@@ -65,6 +65,6 @@ foreach(pf_file ${PFUNIT_TEST_SOURCES})
         FOLDER "Tests/Unit"
     )
     set_tests_properties(${test_name} PROPERTIES
-        LABELS "UnitTest"
+        LABELS "Unit"
     )
 endforeach()
