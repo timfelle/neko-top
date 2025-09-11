@@ -22,7 +22,6 @@ find_package(PFUNIT REQUIRED HINTS ${PFUNIT_DIR})
 
 # Create a file list of the pFUnit test sources. These should be relative paths.
 set(PFUNIT_TEST_SOURCES
-    suite/mesh_operations.pf
     mesh_operations.pf
 )
 
