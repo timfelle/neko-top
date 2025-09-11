@@ -1,7 +1,7 @@
 module mesh_operations
-  use mpi
+  use mpi_f08
   use pfunit
-  use mesh_operators
+  ! use mesh_operators
   use num_types
   use comm, only : NEKO_COMM, pe_rank, pe_size
   implicit none
