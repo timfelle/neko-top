@@ -94,6 +94,7 @@ contains
     real(kind=rp) :: zone_value, tol
     logical :: interpolate
 
+    call neko_log%section("Design initial condition")
     call json_get(params, "type", type)
 
     select case (trim(type))
@@ -122,7 +123,7 @@ contains
     end select
 
     call set_optimization_ic_common(fld, coef, gs)
-
+    call neko_log%end_section()
   end subroutine set_optimization_ic_int
 
   !> Set design initial condition (common)
@@ -261,7 +262,7 @@ contains
     end if
 
     ! Change from "field0.f000*" to "field0.fld" for the fld reader
-    call filename_chsuffix(file_name, trim(file_name), 'fld')
+    call filename_chsuffix(trim(file_name), file_name, 'fld')
 
     call fld_data%init()
     call f%init(trim(file_name))
@@ -353,7 +354,7 @@ contains
        call space_interp%init(fld%Xh, prev_Xh)
 
        ! Do the space-to-space interpolation
-       call space_interp%map_host(fld%x, fld_data%t%x, fld_data%nelv, fld%Xh)
+       call space_interp%map_host(fld%x, fld_data%u%x, fld_data%nelv, fld%Xh)
 
        call space_interp%free()
 

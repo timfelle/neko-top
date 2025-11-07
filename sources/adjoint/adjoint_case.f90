@@ -378,8 +378,8 @@ contains
             path = trim(neko_case%output_directory))
     end if
 
-    call json_get_or_default(neko_case%params, 'case.fluid.output_control',&
-         string_val, 'org')
+    call json_get_or_default(neko_case%params, &
+         'case.adjoint_fluid.output_control', string_val, 'org')
 
     if (trim(string_val) .eq. 'org') then
        ! yes, it should be real_val below for type compatibility
@@ -387,11 +387,12 @@ contains
        call this%output_controller%add(this%f_out, real_val, 'nsamples')
     else if (trim(string_val) .eq. 'never') then
        ! Fix a dummy 0.0 output_value
-       call json_get_or_default(neko_case%params, 'case.fluid.output_value', &
-            real_val, 0.0_rp)
+       call json_get_or_default(neko_case%params, &
+            'case.adjoint_fluid.output_value', real_val, 0.0_rp)
        call this%output_controller%add(this%f_out, 0.0_rp, string_val)
     else
-       call json_get(neko_case%params, 'case.fluid.output_value', real_val)
+       call json_get(neko_case%params, 'case.adjoint_fluid.output_value', &
+            real_val)
        call this%output_controller%add(this%f_out, real_val, string_val)
     end if
 

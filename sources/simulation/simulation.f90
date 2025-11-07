@@ -75,6 +75,7 @@ module simulation_m
   private
 
   type :: simulation_t
+     private
 
      !> and primal case
      type(case_t), public :: neko_case
@@ -90,11 +91,12 @@ module simulation_m
      type(adjoint_scalars_t), public, pointer :: adjoint_scalars => null()
      !> An output sampler for the forward problem.
      !! This should probably be an output controller at some point instead.
-     type(fld_file_output_t), public :: output_forward
+     type(fld_file_output_t) :: output_forward
      !> An output sampler for the adjoint problem.
      !! This should probably be an output controller at some point instead.
-     type(fld_file_output_t), public :: output_adjoint
+     type(fld_file_output_t) :: output_adjoint
 
+     logical :: is_steady = .false.
      logical :: have_scalar = .false.
      integer :: n_timesteps = 0
 
@@ -283,8 +285,10 @@ contains
     class(simulation_t), intent(inout) :: this
     integer, intent(in) :: idx
 
-    call this%output_forward%sample(real(idx, kind=rp))
-    call this%output_adjoint%sample(real(idx, kind=rp))
+    if (this%is_steady) then
+       call this%output_forward%sample(real(idx, kind=rp))
+       call this%output_adjoint%sample(real(idx, kind=rp))
+    end if
 
   end subroutine simulation_write
 

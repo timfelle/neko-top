@@ -28,6 +28,7 @@ module mma_optimizer
   use device_math, only: device_copy, device_cmult
   use field_math, only: field_rzero
   use vector_math, only: vector_cmult
+  use matrix_math, only: matrix_cmult
   use neko_ext, only: reset
   use mask_ops, only: mask_exterior_const
   use device, only: device_memcpy, HOST_TO_DEVICE, DEVICE_TO_HOST
@@ -190,20 +191,13 @@ contains
 
        ! Scaling
        if (this%auto_scale .eqv. .true.) then
-          scaling_factor = abs(this%scale/constraint_value%x(1))
+          scaling_factor = abs(this%scale / constraint_value%x(1))
        else
           scaling_factor = abs(this%scale)
        end if
 
        call vector_cmult(constraint_value, scaling_factor)
-
-       if (NEKO_BCKND_DEVICE .eq. 1) then
-          call device_cmult(constraint_sensitivities%x_d, scaling_factor, &
-               constraint_sensitivities%size())
-       else
-          call cmult(constraint_sensitivities%x, scaling_factor, &
-               constraint_sensitivities%size())
-       end if
+       call matrix_cmult(constraint_sensitivities, scaling_factor)
 
        ! Use scaled sensitivities to update the design variable
        call profiler_start_region("MMA update")
