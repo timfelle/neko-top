@@ -91,6 +91,7 @@ endif()
 # Check for the required libraries.
 find_package(BLAS QUIET)
 find_package(LAPACK QUIET)
+find_package(OpenMP QUIET)
 
 # Check for the optional libraries.
 find_package(MPI REQUIRED)
