@@ -383,7 +383,7 @@ function find_neko() {
         fi
 
         # Determine available features
-        FEATURES="--enable-contrib"
+        FEATURES="--enable-contrib --enable-openmp"
         [ -n "$GSLIB_DIR" ] && FEATURES+=" --with-gslib=$GSLIB_DIR"
         [ -n "$BLAS_DIR" ] && FEATURES+=" --with-blas=$BLAS_DIR"
         [ -n "$HDF5_DIR" ] && FEATURES+=" --with-hdf5=$HDF5_DIR"
