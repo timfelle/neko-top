@@ -120,7 +120,7 @@ endif()
 set(CMAKE_PREFIX_PATH ${JSON_FORTRAN_DIR} ${CMAKE_PREFIX_PATH})
 
 # Find the JSON-Fortran library
-pkg_check_modules(json-fortran REQUIRED IMPORTED_TARGET json-fortran)
+pkg_check_modules(json-fortran REQUIRED IMPORTED_TARGET GLOBAL json-fortran)
 
 # ............................................................................ #
 # Setup of the Neko library
@@ -136,7 +136,7 @@ endif()
 set(CMAKE_PREFIX_PATH ${NEKO_DIR} ${CMAKE_PREFIX_PATH})
 
 # Find the Neko library
-pkg_check_modules(neko REQUIRED IMPORTED_TARGET neko)
+pkg_check_modules(neko REQUIRED IMPORTED_TARGET GLOBAL neko)
 pkg_get_variable(DEVICE_TYPE neko backend)
 
 # ............................................................................ #
