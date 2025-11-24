@@ -393,6 +393,7 @@ function find_neko() {
         if [ "$DEVICE_TYPE" == "CUDA" ]; then
             if [ -n "$CUDA_DIR" ]; then
                 FEATURES+=" --with-cuda=$CUDA_DIR"
+                FEATURES+=" --with-nvtx=$CUDA_DIR"
             else
                 error "CUDA_DIR is not set."
                 error "Please set CUDA_DIR to the directory containing"
