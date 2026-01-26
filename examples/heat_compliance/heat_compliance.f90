@@ -277,9 +277,9 @@ contains
     select type(design)
     type is (thermal_conductivity_design_t)
        n = this%coef%dof%size()
-       call neko_scratch_registry%request_field(RHS, temp_indices(1), .false.)
-       call neko_scratch_registry%request_field(work, temp_indices(2), .false.)
-       call neko_scratch_registry%request_field(delta_phi, temp_indices(3), .false.)
+       call neko_scratch_registry%request(RHS, temp_indices(1), .false.)
+       call neko_scratch_registry%request(work, temp_indices(2), .false.)
+       call neko_scratch_registry%request(delta_phi, temp_indices(3), .false.)
 
        ! Optional masking of design outside optimization region
        if (design%has_mask) then
@@ -344,7 +344,7 @@ contains
             this%ksp_results%res_start, this%ksp_results%res_final
        call neko_log%message(log_buf)
 
-       call neko_scratch_registry%relinquish_field(temp_indices)
+       call neko_scratch_registry%relinquish(temp_indices)
 
        ! Objective: compliance = ∫ φ dΩ (mass-matrix weighted)
        if (NEKO_BCKND_DEVICE .eq. 1) then
@@ -369,9 +369,9 @@ contains
     integer :: n
 
     n = this%coef%dof%size()
-    call neko_scratch_registry%request_field(grad_phi_x, temp_indices(1), .false.)
-    call neko_scratch_registry%request_field(grad_phi_y, temp_indices(2), .false.)
-    call neko_scratch_registry%request_field(grad_phi_z, temp_indices(3), .false.)
+    call neko_scratch_registry%request(grad_phi_x, temp_indices(1), .false.)
+    call neko_scratch_registry%request(grad_phi_y, temp_indices(2), .false.)
+    call neko_scratch_registry%request(grad_phi_z, temp_indices(3), .false.)
 
     ! call this%Ax%compute(grad_phi_x%x, this%phi%x, this%coef, this%coef%msh, &
     !      this%coef%Xh)
@@ -418,7 +418,7 @@ contains
        call neko_error("heat_compliance_update_sensitivity: requires thermal_conductivity_design_t")
     end select
 
-    call neko_scratch_registry%relinquish_field(temp_indices)
+    call neko_scratch_registry%relinquish(temp_indices)
     call this%output%sample(this%writting_counter)
     this%writting_counter = this%writting_counter + 1
   end subroutine heat_compliance_update_sensitivity

@@ -30,7 +30,6 @@ program usrneko
 
   ! ========================================================================== !
   ! Set up distributed stress constraints
-
   ! ========================================================================== !
 
   ! JSON related arguments
@@ -61,8 +60,6 @@ program usrneko
 
   !> Stress constraints
   character(len=20) :: index_str
-  integer, allocatable :: stress_global_indices(:)
-  real(rp), allocatable :: stress_sigma_max(:)
 
   !> For getting objectives and constraints values though getters in problem_t
   type(vector_t) :: all_objectives, constraint_value
@@ -190,8 +187,6 @@ program usrneko
   if (allocated(des)) deallocate(des)
   if (allocated(heat_obj)) deallocate(heat_obj)
   if (allocated(volume_constraint)) deallocate(volume_constraint)
-  if (allocated(stress_global_indices)) deallocate(stress_global_indices)
-  if (allocated(stress_sigma_max)) deallocate(stress_sigma_max)
 
   call neko_finalize()
 
