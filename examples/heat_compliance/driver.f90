@@ -95,7 +95,7 @@ program usrneko
   class default
      call neko_error("??!")
   end select
-  
+
 
   ! -------------------------------------------------------------------------- !
   ! Construct the problem
@@ -135,9 +135,9 @@ program usrneko
   select type(volume_constraint)
   type is (thermal_volume_constraint_t)
      call volume_constraint%init_from_components(des, neko_case%fluid%c_Xh, &
-     name   = 'Volume constraint', &
-     is_max = .true., &
-     limit  = 0.15_rp)
+          name = 'Volume constraint', &
+          is_max = .true., &
+          limit = 0.15_rp)
   class default
      call neko_error("??!")
   end select
@@ -181,9 +181,9 @@ program usrneko
 
   if (allocated(opt)) deallocate(opt)
 
-  end program usrneko
+end program usrneko
 
-  ! ========================================================================== !
+ ! ========================================================================== !
 ! Finite difference validation subroutines
 ! ========================================================================== !
 
@@ -227,9 +227,9 @@ subroutine finite_difference_validation(des, k_test, delta, coef, parameters)
   call designvec%init(n)
   call des%get_values(designvec)
   if (pe_rank == 0) then !only have one rank perturb
-  if (k_test >= 1 .and. k_test <= n) then
-     designvec%x(k_test) = designvec%x(k_test) + delta
-  endif
+     if (k_test >= 1 .and. k_test <= n) then
+        designvec%x(k_test) = designvec%x(k_test) + delta
+     endif
   end if
   call pert_design%update_design(designvec)
 
