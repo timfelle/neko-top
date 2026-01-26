@@ -70,7 +70,7 @@ program usrneko
   ! -------------------------------------------------------------------------- !
   ! Initialize the MPI environment
 
-  call MPI_Init(ierr)
+  call neko_init()
 
   ! -------------------------------------------------------------------------- !
   ! Read the parameters file as the first terminal argument
@@ -84,7 +84,8 @@ program usrneko
 
   ! -------------------------------------------------------------------------- !
   ! Initialization of the components
-  call neko_init(neko_case)
+
+  call neko_case%init(parameters)
   call neko_field%init(neko_case%msh, neko_case%fluid%Xh, "neko_field")
   nloc = neko_field%dof%size()
 
@@ -95,7 +96,6 @@ program usrneko
   class default
      call neko_error("??!")
   end select
-
 
   ! -------------------------------------------------------------------------- !
   ! Construct the problem
@@ -146,7 +146,6 @@ program usrneko
 
   call MPI_Barrier(neko_comm, ierr)
 
-
   !call prob%update_objectives(des)
   !call prob%update_objective_sensitivities(des)
   !call prob%update_constraints(des)
@@ -174,12 +173,28 @@ program usrneko
 
   ! -------------------------------------------------------------------------- !
   ! Clean up the components
-  call neko_finalize(neko_case)
-  call opt%free()
-  call prob%free()
+
+  call parameters%destroy()
+  call neko_case%free()
+  call neko_field%free()
   call des%free()
+  call prob%free()
+  call heat_obj%free()
+  call volume_constraint%free()
+  call opt%free()
+  call initdesign%free()
+  call constraint_value%free()
+  call all_objectives%free()
 
   if (allocated(opt)) deallocate(opt)
+  if (allocated(des)) deallocate(des)
+  if (allocated(prob)) deallocate(prob)
+  if (allocated(heat_obj)) deallocate(heat_obj)
+  if (allocated(volume_constraint)) deallocate(volume_constraint)
+  if (allocated(stress_global_indices)) deallocate(stress_global_indices)
+  if (allocated(stress_sigma_max)) deallocate(stress_sigma_max)
+
+  call neko_finalize()
 
 end program usrneko
 
@@ -233,7 +248,6 @@ subroutine finite_difference_validation(des, k_test, delta, coef, parameters)
   end if
   call pert_design%update_design(designvec)
 
-
   ! Compute perturbed value
   call obj%update_value(pert_design)
   f_perturbed = obj%value
@@ -266,8 +280,12 @@ subroutine finite_difference_validation(des, k_test, delta, coef, parameters)
      print *, "=============================================="
   endif
 
-  deallocate(sensitivities)
+  call designvec%free()
+  call pert_design%free()
   call obj%free()
+
+  if (allocated(sensitivities)) deallocate(sensitivities)
+
 end subroutine finite_difference_validation
 
 
