@@ -188,7 +188,6 @@ program usrneko
 
   if (allocated(opt)) deallocate(opt)
   if (allocated(des)) deallocate(des)
-  if (allocated(prob)) deallocate(prob)
   if (allocated(heat_obj)) deallocate(heat_obj)
   if (allocated(volume_constraint)) deallocate(volume_constraint)
   if (allocated(stress_global_indices)) deallocate(stress_global_indices)
