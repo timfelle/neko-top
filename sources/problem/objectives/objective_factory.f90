@@ -41,14 +41,18 @@ submodule (objective) objective_factory_mod
   use minimum_dissipation_objective, only: minimum_dissipation_objective_t
   use lube_term_objective, only: lube_term_objective_t
   use scalar_mixing_objective, only: scalar_mixing_objective_t
+  use dummy_objective, only: dummy_objective_t
+  use minimize_u, only: minimize_u_t
 
   implicit none
 
   !> Known function types
-  character(len=25), parameter :: KNOWN_TYPES(3) = [ character(len=25) :: &
+  character(len=25), parameter :: KNOWN_TYPES(5) = [ character(len=25) :: &
        "minimum_dissipation", &
        "scalar_mixing", &
-       "lube_term"]
+       "lube_term", &
+       "minimize_u", &
+       "dummy"]
 
 contains
 
@@ -76,6 +80,10 @@ contains
        allocate(scalar_mixing_objective_t::object)
     case ("lube_term")
        allocate(lube_term_objective_t::object)
+    case ("dummy")
+       allocate(dummy_objective_t::object)
+    case ("minimize_u")
+       allocate(minimize_u_t::object)
 
     case default
        call neko_type_error("Objective", type, KNOWN_TYPES)

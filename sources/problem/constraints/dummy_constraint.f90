@@ -38,7 +38,7 @@
 module dummy_constraint
   use constraint, only: constraint_t
   use json_module, only: json_file
-
+  use simulation_m, only: simulation_t
   use design, only: design_t
 
   use num_types, only: rp
@@ -54,6 +54,9 @@ module dummy_constraint
      !> The common constructor using a JSON object.
      procedure, public, pass(this) :: init_json => &
           dummy_constraint_init_json
+     !> The common constructor using a JSON object and a simulation.
+     procedure, public, pass(this) :: init_json_sim => &
+          dummy_constraint_init_json_sim
      !> The direct initializer from attributes.
      procedure, public, pass(this) :: init_from_attributes => &
           dummy_constraint_init_attributes
@@ -77,6 +80,16 @@ contains
     class(design_t), intent(in) :: design
     call this%init_from_attributes(design)
   end subroutine dummy_constraint_init_json
+
+  !> The common constructor using a JSON object.
+  subroutine dummy_constraint_init_json_sim(this, json, design, simulation)
+    class(dummy_constraint_t), intent(inout) :: this
+    type(json_file), intent(inout) :: json
+    class(design_t), intent(in) :: design
+    type(simulation_t), target, intent(inout) :: simulation
+
+    call this%init_from_attributes(design)
+  end subroutine dummy_constraint_init_json_sim
 
   !> The direct initializer from attributes.
   subroutine dummy_constraint_init_attributes(this, design)

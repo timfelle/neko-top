@@ -39,12 +39,14 @@ submodule (constraint) constraint_factory_mod
 
   ! Import the constraint function types
   use volume_constraint, only: volume_constraint_t
+  use dummy_constraint, only: dummy_constraint_t
 
   implicit none
 
   !> Known function types
-  character(len=25), parameter :: KNOWN_TYPES(1) = [ character(len=25) :: &
-       "volume"]
+  character(len=25), parameter :: KNOWN_TYPES(2) = [ character(len=25) :: &
+       "volume", &
+       "dummy"]
 
 contains
 
@@ -68,6 +70,8 @@ contains
     select case (trim(type))
     case ("volume")
        allocate(volume_constraint_t::object)
+    case ("dummy")
+       allocate(dummy_constraint_t::object)
     case default
        call neko_type_error("Constraint", type, KNOWN_TYPES)
     end select

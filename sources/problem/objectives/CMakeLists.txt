@@ -12,4 +12,6 @@ target_sources(neko-top
         ${CMAKE_CURRENT_SOURCE_DIR}/minimum_dissipation_objective.f90
         ${CMAKE_CURRENT_SOURCE_DIR}/scalar_mixing_objective_function.f90
         ${CMAKE_CURRENT_SOURCE_DIR}/augmented_lagrangian_objective.f90
+        ${CMAKE_CURRENT_SOURCE_DIR}/dummy_objective.f90
+        ${CMAKE_CURRENT_SOURCE_DIR}/minimize_u.f90
 )
