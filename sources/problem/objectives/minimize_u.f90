@@ -58,6 +58,7 @@ module minimize_u
   use math_ext, only: glsc2_mask
   use field_math, only: field_col3, field_addcol3, field_cmult, field_col2
   use vector, only: vector_t
+  use iso_c_binding, only: c_ptr
   implicit none
   private
 
@@ -67,6 +68,8 @@ module minimize_u
      private
 
      type(field_t), pointer :: u => null()
+     real(kind=rp), dimension(:,:,:,:), pointer :: B => null()
+     type(c_ptr) :: B_d
 
    contains
 
@@ -134,6 +137,8 @@ contains
 
     ! Initialize the pointer to the velocity field
     this%u => simulation%fluid%u
+    this%B => simulation%fluid%c_Xh%B
+    this%B_d = simulation%fluid%c_Xh%B_d
 
   end subroutine dummy_init_attributes
 
@@ -150,20 +155,12 @@ contains
   subroutine dummy_update_value(this, design)
     class(minimize_u_t), intent(inout) :: this
     class(design_t), intent(in) :: design
-    type(vector_t), pointer :: design_values
-    integer :: index
-
-    call neko_scratch_registry%request(design_values, index, design%size(), .false.)
-    call design%get_values(design_values)
 
     call this%u%copy_from(DEVICE_TO_HOST, sync = .false.)
-    call design_values%copy_from(DEVICE_TO_HOST, sync = .true.)
 
     ! Compute the integral of u in the masked region
-    this%value = glsc2_mask(this%u%x, design_values%x, this%u%size(), &
+    this%value = glsc2_mask(this%u%x, this%B, this%u%size(), &
          this%mask%mask%get(), this%mask%mask%size())
-
-    call neko_scratch_registry%relinquish(index)
 
   end subroutine dummy_update_value
 

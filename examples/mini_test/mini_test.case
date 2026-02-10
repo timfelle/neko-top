@@ -116,7 +116,7 @@
             "initial_distribution": {
                 "type": "point_zone",
                 "base_value": 0.0,
-                "zone_value": 0.5,
+                "zone_value": 0.0,
                 "zone_name": "optimization_domain"
             },
             "domain": {
@@ -160,13 +160,13 @@
             //     "dealias_forcing": false
             // }
         ],
-        "constraints": [
-            {
-                "type": "volume",
-                "mask_name": "optimization_domain",
-                "limit": 0.2,
-                "is_max": true
-            }
-        ]
+        // "constraints": [
+        //     {
+        //         "type": "volume",
+        //         "mask_name": "optimization_domain",
+        //         "limit": 0.2,
+        //         "is_max": true
+        //     }
+        // ]
     }
 }

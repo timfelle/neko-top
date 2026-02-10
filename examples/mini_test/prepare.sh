@@ -24,7 +24,7 @@ function help() {
 }
 
 # Handle options
-N=10
+N=32
 for arg in "$@"; do
     if [ "${arg:0:2}" == "--" ]; then
         case ${arg:2} in
@@ -63,7 +63,7 @@ fi
 z=$(python3 -c "print(1.0 / $N)")
 
 echo "Generating mesh with dimensions: $Nx $Ny $Nz"
-genmeshbox 0 5 0 1 0 $z $Nx $Ny $Nz .false. .true. .true.
+genmeshbox 0 5 0 1 -0.5 0.5 $Nx $Ny $Nz .false. .true. .true.
 
 # End of file
 # ============================================================================ #
