@@ -116,7 +116,7 @@
             "initial_distribution": {
                 "type": "point_zone",
                 "base_value": 0.0,
-                "zone_value": 0.0,
+                "zone_value": 0.2,
                 "zone_name": "optimization_domain"
             },
             "domain": {
@@ -126,7 +126,7 @@
         },
         "solver": {
             "type": "mma",
-            "max_iterations": 5,
+            "max_iterations": 100,
             "tolerance": 1.0e-16,
             "mma": {
                 "max_iter": 100,

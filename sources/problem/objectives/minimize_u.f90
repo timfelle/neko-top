@@ -53,12 +53,13 @@ module minimize_u
   use interpolation, only: interpolator_t
   use space, only: space_t, GL
   use coefs, only: coef_t
-  use math, only: glsc2, copy, col2, invcol2
+  use math, only: glsc2, copy, col2, invcol2, cfill_mask
   use device_math, only: device_copy, device_glsc2, device_col2, device_invcol2
-  use math_ext, only: glsc2_mask
+  use math_ext, only: copy_mask, glsc2_mask
   use field_math, only: field_col3, field_addcol3, field_cmult, field_col2
   use vector, only: vector_t
   use iso_c_binding, only: c_ptr
+  use device, only: HOST_TO_DEVICE
   implicit none
   private
 
@@ -140,6 +141,10 @@ contains
     this%B => simulation%fluid%c_Xh%B
     this%B_d = simulation%fluid%c_Xh%B_d
 
+    ! Compute the initial value of the objective function
+    call this%update_value(design)
+    call this%update_sensitivity(design)
+
   end subroutine dummy_init_attributes
 
   !> Destructor.
@@ -156,7 +161,7 @@ contains
     class(minimize_u_t), intent(inout) :: this
     class(design_t), intent(in) :: design
 
-    call this%u%copy_from(DEVICE_TO_HOST, sync = .false.)
+    call this%u%copy_from(DEVICE_TO_HOST, sync = .true.)
 
     ! Compute the integral of u in the masked region
     this%value = glsc2_mask(this%u%x, this%B, this%u%size(), &
@@ -172,6 +177,10 @@ contains
     class(minimize_u_t), intent(inout) :: this
     class(design_t), intent(in) :: design
 
+    call copy_mask(this%sensitivity%x, this%B, this%u%size(), &
+         this%mask%mask%get(), this%mask%mask%size())
+
+    call this%sensitivity%copy_from(HOST_TO_DEVICE, sync = .true.)
   end subroutine dummy_update_sensitivity
 
 end module minimize_u
