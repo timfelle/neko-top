@@ -176,7 +176,7 @@ contains
     if (present(keep_checkpoints)) this%keep_checkpoints = keep_checkpoints
 
     if (allocated(neko_case%scalars)) then
-       this%n_scalars = size(neko_case%scalars%scalar_fields)
+       this%n_scalars = size(neko_case%scalars%scalar_schemes)
     end if
 
 
@@ -190,7 +190,7 @@ contains
     allocate(this%v_list(this%n_saves_memory))
     allocate(this%w_list(this%n_saves_memory))
     if (this%n_scalars .gt. 0) then
-       this%n_scalars = size(neko_case%scalars%scalar_fields)
+       this%n_scalars = size(neko_case%scalars%scalar_schemes)
        allocate(this%s_list(this%n_saves_memory * this%n_scalars))
     end if
 
@@ -206,7 +206,7 @@ contains
        if (this%n_scalars .gt. 0) then
           do j = 1, this%n_scalars
              write(str, '(A,I0,A,I0)') "s_chkp_", i, "_", j
-             scalar_i => neko_case%scalars%scalar_fields(j)%scalar
+             scalar_i => neko_case%scalars%scalar_schemes(j)%scalar
              call this%s_list((i - 1) * this%n_scalars + j)%init(scalar_i%s%dof, str)
           end do
        end if

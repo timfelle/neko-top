@@ -175,7 +175,7 @@ contains
     ! Allocate the output type
     n_scalars = 0
     if (allocated(this%neko_case%scalars)) then
-       n_scalars = size(this%neko_case%scalars%scalar_fields)
+       n_scalars = this%neko_case%scalars%n_scalars()
     end if
     call this%output_forward%init(sp, 'forward_fields', 4 + n_scalars)
 
@@ -188,7 +188,7 @@ contains
     if (allocated(this%neko_case%scalars)) then
        do i = 1, n_scalars
           call this%output_forward%fields%assign(4 + i, &
-               this%scalars%scalar_fields(i)%scalar%s)
+               this%scalars%scalar_schemes(i)%scalar%s)
        end do
     end if
 
