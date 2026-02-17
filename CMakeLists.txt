@@ -153,8 +153,14 @@ endif()
 
 if (DEFINED HDF5_DIR)
     set(CMAKE_PREFIX_PATH ${HDF5_DIR} ${CMAKE_PREFIX_PATH})
+endif()
 
-    pkg_check_modules(hdf5 REQUIRED IMPORTED_TARGET hdf5)
+pkg_check_modules(HDF5 QUIET IMPORTED_TARGET hdf5)
+if (NOT HDF5_FOUND)
+    pkg_check_modules(HDF5 QUIET IMPORTED_TARGET hdf5_parallel)
+endif()
+
+if (HDF5_FOUND)
     add_compile_definitions(HAVE_HDF5=1)
 endif()
 

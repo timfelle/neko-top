@@ -12,8 +12,7 @@ if (CMAKE_BUILD_TYPE STREQUAL "Debug")
     add_compile_options(
         # Debugging flags
         $<$<COMPILE_LANGUAGE:Fortran>:-g>  # Enable debugging
-        $<$<COMPILE_LANGUAGE:Fortran>:-G0> # Debugging level
-        $<$<COMPILE_LANGUAGE:Fortran>:-m0> # Set message level to verbose
+        $<$<COMPILE_LANGUAGE:Fortran>:-m1> # Set message level to verbose
         $<$<COMPILE_LANGUAGE:Fortran>:-O0> # Disable optimization
 
         $<$<COMPILE_LANGUAGE:Fortran>:-RABCDS> # Run time checks
@@ -23,6 +22,6 @@ elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
         $<$<COMPILE_LANGUAGE:Fortran>:-e0> # Initialize to 0
         $<$<COMPILE_LANGUAGE:Fortran>:-O2> # Optimize to level 2
         $<$<COMPILE_LANGUAGE:Fortran>:-m4> # Set message level to Error only
-        $<$<COMPILE_LANGUAGE:HIP>:-w>      #
+        $<$<COMPILE_LANGUAGE:HIP>:-w>      # Suppress all warnings
     )
 endif()

@@ -19,12 +19,72 @@ computational fluid dynamics.
 Please visit the [LUMI website](https://lumi-supercomputer.eu/) for more
 information about the system and its capabilities.
 
+### Limitations
+
+- CMake, does not support submodules built with CCE-19. Use CCE-17
+  instead.
+
 ### Environment setup
 The following example shows how to set up the environment for LUMI. The
 `prepare.env` file should be placed in the root of the Neko-TOP directory. The
 `setup.sh` script will automatically load the `prepare.env` file if it exists.
 The `prepare.env` file should contain the following lines:
 
+#### CPU GNU
+```bash
+#!/bin/bash
+# Load modules
+ml CrayEnv PrgEnv-gnu cray-mpich 2> /dev/null
+export NEKO_CFLAGS="-O3"
+export NEKO_FCFLAGS="-O2 -w"
+
+# Set build type
+export CMAKE_BUILD_TYPE=Debug
+
+# Set compiler wrappers
+export MPIFC=ftn
+export MPICC=cc
+export MPICXX=CC
+export FC=ftn
+export CC=cc
+```
+
+#### GPU + CPU Cray
+```bash
+#!/bin/bash
+
+# module load CrayEnv PrgEnv-cray buildtools rocm craype-accel-amd-gfx90a cray-hdf5-parallel
+
+# Load modules for the Cray CPU environment
+ml CrayEnv PrgEnv-cray cce/17.0.1 buildtools cray-mpich 2> /dev/null
+export NEKO_CFLAGS="-O3"
+export NEKO_FCFLAGS="-O2 -m4"
+
+# Define the HDF5 support
+ml cray-hdf5-parallel 2> /dev/null
+export NEKO_CONFIG_FLAGS=(--with-hdf5)
+
+# Load GPU Specific modules
+if [ "$DEVICE_TYPE" == "HIP" ]; then
+    ml craype-x86-trento craype-accel-amd-gfx90a rocm 2> /dev/null
+
+    HIP_DIR=${ROCM_PATH}
+    export HIPCC=hipcc
+    export NEKO_HIPCC_FLAGS="-O3 --offload-arch=gfx90a"
+    export NEKO_CONFIG_FLAGS+=(--enable-device-mpi)
+    export MPICH_GPU_SUPPORT_ENABLED=1
+fi
+
+# Set CMake build type and compilers
+export CMAKE_BUILD_TYPE=Release
+export MPIFC=ftn
+export MPICC=cc
+export MPICXX=CC
+export FC=ftn
+export CC=cc
+```
+
+#### OLD
 ```bash
 #!/bin/bash
 
