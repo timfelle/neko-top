@@ -60,7 +60,7 @@ program checkpointing_test
   integer :: n_saves_memory = 10
   character(len=256) :: algorithm = "linear"
   character(len=256) :: filename = "checkpoint"
-  character(len=8) :: fmt = "chkp"
+  character(len=8) :: fmt = "hdf5"
   logical :: keep_checkpoints = .false.
 
   !> Log message for errors
