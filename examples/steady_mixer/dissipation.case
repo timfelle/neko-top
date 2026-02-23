@@ -16,7 +16,7 @@
         },
         "fluid": {
             "scheme": "pnpn",
-            "Re": 2,
+            "Re": 2.0,
             "initial_condition": {
                 "type": "uniform",
                 "value": [ 0.0, 0.0, 0.0 ]
@@ -74,7 +74,7 @@
                 },
                 {
                     "type": "neumann",
-                    "flux": 0,
+                    "flux": 0.0,
                     "zone_indices": [ 2, 3, 4, 5, 6 ]
                 }
             ]
@@ -84,12 +84,12 @@
             "boundary_conditions": [
                 {
                     "type": "dirichlet",
-                    "value": 0,
+                    "value": 0.0,
                     "zone_indices": [ 1 ]
                 },
                 {
                     "type": "neumann",
-                    "flux": 0,
+                    "flux": 0.0,
                     "zone_indices": [ 2, 3, 4, 5, 6 ]
                 }
             ],
@@ -126,50 +126,23 @@
             {
                 "name": "optimization_domain",
                 "geometry": "box",
-                "x_bounds": [
-                    3.0,
-                    7.0
-                ],
-                "y_bounds": [
-                    -1.0,
-                    3.0
-                ],
-                "z_bounds": [
-                    -1.0,
-                    3.0
-                ]
+                "x_bounds": [ 3.0, 7.0 ],
+                "y_bounds": [ -1.0, 3.0 ],
+                "z_bounds": [ -1.0, 3.0 ]
             },
             {
                 "name": "objective_domain",
                 "geometry": "box",
-                "x_bounds": [
-                    9.5,
-                    10.0
-                ],
-                "y_bounds": [
-                    -1.0,
-                    3.0
-                ],
-                "z_bounds": [
-                    -1.0,
-                    3.0
-                ]
+                "x_bounds": [ 9.5, 10.0 ],
+                "y_bounds": [ -1.0, 3.0 ],
+                "z_bounds": [ -1.0, 3.0 ]
             },
             {
                 "name": "initial_design",
                 "geometry": "box",
-                "x_bounds": [
-                    4.0,
-                    5.0
-                ],
-                "y_bounds": [
-                    -1.0,
-                    1.0
-                ],
-                "z_bounds": [
-                    -1.0,
-                    1.0
-                ]
+                "x_bounds": [ 4.0, 5.0 ],
+                "y_bounds": [ -1.0, 1.0 ],
+                "z_bounds": [ -1.0, 1.0 ]
             }
         ]
     },
@@ -184,14 +157,14 @@
                 },
                 {
                     "type": "RAMP",
-                    "f_max": 100,
+                    "f_max": 100.0
                 }
             ],
             "initial_distribution": {
                 "type": "point_zone",
                 "zone_name": "initial_design",
                 "base_value": 0.0,
-                "zone_value": 1.0,
+                "zone_value": 1.0
             },
             "domain": {
                 "type": "point_zone",
@@ -200,8 +173,7 @@
         },
         "solver": {
             "type": "mma",
-            "backend": "cpu",
-            "max_iterations": 10,
+            "max_iterations": 50,
             "tolerance": 1.0e-13,
             "mma": {
                 "scale": 100.0,
@@ -215,7 +187,19 @@
                 "mask_name": "objective_domain",
                 "phi_ref": 0.5,
                 "weight": 1.0
+            },
+            {
+                "type": "minimum_dissipation",
+                "weight": 1.0
             }
         ],
+        "constraints": [
+            {
+                "type": "volume",
+                "limit": 0.2,
+                "is_max": true,
+                "weight": 1.0
+            }
+        ]
     }
 }
