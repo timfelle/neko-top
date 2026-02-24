@@ -59,6 +59,10 @@ module problem
   use simulation, only: simulation_init, simulation_step, simulation_finalize
   use mpi_f08, only: MPI_WTIME
   use profiler, only: profiler_start_region, profiler_end_region
+  use coefs, only: coef_t
+  use neko_config, only: NEKO_BCKND_DEVICE
+  use math, only: col2
+  use device_math, only: device_col2
 
   implicit none
   private
@@ -79,6 +83,7 @@ module problem
      !> The constraints of the problem.
      class(constraint_wrapper_t), allocatable, dimension(:) :: constraint_list
 
+     type(coef_t), pointer :: c_Xh
    contains
 
      ! ----------------------------------------------------------------------- !
@@ -217,6 +222,8 @@ contains
     ! Read the objectives and constraints
     call this%read_objectives(parameters, design, simulation)
     call this%read_constraints(parameters, design, simulation)
+
+    this%c_Xh => simulation%fluid%c_Xh
 
   end subroutine problem_init
 
