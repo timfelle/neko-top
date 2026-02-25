@@ -6,13 +6,13 @@
         "output_at_end": false,
         "output_boundary": false,
         "time": {
-            "end_time": 3.0,
-            "timestep": 1e-4
+            "end_time": 1e-5,
+            "timestep": 1e-6
         },
         "numerics": {
-            "time_order": 1,
-            "polynomial_order": 3,
-            "dealias": true
+            "time_order": 3,
+            "polynomial_order": 5,
+            "dealias": false
         },
         "fluid": {
             "scheme": "pnpn",
@@ -22,12 +22,12 @@
                 "value": [ 0.0, 0.0, 0.0 ]
             },
             "velocity_solver": {
-                "type": "fused_coupled_cg",
+                "type": "cg",
                 "preconditioner": {
                     "type": "jacobi"
                 },
                 "absolute_tolerance": 1e-8,
-                "max_iterations": 50
+                "max_iterations": 800
             },
             "pressure_solver": {
                 "type": "gmres",
@@ -35,7 +35,7 @@
                     "type": "hsmg"
                 },
                 "absolute_tolerance": 1e-7,
-                "max_iterations": 50
+                "max_iterations": 800
             },
             "boundary_conditions": [
                 {
@@ -152,12 +152,12 @@
             "mapping": [
                 {
                     "type": "PDE_filter",
-                    "r": 0.05,
+                    "r": 0.1,
                     "tol": 1e-15
                 },
                 {
                     "type": "RAMP",
-                    "f_max": 1000.0
+                    "f_max": 1e6
                 }
             ],
             "initial_distribution": {
