@@ -95,6 +95,9 @@ module mapping_handler
           mapping_handler_add_json_mappings
      !> Force a field to be continuous.
      procedure, pass(this) :: make_cts => mapping_handler_make_cts
+     !> Update all mappings in the cascade for continuation.
+     !! @param iter The current optimization iteration.
+     procedure, pass(this) :: update => mapping_handler_update
   end type mapping_handler_t
 
 contains
@@ -369,4 +372,21 @@ contains
     end if
 
   end subroutine mapping_handler_make_cts
+
+  !> Update all mappings in the cascade for continuation.
+  !! @param this The handler object.
+  !! @param iter The current optimization iteration.
+  subroutine mapping_handler_update(this, iter)
+    class(mapping_handler_t), intent(inout) :: this
+    integer, intent(in) :: iter
+    integer :: i
+
+    if (allocated(this%mapping_cascade)) then
+       do i = 1, size(this%mapping_cascade)
+          call this%mapping_cascade(i)%mapping%update(iter)
+       end do
+    end if
+
+  end subroutine mapping_handler_update
+
 end module mapping_handler

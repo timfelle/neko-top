@@ -45,6 +45,7 @@ module RAMP_mapping
        device_convex_up_RAMP_mapping_apply, &
        device_convex_up_RAMP_mapping_apply_backward
   use json_utils, only: json_get, json_get_or_default
+  use logger, only: neko_log, LOG_SIZE
   implicit none
   private
 
@@ -87,6 +88,15 @@ module RAMP_mapping
      !! upper being that used by Borrvall & Peterson)
      logical :: convex_up
 
+     ! Continuation parameters
+     !> Maximum value for q (continuation upper bound).
+     real(kind=rp) :: q_max
+     !> Multiplicative update factor for q (continuation).
+     !! A value of 1.0 means no continuation is applied.
+     real(kind=rp) :: q_factor
+     !> Number of iterations between continuation updates.
+     integer :: update_interval
+
    contains
      !> Constructor from json.
      procedure, pass(this) :: init => RAMP_mapping_init_from_json
@@ -99,6 +109,8 @@ module RAMP_mapping
      procedure, pass(this) :: forward_mapping => RAMP_forward_mapping
      !> Apply the adjoint mapping
      procedure, pass(this) :: backward_mapping => RAMP_backward_mapping
+     !> Update mapping parameters for continuation.
+     procedure, pass(this) :: update => RAMP_mapping_update
   end type RAMP_mapping_t
 
 contains
@@ -108,32 +120,50 @@ contains
     class(RAMP_mapping_t), intent(inout) :: this
     type(json_file), intent(inout) :: json
     type(coef_t), intent(inout) :: coef
-    real(kind=rp) :: f_min, f_max, q
+    real(kind=rp) :: f_min, f_max, q, q_max, q_factor
     logical :: convex_up
+    integer :: update_interval
 
     call json_get_or_default(json, 'f_min', f_min, 0.0_rp)
     call json_get(json, 'f_max', f_max)
     call json_get_or_default(json, 'q', q, 1.0_rp)
     call json_get_or_default(json, 'convex_up', convex_up, .false.)
 
+    ! Continuation parameters (optional)
+    call json_get_or_default(json, 'continuation.q_max', q_max, huge(0.0_rp))
+    call json_get_or_default(json, 'continuation.q_factor', q_factor, 1.0_rp)
+    call json_get_or_default(json, 'continuation.update_interval', &
+         update_interval, 1)
+
     call this%init_base(json, coef)
-    call this%init_from_attributes(coef, f_min, f_max, q, &
-         convex_up)
+    call this%init_from_attributes(coef, f_min, f_max, q, convex_up, &
+         q_max, q_factor, update_interval)
 
   end subroutine RAMP_mapping_init_from_json
 
   !> Actual constructor.
   subroutine RAMP_mapping_init_from_attributes(this, coef, f_min, f_max, q, &
-       convex_up)
+       convex_up, q_max, q_factor, update_interval)
     class(RAMP_mapping_t), intent(inout) :: this
     type(coef_t), intent(inout) :: coef
     real(kind=rp), intent(in) :: f_min, f_max, q
     logical, intent(in) :: convex_up
+    real(kind=rp), intent(in), optional :: q_max, q_factor
+    integer, intent(in), optional :: update_interval
 
     this%f_min = f_min
     this%f_max = f_max
     this%q = q
     this%convex_up = convex_up
+
+    ! Continuation defaults: no continuation
+    this%q_max = huge(0.0_rp)
+    this%q_factor = 1.0_rp
+    this%update_interval = 1
+
+    if (present(q_max)) this%q_max = q_max
+    if (present(q_factor)) this%q_factor = q_factor
+    if (present(update_interval)) this%update_interval = update_interval
 
   end subroutine RAMP_mapping_init_from_attributes
 
@@ -311,4 +341,25 @@ contains
     end if
 
   end subroutine convex_up_RAMP_mapping_apply_backward
+
+  !> Update the RAMP penalty parameter q for continuation.
+  !! @param this The mapping object.
+  !! @param iter The current optimization iteration.
+  subroutine RAMP_mapping_update(this, iter)
+    class(RAMP_mapping_t), intent(inout) :: this
+    integer, intent(in) :: iter
+    character(len=LOG_SIZE) :: log_buf
+
+    ! Only update when continuation is active and the interval is reached
+    if (this%q_factor .eq. 1.0_rp) return
+    if (iter .le. 0) return
+    if (mod(iter, this%update_interval) .ne. 0) return
+
+    this%q = min(this%q * this%q_factor, this%q_max)
+
+    write(log_buf, '(A,ES13.6)') 'RAMP continuation: q updated to ', this%q
+    call neko_log%message(log_buf)
+
+  end subroutine RAMP_mapping_update
+
 end module RAMP_mapping

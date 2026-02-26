@@ -116,6 +116,12 @@ module design
      !> Write the design
      procedure(design_write), public, pass(this), deferred :: write
 
+     !> Update mapping parameters for a continuation strategy.
+     !! @details The default implementation is a no-op. Override in designs
+     !! that use mapping_handler_t to propagate the update.
+     !! @param iter The current optimization iteration.
+     procedure, public, pass(this) :: update_mappings => design_update_mappings
+
      !> Save the design to a checkpoint file
      procedure, public, pass(this) :: save_checkpoint => design_save_checkpoint
      !> Load the design from a checkpoint file
@@ -286,6 +292,15 @@ contains
     this%n = 0
     this%n_global = 0
   end subroutine design_free_base
+
+  !> Default no-op for update_mappings.
+  !! @param this The design object.
+  !! @param iter The current optimization iteration.
+  subroutine design_update_mappings(this, iter)
+    class(design_t), intent(inout) :: this
+    integer, intent(in) :: iter
+    ! Default: no-op
+  end subroutine design_update_mappings
 
   !> Get the name of the design.
   !! @param this The design object.

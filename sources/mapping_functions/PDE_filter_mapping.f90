@@ -82,7 +82,7 @@ module PDE_filter
      type(bc_list_t) :: bclst_filt
 
      ! Inputs from the user
-     !> filter radius
+     !> filter radius (scaled internally as r / (2*sqrt(3))).
      real(kind=rp) :: r
      !> tolerance for PDE filter
      real(kind=rp) :: abstol_filt
@@ -93,6 +93,15 @@ module PDE_filter
      ! > preconditioner type
      character(len=:), allocatable :: precon_type_filt
      integer :: ksp_n, n, i
+
+     ! Continuation parameters
+     !> Minimum filter radius (scaled), used as a lower bound.
+     real(kind=rp) :: r_min
+     !> Multiplicative update factor for r (continuation).
+     !! A value of 1.0 means no continuation is applied.
+     real(kind=rp) :: r_factor
+     !> Number of iterations between continuation updates.
+     integer :: update_interval
 
 
 
@@ -116,6 +125,8 @@ module PDE_filter
      ! After an email with Niels, we should be using the chain rule,
      ! not a sensitivity filter
      procedure, pass(this) :: backward_mapping => PDE_filter_backward_mapping
+     !> Update filter radius for continuation.
+     procedure, pass(this) :: update => PDE_filter_update
   end type PDE_filter_t
 
 contains
@@ -125,8 +136,8 @@ contains
     class(PDE_filter_t), intent(inout) :: this
     type(json_file), intent(inout) :: json
     type(coef_t), intent(inout) :: coef
-    real(kind=rp) :: r, tol
-    integer :: max_iter
+    real(kind=rp) :: r, tol, r_min, r_factor
+    integer :: max_iter, update_interval
     character(len=:), allocatable :: ksp_solver, precon_type
 
     call json_get(json, 'r', r)
@@ -135,20 +146,28 @@ contains
     call json_get_or_default(json, 'solver', ksp_solver, "cg")
     call json_get_or_default(json, 'preconditioner', precon_type, "jacobi")
 
+    ! Continuation parameters (optional)
+    call json_get_or_default(json, 'continuation.r_min', r_min, 0.0_rp)
+    call json_get_or_default(json, 'continuation.r_factor', r_factor, 1.0_rp)
+    call json_get_or_default(json, 'continuation.update_interval', &
+         update_interval, 1)
+
     call this%init_base(json, coef)
     call this%init_from_attributes(coef, r, tol, max_iter, &
-         ksp_solver, precon_type)
+         ksp_solver, precon_type, r_min, r_factor, update_interval)
 
   end subroutine PDE_filter_init_from_json
 
   !> Actual constructor.
   subroutine PDE_filter_init_from_attributes(this, coef, r, tol, max_iter, &
-       ksp_solver, precon_type)
+       ksp_solver, precon_type, r_min, r_factor, update_interval)
     class(PDE_filter_t), intent(inout) :: this
     type(coef_t), intent(inout) :: coef
     real(kind=rp), intent(in) :: r, tol
     integer, intent(in) :: max_iter
     character(len=*), intent(in) :: ksp_solver, precon_type
+    real(kind=rp), intent(in), optional :: r_min, r_factor
+    integer, intent(in), optional :: update_interval
     integer :: n
 
     this%r = r / (2.0_rp * sqrt(3.0_rp))
@@ -156,6 +175,15 @@ contains
     this%ksp_max_iter = max_iter
     this%ksp_solver = ksp_solver
     this%precon_type_filt = precon_type
+
+    ! Continuation defaults: no continuation
+    this%r_min = 0.0_rp
+    this%r_factor = 1.0_rp
+    this%update_interval = 1
+
+    if (present(r_min)) this%r_min = r_min / (2.0_rp * sqrt(3.0_rp))
+    if (present(r_factor)) this%r_factor = r_factor
+    if (present(update_interval)) this%update_interval = update_interval
 
     ! set the number of dofs
     n = this%coef%dof%size()
@@ -416,5 +444,27 @@ contains
     call ksp%set_pc(pc)
 
   end subroutine filter_precon_factory
+
+  !> Update the filter radius r for continuation.
+  !! @param this The filter object.
+  !! @param iter The current optimization iteration.
+  subroutine PDE_filter_update(this, iter)
+    class(PDE_filter_t), intent(inout) :: this
+    integer, intent(in) :: iter
+    character(len=LOG_SIZE) :: log_buf
+
+    ! Only update when continuation is active and the interval is reached
+    if (this%r_factor .eq. 1.0_rp) return
+    if (iter .le. 0) return
+    if (mod(iter, this%update_interval) .ne. 0) return
+
+    this%r = max(this%r * this%r_factor, this%r_min)
+
+    write(log_buf, '(A,ES13.6)') &
+         'PDE filter continuation: r updated to ', &
+         this%r * 2.0_rp * sqrt(3.0_rp)
+    call neko_log%message(log_buf)
+
+  end subroutine PDE_filter_update
 
 end module PDE_filter

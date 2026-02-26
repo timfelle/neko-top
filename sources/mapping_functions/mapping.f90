@@ -58,6 +58,13 @@ module mapping
      procedure, pass(this) :: apply_forward => mapping_apply_forward_wrapper
      !> Apply the backward mapping (ie, chain rule)
      procedure, pass(this) :: apply_backward => mapping_apply_backward_wrapper
+     !> Update the mapping parameters (continuation strategy).
+     !! @details
+     !! This method is called at each optimization iteration to allow mappings
+     !! to update their parameters as part of a continuation strategy. The
+     !! default implementation is a no-op; override in subclasses.
+     !! @param iter The current optimization iteration.
+     procedure, pass(this) :: update => mapping_update
      !> The common constructor using a JSON dictionary.
      procedure(mapping_init), pass(this), deferred :: init
      !> Destructor.
@@ -210,5 +217,14 @@ contains
     call this%backward_mapping(sens_out, sens_in, this%X_in)
 
   end subroutine mapping_apply_backward_wrapper
+
+  !> Default no-op update for the mapping parameters.
+  !! @param this The mapping object.
+  !! @param iter The current optimization iteration.
+  subroutine mapping_update(this, iter)
+    class(mapping_t), intent(inout) :: this
+    integer, intent(in) :: iter
+    ! Default: no-op
+  end subroutine mapping_update
 
 end module mapping

@@ -234,6 +234,9 @@ module brinkman_design
      ! a writer being called from outside would be nice
      procedure, pass(this) :: write => brinkman_design_write
 
+     !> Update mapping parameters for continuation.
+     procedure, pass(this) :: update_mappings => brinkman_design_update_mappings
+
      !> Destructor
      procedure, pass(this) :: free => brinkman_design_free
      ! TODO
@@ -628,5 +631,16 @@ contains
     call this%output%sample(real(idx, kind=rp))
 
   end subroutine brinkman_design_write
+
+  !> Update mapping parameters for continuation.
+  !! @param this The design object.
+  !! @param iter The current optimization iteration.
+  subroutine brinkman_design_update_mappings(this, iter)
+    class(brinkman_design_t), intent(inout) :: this
+    integer, intent(in) :: iter
+
+    call this%mapping%update(iter)
+
+  end subroutine brinkman_design_update_mappings
 
 end module brinkman_design
