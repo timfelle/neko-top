@@ -79,8 +79,8 @@ module adjoint_minimum_dissipation_source_term
      type(field_t), pointer :: v => null()
      !> w of the primal
      type(field_t), pointer :: w => null()
-     !> a scale for the source term
-     real(kind=rp) :: obj_scale
+     !> A scale for the source term (pointer to the objective weight)
+     real(kind=rp), pointer :: obj_scale => null()
      !> A mask for where the source term is evaluated
      class(point_zone_t), pointer :: mask => null()
      !> containing a mask?
@@ -153,7 +153,7 @@ contains
     type(coef_t) :: coef
     real(kind=rp) :: start_time
     real(kind=rp) :: end_time
-    real(kind=rp) :: obj_scale
+    real(kind=rp), intent(in), target :: obj_scale
     type(field_t), intent(in), target :: u, v, w
     class(point_zone_t), intent(in), target :: mask
     real(kind=rp), intent(in) :: volume
@@ -180,7 +180,7 @@ contains
     this%v => v
     this%w => w
 
-    this%obj_scale = obj_scale
+    this%obj_scale => obj_scale
     this%volume = volume
 
     this%if_mask = if_mask
@@ -202,6 +202,7 @@ contains
     nullify(this%v)
     nullify(this%w)
     nullify(this%mask)
+    nullify(this%obj_scale)
     if (allocated(this%Ax)) then
        deallocate(this%Ax)
     end if

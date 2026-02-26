@@ -153,6 +153,7 @@ contains
     logical, intent(in) :: dealias
 
     call this%init_base(name, design%size(), weight, mask_name)
+    call this%init_weight_continuation(json)
 
     ! Save the simulation and design
     this%u => simulation%neko_case%fluid%u

@@ -40,6 +40,8 @@ module objective
   use num_types, only: rp
   use point_zone_registry, only: neko_point_zone_registry
   use json_module, only: json_file
+  use json_utils, only: json_get_or_default
+  use logger, only: neko_log, LOG_SIZE
   implicit none
   private
 
@@ -50,8 +52,19 @@ module objective
   !! This is the base class for objectives, which is a type of base functional.
   !! Each objective contain a weight that is used to scale the objective value.
   type, abstract, extends(base_functional_t) :: objective_t
-     !> Weight of the objective in the overall cost function
-     real(kind=rp) :: weight = 1.0_rp
+     !> Weight of the objective in the overall cost function.
+     !! The target attribute allows adjoint source terms to reference this weight
+     !! by pointer, so that continuation updates are reflected automatically.
+     real(kind=rp), target :: weight = 1.0_rp
+
+     ! Continuation parameters for the weight
+     !> Multiplicative update factor for the weight (continuation).
+     !! A value of 1.0 means no continuation is applied.
+     real(kind=rp) :: weight_factor = 1.0_rp
+     !> Maximum weight (upper bound for continuation).
+     real(kind=rp) :: weight_max = huge(0.0_rp)
+     !> Number of iterations between weight continuation updates.
+     integer :: weight_update_interval = 1
 
    contains
 
@@ -61,6 +74,12 @@ module objective
      procedure, pass(this) :: free_base => objective_free_base
      !> Get the weight of the objective
      procedure, pass(this) :: get_weight => objective_get_weight
+     !> Read weight continuation parameters from JSON.
+     procedure, pass(this) :: init_weight_continuation => &
+          objective_init_weight_continuation
+     !> Update the weight for continuation.
+     !! @param iter The current optimization iteration.
+     procedure, pass(this) :: update_weight => objective_update_weight
 
   end type objective_t
 
@@ -130,6 +149,9 @@ contains
 
     this%name = ""
     this%weight = 1.0_rp
+    this%weight_factor = 1.0_rp
+    this%weight_max = huge(0.0_rp)
+    this%weight_update_interval = 1
 
     this%value = 0.0_rp
     this%value_old = 0.0_rp
@@ -159,6 +181,42 @@ contains
     real(kind=rp) :: w
     w = this%weight
   end function objective_get_weight
+
+  !> Read weight continuation parameters from JSON.
+  !! @param this The objective.
+  !! @param json The JSON parameters.
+  subroutine objective_init_weight_continuation(this, json)
+    class(objective_t), intent(inout) :: this
+    type(json_file), intent(inout) :: json
+
+    call json_get_or_default(json, 'continuation.weight_factor', &
+         this%weight_factor, 1.0_rp)
+    call json_get_or_default(json, 'continuation.weight_max', &
+         this%weight_max, huge(0.0_rp))
+    call json_get_or_default(json, 'continuation.update_interval', &
+         this%weight_update_interval, 1)
+
+  end subroutine objective_init_weight_continuation
+
+  !> Update the objective weight for continuation.
+  !! @param this The objective.
+  !! @param iter The current optimization iteration.
+  subroutine objective_update_weight(this, iter)
+    class(objective_t), intent(inout) :: this
+    integer, intent(in) :: iter
+    character(len=LOG_SIZE) :: log_buf
+
+    if (this%weight_factor .eq. 1.0_rp) return
+    if (iter .le. 0) return
+    if (mod(iter, this%weight_update_interval) .ne. 0) return
+
+    this%weight = min(this%weight * this%weight_factor, this%weight_max)
+
+    write(log_buf, '(A,A,A,ES13.6)') 'Objective [', trim(this%name), &
+         '] weight updated to ', this%weight
+    call neko_log%message(log_buf)
+
+  end subroutine objective_update_weight
 
 end module objective
 

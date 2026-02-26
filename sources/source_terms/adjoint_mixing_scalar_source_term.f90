@@ -65,7 +65,8 @@ module adjoint_mixing_scalar_source_term
      !> The forward scalar field
      type(field_t), pointer :: s => null()
      !> A scalaing factor
-     real(kind=rp) :: obj_scale
+     !> A scale for the source term (pointer to the objective weight)
+     real(kind=rp), pointer :: obj_scale => null()
      !> Reference concentration
      real(kind=rp) :: phi_ref
      !> A mask for where the source term is evaluated
@@ -124,7 +125,7 @@ contains
     type(coef_t) :: coef
     real(kind=rp) :: start_time
     real(kind=rp) :: end_time
-    real(kind=rp) :: obj_scale
+    real(kind=rp), intent(in), target :: obj_scale
 
     logical :: if_mask
 
@@ -143,7 +144,7 @@ contains
 
     ! point everything in the correct places
     this%s => s
-    this%obj_scale = obj_scale
+    this%obj_scale => obj_scale
     this%phi_ref = phi_ref
     this%if_mask = if_mask
 
@@ -163,6 +164,7 @@ contains
     call this%free_base()
     nullify(this%s)
     nullify(this%mask)
+    nullify(this%obj_scale)
 
   end subroutine adjoint_mixing_scalar_source_term_free
 

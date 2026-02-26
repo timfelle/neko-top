@@ -133,6 +133,10 @@ module problem
      !> Update the objective function.
      procedure, pass(this) :: update_objectives => &
           problem_update_objectives
+     !> Update the objective weights for continuation.
+     !! @param iter The current optimization iteration.
+     procedure, pass(this) :: update_objective_weights => &
+          problem_update_objective_weights
      !> Update the constraints.
      procedure, pass(this) :: update_constraints => &
           problem_update_constraints
@@ -563,6 +567,22 @@ contains
        call this%objective_list(i)%objective%update_value(design)
     end do
   end subroutine problem_update_objectives
+
+  !> Update objective weights for continuation.
+  !!
+  !! This function updates the weight of each objective according to its
+  !! continuation parameters.
+  !! @param[inout] this The problem.
+  !! @param[in] iter The current optimization iteration.
+  subroutine problem_update_objective_weights(this, iter)
+    class(problem_t), intent(inout) :: this
+    integer, intent(in) :: iter
+    integer :: i
+
+    do i = 1, this%n_objectives
+       call this%objective_list(i)%objective%update_weight(iter)
+    end do
+  end subroutine problem_update_objective_weights
 
   !> Update the constraints.
   !!

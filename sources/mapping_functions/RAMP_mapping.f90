@@ -94,6 +94,11 @@ module RAMP_mapping
      !> Multiplicative update factor for q (continuation).
      !! A value of 1.0 means no continuation is applied.
      real(kind=rp) :: q_factor
+     !> Final (maximum) value for f_max (continuation upper bound).
+     real(kind=rp) :: f_max_final
+     !> Multiplicative update factor for f_max (continuation).
+     !! A value of 1.0 means no continuation is applied.
+     real(kind=rp) :: f_max_factor
      !> Number of iterations between continuation updates.
      integer :: update_interval
 
@@ -120,7 +125,7 @@ contains
     class(RAMP_mapping_t), intent(inout) :: this
     type(json_file), intent(inout) :: json
     type(coef_t), intent(inout) :: coef
-    real(kind=rp) :: f_min, f_max, q, q_max, q_factor
+    real(kind=rp) :: f_min, f_max, q, q_max, q_factor, f_max_final, f_max_factor
     logical :: convex_up
     integer :: update_interval
 
@@ -132,23 +137,28 @@ contains
     ! Continuation parameters (optional)
     call json_get_or_default(json, 'continuation.q_max', q_max, huge(0.0_rp))
     call json_get_or_default(json, 'continuation.q_factor', q_factor, 1.0_rp)
+    call json_get_or_default(json, 'continuation.f_max_final', f_max_final, &
+         huge(0.0_rp))
+    call json_get_or_default(json, 'continuation.f_max_factor', &
+         f_max_factor, 1.0_rp)
     call json_get_or_default(json, 'continuation.update_interval', &
          update_interval, 1)
 
     call this%init_base(json, coef)
     call this%init_from_attributes(coef, f_min, f_max, q, convex_up, &
-         q_max, q_factor, update_interval)
+         q_max, q_factor, f_max_final, f_max_factor, update_interval)
 
   end subroutine RAMP_mapping_init_from_json
 
   !> Actual constructor.
   subroutine RAMP_mapping_init_from_attributes(this, coef, f_min, f_max, q, &
-       convex_up, q_max, q_factor, update_interval)
+       convex_up, q_max, q_factor, f_max_final, f_max_factor, update_interval)
     class(RAMP_mapping_t), intent(inout) :: this
     type(coef_t), intent(inout) :: coef
     real(kind=rp), intent(in) :: f_min, f_max, q
     logical, intent(in) :: convex_up
     real(kind=rp), intent(in), optional :: q_max, q_factor
+    real(kind=rp), intent(in), optional :: f_max_final, f_max_factor
     integer, intent(in), optional :: update_interval
 
     this%f_min = f_min
@@ -159,10 +169,14 @@ contains
     ! Continuation defaults: no continuation
     this%q_max = huge(0.0_rp)
     this%q_factor = 1.0_rp
+    this%f_max_final = huge(0.0_rp)
+    this%f_max_factor = 1.0_rp
     this%update_interval = 1
 
     if (present(q_max)) this%q_max = q_max
     if (present(q_factor)) this%q_factor = q_factor
+    if (present(f_max_final)) this%f_max_final = f_max_final
+    if (present(f_max_factor)) this%f_max_factor = f_max_factor
     if (present(update_interval)) this%update_interval = update_interval
 
   end subroutine RAMP_mapping_init_from_attributes
@@ -351,14 +365,23 @@ contains
     character(len=LOG_SIZE) :: log_buf
 
     ! Only update when continuation is active and the interval is reached
-    if (this%q_factor .eq. 1.0_rp) return
+    if (this%q_factor .eq. 1.0_rp .and. &
+         this%f_max_factor .eq. 1.0_rp) return
     if (iter .le. 0) return
     if (mod(iter, this%update_interval) .ne. 0) return
 
-    this%q = min(this%q * this%q_factor, this%q_max)
+    if (this%q_factor .ne. 1.0_rp) then
+       this%q = min(this%q * this%q_factor, this%q_max)
+       write(log_buf, '(A,ES13.6)') 'RAMP continuation: q updated to ', this%q
+       call neko_log%message(log_buf)
+    end if
 
-    write(log_buf, '(A,ES13.6)') 'RAMP continuation: q updated to ', this%q
-    call neko_log%message(log_buf)
+    if (this%f_max_factor .ne. 1.0_rp) then
+       this%f_max = min(this%f_max * this%f_max_factor, this%f_max_final)
+       write(log_buf, '(A,ES13.6)') &
+            'RAMP continuation: f_max updated to ', this%f_max
+       call neko_log%message(log_buf)
+    end if
 
   end subroutine RAMP_mapping_update
 

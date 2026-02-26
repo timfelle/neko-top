@@ -317,8 +317,9 @@ contains
        call matrix_cmult(constraint_sensitivities, this%scaling_factor)
     end if
 
-    ! Update mapping parameters for continuation (if any)
+    ! Update mapping parameters and objective weights for continuation (if any)
     call design%update_mappings(iter)
+    call problem%update_objective_weights(iter)
 
     ! Update the design variable
     call this%mma%update(iter, x, objective_sensitivities, &
