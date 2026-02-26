@@ -43,7 +43,9 @@ add_subdirectory(checkpointing)
 # Add the listed tests to the CMake project.
 
 # Create a file list of the pFUnit test sources. These should be relative paths.
-set(PFUNIT_TEST_SOURCES)
+set(PFUNIT_TEST_SOURCES
+    continuation/continuation.pf
+)
 
 if (hdf5_FOUND)
     list(APPEND PFUNIT_TEST_SOURCES mma/io_hdf5.pf)

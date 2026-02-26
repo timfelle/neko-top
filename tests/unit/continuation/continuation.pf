@@ -1,0 +1,490 @@
+!> @file continuation.pf
+!! @copyright
+!! Copyright (c) 2026, The Neko-TOP Authors
+!! All rights reserved.
+!!
+!! Redistribution and use in source and binary forms, with or without
+!! modification, are permitted provided that the following conditions
+!! are met:
+!!
+!!   * Redistributions of source code must retain the above copyright
+!!     notice, this list of conditions and the following disclaimer.
+!!
+!!   * Redistributions in binary form must reproduce the above
+!!     copyright notice, this list of conditions and the following
+!!     disclaimer in the documentation and/or other materials provided
+!!     with the distribution.
+!!
+!!   * Neither the name of the authors nor the names of its
+!!     contributors may be used to endorse or promote products derived
+!!     from this software without specific prior written permission.
+!!
+!! THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+!! "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+!! LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+!! FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+!! COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+!! INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+!! BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+!! LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+!! CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+!! LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+!! ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+!! POSSIBILITY OF SUCH DAMAGE.
+
+!> pFUnit tests for the continuation strategy applied to RAMP mapping
+!! parameters, PDE filter radius, and objective weights.
+!!
+!! Each updatable component is tested independently:
+!!
+!! - RAMP mapping `q` (penalty exponent)
+!! - RAMP mapping `f_max` (Brinkman amplitude)
+!! - PDE filter `r` (filter radius)
+!! - Objective `weight`
+module continuation_test
+  use mpi
+  use pfunit
+  use num_types, only: rp
+  use RAMP_mapping, only: RAMP_mapping_t
+  use PDE_filter, only: PDE_filter_t
+  use objective, only: objective_t
+  use design, only: design_t
+  use neko, only: neko_init
+  use math, only: NEKO_EPS
+  implicit none
+
+  !> A minimal concrete objective type used for testing the weight
+  !! continuation logic.  All deferred procedures are stubs.
+  type, extends(objective_t) :: test_objective_t
+   contains
+     procedure, pass(this) :: free => test_obj_free
+     procedure, pass(this) :: update_value => test_obj_update_value
+     procedure, pass(this) :: update_sensitivity => test_obj_update_sensitivity
+  end type test_objective_t
+
+  @TestCase
+  type, extends(MPITestCase) :: continuation_test_case
+   contains
+     procedure :: setUp
+     procedure :: tearDown
+  end type continuation_test_case
+
+  logical :: initialized = .false.
+
+contains
+
+  ! -------------------------------------------------------------------------- !
+  ! Test case lifecycle
+
+  subroutine setUp(this)
+    class(continuation_test_case), intent(inout) :: this
+
+    if (initialized) return
+    initialized = .true.
+    call neko_init()
+
+  end subroutine setUp
+
+  subroutine tearDown(this)
+    class(continuation_test_case), intent(inout) :: this
+  end subroutine tearDown
+
+  ! -------------------------------------------------------------------------- !
+  ! Stub implementations for the minimal test objective type
+
+  subroutine test_obj_free(this)
+    class(test_objective_t), intent(inout) :: this
+    call this%free_base()
+  end subroutine test_obj_free
+
+  subroutine test_obj_update_value(this, design)
+    class(test_objective_t), intent(inout) :: this
+    class(design_t), intent(in) :: design
+  end subroutine test_obj_update_value
+
+  subroutine test_obj_update_sensitivity(this, design)
+    class(test_objective_t), intent(inout) :: this
+    class(design_t), intent(in) :: design
+  end subroutine test_obj_update_sensitivity
+
+  ! ========================================================================== !
+  ! RAMP mapping — q continuation tests
+  ! ========================================================================== !
+
+  !> q is not changed when q_factor equals 1.0 (continuation inactive).
+  @test(npes=[1])
+  subroutine test_ramp_q_no_update_when_factor_one(this)
+    class(continuation_test_case), intent(inout) :: this
+    type(RAMP_mapping_t) :: ramp
+
+    ramp%q = 2.0_rp
+    ramp%q_factor = 1.0_rp
+    ramp%q_max = huge(0.0_rp)
+    ramp%f_max_factor = 1.0_rp
+    ramp%update_interval = 1
+
+    call ramp%update(1)
+
+    @assertEqual(2.0_rp, ramp%q, NEKO_EPS, &
+         message = "q must not change when q_factor == 1.0")
+
+  end subroutine test_ramp_q_no_update_when_factor_one
+
+  !> q is not changed when the iteration does not fall on an update interval.
+  @test(npes=[1])
+  subroutine test_ramp_q_no_update_off_interval(this)
+    class(continuation_test_case), intent(inout) :: this
+    type(RAMP_mapping_t) :: ramp
+
+    ramp%q = 2.0_rp
+    ramp%q_factor = 2.0_rp
+    ramp%q_max = huge(0.0_rp)
+    ramp%f_max_factor = 1.0_rp
+    ramp%update_interval = 5
+
+    call ramp%update(3)
+
+    @assertEqual(2.0_rp, ramp%q, NEKO_EPS, &
+         message = "q must not change between update intervals")
+
+  end subroutine test_ramp_q_no_update_off_interval
+
+  !> q is multiplied by q_factor when an update interval is reached.
+  @test(npes=[1])
+  subroutine test_ramp_q_updated_at_interval(this)
+    class(continuation_test_case), intent(inout) :: this
+    type(RAMP_mapping_t) :: ramp
+
+    ramp%q = 2.0_rp
+    ramp%q_factor = 1.5_rp
+    ramp%q_max = huge(0.0_rp)
+    ramp%f_max_factor = 1.0_rp
+    ramp%update_interval = 5
+
+    call ramp%update(5)
+
+    @assertEqual(3.0_rp, ramp%q, NEKO_EPS, &
+         message = "q must be multiplied by q_factor at the update interval")
+
+  end subroutine test_ramp_q_updated_at_interval
+
+  !> q is capped at q_max even when the multiplicative update would exceed it.
+  @test(npes=[1])
+  subroutine test_ramp_q_capped_at_q_max(this)
+    class(continuation_test_case), intent(inout) :: this
+    type(RAMP_mapping_t) :: ramp
+
+    ramp%q = 2.0_rp
+    ramp%q_factor = 4.0_rp
+    ramp%q_max = 5.0_rp
+    ramp%f_max_factor = 1.0_rp
+    ramp%update_interval = 5
+
+    call ramp%update(5)
+
+    @assertEqual(5.0_rp, ramp%q, NEKO_EPS, &
+         message = "q must be capped at q_max")
+
+  end subroutine test_ramp_q_capped_at_q_max
+
+  !> Successive updates accumulate correctly up to q_max.
+  @test(npes=[1])
+  subroutine test_ramp_q_multiple_updates(this)
+    class(continuation_test_case), intent(inout) :: this
+    type(RAMP_mapping_t) :: ramp
+    integer :: iter
+
+    ramp%q = 1.0_rp
+    ramp%q_factor = 2.0_rp
+    ramp%q_max = 8.0_rp
+    ramp%f_max_factor = 1.0_rp
+    ramp%update_interval = 5
+
+    do iter = 1, 20
+       call ramp%update(iter)
+    end do
+
+    ! After iterations 5,10,15,20 (4 updates): q = 1 x 2^4 = 16, capped at 8
+    @assertEqual(8.0_rp, ramp%q, NEKO_EPS, &
+         message = "q after multiple updates must be capped at q_max")
+
+  end subroutine test_ramp_q_multiple_updates
+
+  ! ========================================================================== !
+  ! RAMP mapping — f_max continuation tests
+  ! ========================================================================== !
+
+  !> f_max is not changed when f_max_factor equals 1.0 (continuation inactive).
+  @test(npes=[1])
+  subroutine test_ramp_fmax_no_update_when_factor_one(this)
+    class(continuation_test_case), intent(inout) :: this
+    type(RAMP_mapping_t) :: ramp
+
+    ramp%f_max = 100.0_rp
+    ramp%f_max_factor = 1.0_rp
+    ramp%f_max_final = huge(0.0_rp)
+    ramp%q_factor = 1.0_rp
+    ramp%update_interval = 1
+
+    call ramp%update(1)
+
+    @assertEqual(100.0_rp, ramp%f_max, NEKO_EPS, &
+         message = "f_max must not change when f_max_factor == 1.0")
+
+  end subroutine test_ramp_fmax_no_update_when_factor_one
+
+  !> f_max is not changed when the iteration is off the update interval.
+  @test(npes=[1])
+  subroutine test_ramp_fmax_no_update_off_interval(this)
+    class(continuation_test_case), intent(inout) :: this
+    type(RAMP_mapping_t) :: ramp
+
+    ramp%f_max = 100.0_rp
+    ramp%f_max_factor = 2.0_rp
+    ramp%f_max_final = huge(0.0_rp)
+    ramp%q_factor = 1.0_rp
+    ramp%update_interval = 5
+
+    call ramp%update(3)
+
+    @assertEqual(100.0_rp, ramp%f_max, NEKO_EPS, &
+         message = "f_max must not change between update intervals")
+
+  end subroutine test_ramp_fmax_no_update_off_interval
+
+  !> f_max is multiplied by f_max_factor when an update interval is reached.
+  @test(npes=[1])
+  subroutine test_ramp_fmax_updated_at_interval(this)
+    class(continuation_test_case), intent(inout) :: this
+    type(RAMP_mapping_t) :: ramp
+
+    ramp%f_max = 100.0_rp
+    ramp%f_max_factor = 2.0_rp
+    ramp%f_max_final = huge(0.0_rp)
+    ramp%q_factor = 1.0_rp
+    ramp%update_interval = 5
+
+    call ramp%update(5)
+
+    @assertEqual(200.0_rp, ramp%f_max, NEKO_EPS, &
+         message = "f_max must be multiplied by f_max_factor at the interval")
+
+  end subroutine test_ramp_fmax_updated_at_interval
+
+  !> f_max is capped at f_max_final even when the update would exceed it.
+  @test(npes=[1])
+  subroutine test_ramp_fmax_capped_at_final(this)
+    class(continuation_test_case), intent(inout) :: this
+    type(RAMP_mapping_t) :: ramp
+
+    ramp%f_max = 100.0_rp
+    ramp%f_max_factor = 5.0_rp
+    ramp%f_max_final = 300.0_rp
+    ramp%q_factor = 1.0_rp
+    ramp%update_interval = 5
+
+    call ramp%update(5)
+
+    @assertEqual(300.0_rp, ramp%f_max, NEKO_EPS, &
+         message = "f_max must be capped at f_max_final")
+
+  end subroutine test_ramp_fmax_capped_at_final
+
+  ! ========================================================================== !
+  ! PDE filter — r continuation tests
+  ! ========================================================================== !
+
+  !> r is not changed when r_factor equals 1.0 (continuation inactive).
+  @test(npes=[1])
+  subroutine test_pde_filter_r_no_update_when_factor_one(this)
+    class(continuation_test_case), intent(inout) :: this
+    type(PDE_filter_t) :: filt
+
+    filt%r = 0.05_rp
+    filt%r_factor = 1.0_rp
+    filt%r_min = 0.0_rp
+    filt%update_interval = 1
+
+    call filt%update(1)
+
+    @assertEqual(0.05_rp, filt%r, NEKO_EPS, &
+         message = "r must not change when r_factor == 1.0")
+
+  end subroutine test_pde_filter_r_no_update_when_factor_one
+
+  !> r is not changed when the iteration is off the update interval.
+  @test(npes=[1])
+  subroutine test_pde_filter_r_no_update_off_interval(this)
+    class(continuation_test_case), intent(inout) :: this
+    type(PDE_filter_t) :: filt
+
+    filt%r = 0.1_rp
+    filt%r_factor = 0.5_rp
+    filt%r_min = 0.0_rp
+    filt%update_interval = 5
+
+    call filt%update(3)
+
+    @assertEqual(0.1_rp, filt%r, NEKO_EPS, &
+         message = "r must not change between update intervals")
+
+  end subroutine test_pde_filter_r_no_update_off_interval
+
+  !> r is multiplied by r_factor when an update interval is reached.
+  @test(npes=[1])
+  subroutine test_pde_filter_r_updated_at_interval(this)
+    class(continuation_test_case), intent(inout) :: this
+    type(PDE_filter_t) :: filt
+
+    filt%r = 0.1_rp
+    filt%r_factor = 0.5_rp
+    filt%r_min = 0.0_rp
+    filt%update_interval = 5
+
+    call filt%update(5)
+
+    @assertEqual(0.05_rp, filt%r, NEKO_EPS, &
+         message = "r must be multiplied by r_factor at the update interval")
+
+  end subroutine test_pde_filter_r_updated_at_interval
+
+  !> r is floored at r_min when the update would reduce it further.
+  @test(npes=[1])
+  subroutine test_pde_filter_r_floored_at_r_min(this)
+    class(continuation_test_case), intent(inout) :: this
+    type(PDE_filter_t) :: filt
+
+    filt%r = 0.1_rp
+    filt%r_factor = 0.01_rp
+    filt%r_min = 0.06_rp
+    filt%update_interval = 5
+
+    call filt%update(5)
+
+    @assertEqual(0.06_rp, filt%r, NEKO_EPS, &
+         message = "r must be floored at r_min")
+
+  end subroutine test_pde_filter_r_floored_at_r_min
+
+  !> Successive updates reduce r correctly, stopping at r_min.
+  @test(npes=[1])
+  subroutine test_pde_filter_r_multiple_updates(this)
+    class(continuation_test_case), intent(inout) :: this
+    type(PDE_filter_t) :: filt
+    integer :: iter
+
+    filt%r = 1.0_rp
+    filt%r_factor = 0.5_rp
+    filt%r_min = 0.1_rp
+    filt%update_interval = 5
+
+    do iter = 1, 40
+       call filt%update(iter)
+    end do
+
+    ! After iterations 5,10,...,40 (8 updates): r = 1 x 0.5^8 = 1/256 ~ 0.0039
+    ! but floored at r_min = 0.1
+    @assertEqual(0.1_rp, filt%r, NEKO_EPS, &
+         message = "r must be floored at r_min after many updates")
+
+  end subroutine test_pde_filter_r_multiple_updates
+
+  ! ========================================================================== !
+  ! Objective weight continuation tests
+  ! ========================================================================== !
+
+  !> weight is not changed when weight_factor equals 1.0 (continuation inactive)
+  @test(npes=[1])
+  subroutine test_objective_weight_no_update_when_factor_one(this)
+    class(continuation_test_case), intent(inout) :: this
+    type(test_objective_t) :: obj
+
+    obj%weight = 1.0_rp
+    obj%weight_factor = 1.0_rp
+    obj%weight_max = huge(0.0_rp)
+    obj%weight_update_interval = 1
+
+    call obj%update_weight(1)
+
+    @assertEqual(1.0_rp, obj%weight, NEKO_EPS, &
+         message = "weight must not change when weight_factor == 1.0")
+
+  end subroutine test_objective_weight_no_update_when_factor_one
+
+  !> weight is not changed when the iteration is off the update interval.
+  @test(npes=[1])
+  subroutine test_objective_weight_no_update_off_interval(this)
+    class(continuation_test_case), intent(inout) :: this
+    type(test_objective_t) :: obj
+
+    obj%weight = 1.0_rp
+    obj%weight_factor = 2.0_rp
+    obj%weight_max = huge(0.0_rp)
+    obj%weight_update_interval = 5
+
+    call obj%update_weight(3)
+
+    @assertEqual(1.0_rp, obj%weight, NEKO_EPS, &
+         message = "weight must not change between update intervals")
+
+  end subroutine test_objective_weight_no_update_off_interval
+
+  !> weight is multiplied by weight_factor when an update interval is reached.
+  @test(npes=[1])
+  subroutine test_objective_weight_updated_at_interval(this)
+    class(continuation_test_case), intent(inout) :: this
+    type(test_objective_t) :: obj
+
+    obj%weight = 1.0_rp
+    obj%weight_factor = 2.0_rp
+    obj%weight_max = huge(0.0_rp)
+    obj%weight_update_interval = 5
+
+    call obj%update_weight(5)
+
+    @assertEqual(2.0_rp, obj%weight, NEKO_EPS, &
+         message = "weight must be multiplied by weight_factor at the interval")
+
+  end subroutine test_objective_weight_updated_at_interval
+
+  !> weight is capped at weight_max even when the update would exceed it.
+  @test(npes=[1])
+  subroutine test_objective_weight_capped_at_max(this)
+    class(continuation_test_case), intent(inout) :: this
+    type(test_objective_t) :: obj
+
+    obj%weight = 2.0_rp
+    obj%weight_factor = 10.0_rp
+    obj%weight_max = 5.0_rp
+    obj%weight_update_interval = 5
+
+    call obj%update_weight(5)
+
+    @assertEqual(5.0_rp, obj%weight, NEKO_EPS, &
+         message = "weight must be capped at weight_max")
+
+  end subroutine test_objective_weight_capped_at_max
+
+  !> Successive weight updates accumulate correctly up to weight_max.
+  @test(npes=[1])
+  subroutine test_objective_weight_multiple_updates(this)
+    class(continuation_test_case), intent(inout) :: this
+    type(test_objective_t) :: obj
+    integer :: iter
+
+    obj%weight = 1.0_rp
+    obj%weight_factor = 2.0_rp
+    obj%weight_max = 8.0_rp
+    obj%weight_update_interval = 5
+
+    do iter = 1, 20
+       call obj%update_weight(iter)
+    end do
+
+    ! After iterations 5,10,15,20 (4 updates): w = 1 x 2^4 = 16, capped at 8
+    @assertEqual(8.0_rp, obj%weight, NEKO_EPS, &
+         message = "weight after multiple updates must be capped at weight_max")
+
+  end subroutine test_objective_weight_multiple_updates
+
+end module continuation_test
