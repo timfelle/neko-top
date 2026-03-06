@@ -19,37 +19,33 @@ computational fluid dynamics.
 Please visit the [LUMI website](https://lumi-supercomputer.eu/) for more
 information about the system and its capabilities.
 
+### Limitations
+
 ### Environment setup
 The following example shows how to set up the environment for LUMI. The
 `prepare.env` file should be placed in the root of the Neko-TOP directory. The
 `setup.sh` script will automatically load the `prepare.env` file if it exists.
 The `prepare.env` file should contain the following lines:
 
+#### CPU Cray
+(Tested after LUMI update january 2026)
 ```bash
-#!/bin/bash
+# Load modules for the Cray CPU environment
+ml CrayEnv cce/19 buildtools 2> /dev/null
+export NEKO_CFLAGS="-O3"
+export NEKO_FCFLAGS="-O0 -m4"
 
-# Load modules
-ml CrayEnv PrgEnv-cray buildtools cray-mpich 2> /dev/null
+# Define the HDF5 support
+ml cray-hdf5-parallel 2> /dev/null
+export NEKO_CONFIG_FLAGS=(--with-hdf5)
 
+# Set CMake build type and compilers
+export CMAKE_BUILD_TYPE=Release
 export MPIFC=ftn
 export MPICC=cc
 export MPICXX=CC
 export FC=ftn
 export CC=cc
-
-export NEKO_CFLAGS="-O3"
-export NEKO_FCFLAGS="-O2 -m4"
-
-if [ "$DEVICE_TYPE" == "HIP" ]; then
-    # Load GPU Specific modules
-    ml craype-x86-trento craype-accel-amd-gfx90a rocm 2> /dev/null
-
-    HIP_DIR=${ROCM_PATH}
-    export HIPCC=hipcc
-    export NEKO_HIPCC_FLAGS="-O3 --offload-arch=gfx90a"
-    export NEKO_CONFIG_FLAGS=(--enable-device-mpi)
-    export MPICH_GPU_SUPPORT_ENABLED=1
-fi
 ```
 
 ### Execution of examples

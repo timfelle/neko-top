@@ -54,6 +54,12 @@ if [ "$NEKO_DIR" ]; then
     PATH=$NEKO_DIR/bin:$PATH
 fi
 
+if [ -f "box.nmsh" ]; then
+    echo -e "Mesh file 'box.nmsh' already exists. Skipping mesh generation."
+    echo -e "If you want to regenerate the mesh, please remove 'box.nmsh' and run again."
+    exit 0
+fi
+
 if [[ -z $(which genmeshbox) ]]; then
     echo -e "Neko tool 'genmeshbox' not found." >&2
     echo -e "Please ensure Neko is installed and in your PATH." >&2
@@ -69,7 +75,17 @@ fi
 z=$(python3 -c "print(1.0 / $N)")
 
 echo "Generating mesh with dimensions: $Nx $Ny $Nz"
-genmeshbox 0 $Lx 0 1 0 $z $Nx $Ny $Nz .false. .true. .true.
+genmeshbox 0 $Lx 0 1 0 $z $Nx $Ny $Nz .false. .true. .true. \
+    > genmeshbox.log 2>&1 || {
+    echo -e "ERROR: Mesh generation failed." >&2
+    echo -e "See genmeshbox.log for details." >&2
+    exit 1
+}
+
+if [ ! -f "box.nmsh" ]; then
+    echo -e "ERROR: Mesh file 'box.nmsh' not found after mesh generation." >&2
+    exit 1
+fi
 
 # End of file
 # ============================================================================ #
