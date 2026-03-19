@@ -48,6 +48,36 @@ export FC=ftn
 export CC=cc
 ```
 
+#### GPU Cray
+(Tested after LUMI update january 2026)
+```bash
+# Load modules for the Cray CPU environment
+ml CrayEnv cce/19 buildtools 2> /dev/null
+export NEKO_CFLAGS="-O3"
+export NEKO_FCFLAGS="-O0 -m4"
+
+# # Define the HDF5 support
+ml cray-hdf5-parallel/1.12.2.11 2> /dev/null
+
+# Load GPU Specific modules
+ml craype-accel-amd-gfx90a rocm/6.3.4 2> /dev/null
+export LD_LIBRARY_PATH="$CRAY_LD_LIBRARY_PATH:$LD_LIBRARY_PATH"
+
+export HIP_DIR="${ROCM_PATH}"
+export HIPCC=hipcc
+export NEKO_HIPCC_FLAGS="-O3 --offload-arch=gfx90a"
+export NEKO_CONFIG_FLAGS=(--enable-device-mpi)
+export MPICH_GPU_SUPPORT_ENABLED=1
+
+# Set CMake build type and compilers
+export CMAKE_BUILD_TYPE=Release
+export MPIFC=ftn
+export MPICC=cc
+export MPICXX=CC
+export FC=ftn
+export CC=cc
+```
+
 ### Execution of examples
 Examples on LUMI can be executed in two different ways, interactively or as a
 submitted batch job.
