@@ -1,6 +1,6 @@
 !> @file simulation_adjoint.f90
 !! @copyright
-!! Copyright (c) 2024-2025, The Neko-TOP Authors
+!! Copyright (c) 2024-2026, The Neko-TOP Authors
 !! All rights reserved.
 !!
 !! Redistribution and use in source and binary forms, with or without
@@ -35,19 +35,19 @@
 !> Adjoint simulation driver
 module simulation_adjoint
   use mpi_f08, only: MPI_WTIME
-  use case, only: case_t
+  use neko_config, only: NEKO_BCKND_DEVICE
   use num_types, only: rp, dp
   use time_scheme_controller, only: time_scheme_controller_t
   use file, only: file_t
   use logger, only: LOG_SIZE, neko_log
-  use jobctrl, only: jobctrl_time_limit
-  use field, only: field_t
-  use profiler, only: profiler_start, profiler_stop, &
-       profiler_start_region, profiler_end_region
+  use profiler, only: profiler_start_region, profiler_end_region
   use json_utils, only: json_get_or_default
   use time_state, only : time_state_t
   use time_step_controller, only: time_step_controller_t
   use adjoint_case, only: adjoint_case_t
+  use device_math, only: device_glsc3
+  use math, only: glsc3
+  use vector, only: vector_t
   implicit none
   private
 
@@ -78,6 +78,7 @@ contains
     ! Call stats, samplers and user-init before time loop
     call neko_log%section('Postprocessing')
     call C%output_controller%execute(C%time)
+    call simulation_adjoint_norm_output(C, C%time)
 
     call C%case%user%initialize(C%time)
     call neko_log%end_section()
@@ -142,6 +143,9 @@ contains
        C%time%t = final_time - t_bkp
     end if
     call C%time%status()
+    if (present(final_time)) then
+       C%time%t = t_bkp
+    end if
     call neko_log%begin()
 
     write(log_buf, '(A,E15.7,1x,A,E15.7)') 'CFL:', cfl, 'dt:', C%time%dt
@@ -173,6 +177,7 @@ contains
 
     ! Run any IO needed.
     call C%output_controller%execute(C%time)
+    call simulation_adjoint_norm_output(C, C%time)
 
     call neko_log%end_section()
 
@@ -180,7 +185,8 @@ contains
     end_time = MPI_WTIME()
     call neko_log%section('Step summary')
     write(log_buf, '(A,I8,A,E15.7)') &
-         'Total time for step ', C%time%tstep, ' (s): ', end_time-tstep_start_time
+         'Total time for step ', C%time%tstep, ' (s): ', &
+         end_time - tstep_start_time
     call neko_log%message(log_buf)
     write(log_buf, '(A,E15.7)') &
          'Total elapsed time (s):           ', end_time-tstep_loop_start_time
@@ -269,7 +275,46 @@ contains
     call neko_log%end_section()
 
     call C%output_controller%set_counter(C%time)
+    if (C%norm_output_enabled) then
+       call C%norm_output_ctrl%set_counter(C%time)
+    end if
   end subroutine simulation_adjoint_restart
+
+  subroutine simulation_adjoint_norm_output(C, time_output)
+    type(adjoint_case_t), intent(inout) :: C
+    type(time_state_t), intent(in) :: time_output
+    type(vector_t) :: data_line
+    real(kind=rp) :: norm_l2
+    integer :: n
+
+    if (.not. C%norm_output_enabled) return
+    if (.not. C%norm_output_ctrl%check(time_output)) return
+
+    n = C%fluid_adj%c_Xh%dof%size()
+    if (NEKO_BCKND_DEVICE .eq. 1) then
+       norm_l2 = device_glsc3(C%fluid_adj%u_adj%x_d, &
+            C%fluid_adj%u_adj%x_d, C%fluid_adj%c_Xh%B_d, n) + &
+            device_glsc3(C%fluid_adj%v_adj%x_d, &
+            C%fluid_adj%v_adj%x_d, C%fluid_adj%c_Xh%B_d, n) + &
+            device_glsc3(C%fluid_adj%w_adj%x_d, &
+            C%fluid_adj%w_adj%x_d, C%fluid_adj%c_Xh%B_d, n)
+    else
+       norm_l2 = glsc3(C%fluid_adj%u_adj%x, C%fluid_adj%u_adj%x, &
+            C%fluid_adj%c_Xh%B, n) + &
+            glsc3(C%fluid_adj%v_adj%x, C%fluid_adj%v_adj%x, &
+            C%fluid_adj%c_Xh%B, n) + &
+            glsc3(C%fluid_adj%w_adj%x, C%fluid_adj%w_adj%x, &
+            C%fluid_adj%c_Xh%B, n)
+    end if
+
+    norm_l2 = sqrt(norm_l2) / C%fluid_adj%c_Xh%volume
+
+    call data_line%init(1)
+    data_line%x = [norm_l2]
+    call C%norm_output_file%write(data_line, time_output%t)
+    call data_line%free()
+    call C%norm_output_ctrl%register_execution()
+  end subroutine simulation_adjoint_norm_output
 
   !> Write a checkpoint at joblimit
   subroutine simulation_adjoint_joblimit_chkp(C, t)

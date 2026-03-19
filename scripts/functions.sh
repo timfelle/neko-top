@@ -222,6 +222,11 @@ function cleanup {
     fi
 
     # ------------------------------------------------------------------------ #
+    # Remove links to data files and folders
+
+    find ./ -maxdepth 1 -type l -delete
+
+    # ------------------------------------------------------------------------ #
     # Move the results to the results folder
     results=$RPATH/$example
     printf "=%.0s" {1..80} && printf "\n"
@@ -238,12 +243,12 @@ function cleanup {
     for nek in $(find ./ -name "*.nek5000"); do
         printf "\t- %s\n" ${nek##*/}
 
-        base=$(basename $nek)
-        directory=$(dirname $nek)
+        base=$(basename ${nek%[0-9]*.*})
+        directory=$(dirname ${nek%[0-9]*.*})
         pattern=$directory/${base%.*}
 
         mkdir -p $pattern
-        mv -t $pattern $nek ${nek%[0-9]*.*}[0-9]*.f*
+        mv -t $pattern $nek ${nek%[0-9]*.*}[0-9]*.f* 2>/dev/null || true
     done
     printf "\n"
 
@@ -262,7 +267,6 @@ function cleanup {
         ./ $results
 
     # Remove all but the log files
-    find ./ -type l -delete
     find ./ -type f -not -name "error.log" -not -name "output.log" -delete
     find ./ -type d -empty -delete
 
