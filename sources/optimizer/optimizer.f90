@@ -347,10 +347,10 @@ contains
     call json_get_or_default(solver_params, 'max_runtime', read_real, &
          this%max_runtime)
     this%max_runtime = read_real
-
-    call json_get_or_default(solver_params, 'checkpoint.file', read_str, &
+    call json_get_or_default(solver_params, 'restart_file', read_str, &
          this%checkpoint_file)
     this%checkpoint_file = read_str
+
     call json_get_or_default(solver_params, 'checkpoint.path', read_str, &
          this%checkpoint_path)
     this%checkpoint_path = read_str
@@ -638,27 +638,28 @@ contains
   !! @param overwrite Whether to overwrite the file if it exists.
   !! @param path The path where the checkpoint file will be saved.
   !! @param basename The base name of the file to save the checkpoint.
-  !! @param extension The file extension to use for the checkpoint file.
+  !! @param format The file format to use for the checkpoint file.
   subroutine optimizer_save_checkpoint(this, iter, design, overwrite, &
-       path, basename, extension)
+       path, basename, format)
     class(optimizer_t), intent(inout) :: this
     integer, intent(in) :: iter
     class(design_t), intent(inout) :: design
     logical, intent(in) :: overwrite
     character(len=*), intent(in), optional :: path
     character(len=*), intent(in), optional :: basename
-    character(len=*), intent(in), optional :: extension
+    character(len=*), intent(in), optional :: format
+    character(len=:), allocatable :: checkpoint_format
     character(len=256) :: file_path, file_base, file_ext, file_full
     logical :: exist
 
     ! Set default behaviour, read from object if not provided
     if (.not. present(path)) file_path = trim(this%checkpoint_path)
     if (.not. present(basename)) file_base = trim(this%checkpoint_base)
-    if (.not. present(extension)) file_ext = trim(this%checkpoint_format)
+    if (.not. present(format)) checkpoint_format = trim(this%checkpoint_format)
 
     if (present(path)) file_path = trim(path)
     if (present(basename)) file_base = trim(basename)
-    if (present(extension)) file_ext = trim(extension)
+    if (present(format)) checkpoint_format = trim(format)
 
     ! Make sure path is valid and exists
     if (len_trim(file_path) .eq. 0) then
@@ -671,6 +672,14 @@ contains
     if (.not. exist) then
        call system('mkdir -p ' // trim(file_path))
     end if
+
+    select case (trim(checkpoint_format))
+    case ('h5', 'hdf5', 'hf5', 'hdf')
+       file_ext = 'h5'
+    case default
+       call neko_error('optimizer: Unsupported checkpoint format: "' // &
+            trim(checkpoint_format) // '"')
+    end select
 
     ! Construct the full filename based on overwrite flag
     if (overwrite) then
