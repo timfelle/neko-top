@@ -31,13 +31,12 @@ The `prepare.env` file should contain the following lines:
 (Tested after LUMI update january 2026)
 ```bash
 # Load modules for the Cray CPU environment
-ml CrayEnv cce/19 buildtools 2> /dev/null
+ml CrayEnv cce/20.0.0 cray-mpich/9.0.1 buildtools 2>> /dev/null
 export NEKO_CFLAGS="-O3"
 export NEKO_FCFLAGS="-O0 -m4"
 
-# Define the HDF5 support
-ml cray-hdf5-parallel 2> /dev/null
-export NEKO_CONFIG_FLAGS=(--with-hdf5)
+# # Define the HDF5 support
+ml cray-hdf5-parallel/1.14.3.7 2>> /dev/null
 
 # Set CMake build type and compilers
 export CMAKE_BUILD_TYPE=Release
@@ -52,15 +51,15 @@ export CC=cc
 (Tested after LUMI update january 2026)
 ```bash
 # Load modules for the Cray CPU environment
-ml CrayEnv cce/19 buildtools 2> /dev/null
+ml CrayEnv cce/20.0.0 cray-mpich/9.0.1 buildtools 2>> /dev/null
 export NEKO_CFLAGS="-O3"
 export NEKO_FCFLAGS="-O0 -m4"
 
 # # Define the HDF5 support
-ml cray-hdf5-parallel/1.12.2.11 2> /dev/null
+ml cray-hdf5-parallel/1.14.3.7 2>> /dev/null
 
 # Load GPU Specific modules
-ml craype-accel-amd-gfx90a rocm/6.3.4 2> /dev/null
+ml craype-accel-amd-gfx90a rocm/6.3.4 2>> /dev/null
 export LD_LIBRARY_PATH="$CRAY_LD_LIBRARY_PATH:$LD_LIBRARY_PATH"
 
 export HIP_DIR="${ROCM_PATH}"
