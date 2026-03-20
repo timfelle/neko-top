@@ -73,7 +73,7 @@ module optimizer
      ! Checkpoint related information
      character(len=256), private :: checkpoint_path = './checkpoints/'
      character(len=256), private :: checkpoint_base = 'optimizer_checkpoint'
-     character(len=256), private :: checkpoint_format = 'h5'
+     character(len=256), private :: checkpoint_format = 'hdf5'
      integer, private :: checkpoint_interval = -1
 
      ! Variables for the runtime-based stopping criteria
@@ -322,7 +322,7 @@ contains
     this%checkpoint_file = ''
     this%checkpoint_path = './checkpoints/'
     this%checkpoint_base = 'optimizer_checkpoint'
-    this%checkpoint_format = 'h5'
+    this%checkpoint_format = 'hdf5'
     this%checkpoint_interval = -1
 
     this%start_time = 0.0_rp
