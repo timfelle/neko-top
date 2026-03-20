@@ -388,6 +388,7 @@ contains
     class(design_t), intent(inout) :: design
     type(simulation_t), optional, intent(inout) :: simulation
     real(kind=rp) :: iteration_time
+    character(len=1024) :: checkpoint_file
     logical :: converged, file_exists
     integer :: stop_flag
 
@@ -396,17 +397,20 @@ contains
     converged = .false.
 
     ! Restart from checkpoint if available
-    inquire(file = this%checkpoint_file, exist = file_exists)
-    if (file_exists) then
-       call this%load_checkpoint(this%checkpoint_file, this%current_iteration, &
-            design)
+    if (trim(this%checkpoint_file) .ne. '') then
+       checkpoint_file = trim(this%checkpoint_file)
     else
-       inquire(file = 'optimizer_rt_checkpoint.' // this%checkpoint_format, &
-            exist = file_exists)
-       if (file_exists) then
-          call this%load_checkpoint('optimizer_rt_checkpoint.' // &
-               this%checkpoint_format, this%current_iteration, design)
-       end if
+       select case (trim(this%checkpoint_format))
+         case ('h5', 'hdf5', 'hf5', 'hdf')
+             checkpoint_file = trim(this%checkpoint_path) // &
+                  'optimizer_rt_checkpoint.h5'
+         end select
+    end if
+
+    inquire(file = checkpoint_file, exist = file_exists)
+    if (file_exists) then
+       call this%load_checkpoint(checkpoint_file, this%current_iteration, &
+            design)
     end if
 
     ! compute potential internals for for a potential restart
@@ -670,7 +674,7 @@ contains
 
     inquire(file=file_path, exist=exist)
     if (.not. exist) then
-       call system('mkdir -p ' // trim(file_path))
+       call execute_command_line('mkdir -p "' // trim(file_path) // '"')
     end if
 
     select case (trim(checkpoint_format))
