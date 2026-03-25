@@ -65,8 +65,11 @@ module continuation_scheduler
    contains
      procedure :: init => init_scheduler
      procedure :: free => free_scheduler
-     procedure :: json_get_or_register
-     procedure :: register_parameter
+
+     generic :: register => register_json, register_parameter
+     procedure, pass(this) :: register_json => continuation_json_get_or_register
+     procedure, pass(this) :: register_parameter => &
+          continuation_register_parameter
      procedure :: update
      procedure :: get_param_name
      procedure :: get_n_params
@@ -108,22 +111,23 @@ contains
     deallocate(this%params)
   end subroutine free_scheduler
 
-  !> Read a parameter from JSON and optionally register it for continuation.
+  !> Read a parameter from JSON and register it for continuation.
   !! @param this The continuation scheduler instance.
   !! @param json The json_file object.
   !! @param name The parameter name.
   !! @param target The pointer to the value that we possibly want to register.
-  !! @param default_value Default scalar value if parameter not found.
-  subroutine json_get_or_register(this, json, name, target, default_value)
+  subroutine continuation_register_json(this, json, name, target_value)
     class(continuation_scheduler_t), intent(inout) :: this
     type(json_file), intent(inout) :: json
     character(len=*), intent(in) :: name
-    real(kind=rp), target, intent(inout) :: target
-    real(kind=rp), intent(inout) :: default_value
+    real(kind=rp), target, intent(inout) :: target_value
     real(kind=rp), allocatable :: values(:)
     real(kind=rp) :: scalar_parameter
     logical :: found
     integer :: var_type, iter
+
+    call json_get(json, "values", values)
+    call json_get(json, "iterations", iter)
 
     ! Inspect JSON for the parameter
     call json%info(name, found=found, var_type=var_type)
@@ -138,18 +142,18 @@ contains
        call json_get_or_default(json, trim(name)//'_iterations', iter, &
             this%default_iterations)
        ! Register the parameter for continuation
-       call this%register_parameter(name, target, values, iter)
+       call this%continuation_register_parameter(name, target_value, values, iter)
     else
        call neko_error(trim(name)//" can only be real variable or real array!")
     end if
 
-  end subroutine json_get_or_register
+  end subroutine continuation_register_json
 
   !> Register a continuation parameter
-  subroutine register_parameter(this, name, target, values, iterations)
+  subroutine continuation_register_parameter(this, name, target_value, values, iterations)
     class(continuation_scheduler_t), intent(inout) :: this
     character(len=*), intent(in) :: name
-    real(rp), target, intent(inout) :: target
+    real(rp), target, intent(inout) :: target_value
     real(rp), intent(in) :: values(:)
     integer, optional, intent(in) :: iterations
 
@@ -180,11 +184,11 @@ contains
     end if
 
     this%params(n)%name = name
-    this%params(n)%target => target
+    this%params(n)%target => target_value
     allocate(this%params(n)%values(size(values)))
     this%params(n)%values = values
     this%params(n)%iterations_per_value = iter_val
-  end subroutine register_parameter
+  end subroutine continuation_register_parameter
 
   !> Update all registered parameters for the current iteration
   subroutine update(this, iter)

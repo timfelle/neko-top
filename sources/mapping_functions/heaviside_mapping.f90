@@ -89,15 +89,18 @@ contains
     class(heaviside_mapping_t), intent(inout) :: this
     type(json_file), intent(inout) :: json
     type(coef_t), intent(inout) :: coef
-    real(kind=rp) :: eta, beta
+    real(kind=rp) :: beta, eta
+    type(json_file) :: beta_continuation
+    logical :: founds
 
-    ! default value for beta
-    beta = 1.0_rp
-
+    call json_get(json, 'beta', beta)
     call json_get_or_default(json, 'eta', eta, 0.5_rp)
 
-    call nekotop_continuation%json_get_or_register(json, 'beta', this%beta, &
-         beta)
+    call json%info("beta_continuation", found = found)
+    if (founds) then
+       call json_get(json, 'beta_continuation', beta_continuation)
+       call nekotop_continuation%register(beta_continuation, "" this%beta)
+    end if
 
     ! Initialize base
     call this%init_base(json, coef)

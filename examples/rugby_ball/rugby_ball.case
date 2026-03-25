@@ -95,6 +95,11 @@
                     "r": 0.01
                 },
                 {
+                    "type": "heaviside",
+                    "beta": 8.0,
+                    "eta": 0.5
+                },
+                {
                     "type": "RAMP",
                     "f_max": 100.0,
                     "q": 3.0,
