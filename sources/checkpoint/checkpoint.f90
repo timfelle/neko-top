@@ -167,9 +167,10 @@ contains
     if ("extra_fields" .in. params) then
        allocate(extra_field_names(0))
        call json_get(params, "extra_fields", extra_field_names)
+       call extra_fields%init(size(extra_field_names))
        do i = 1, size(extra_field_names)
           fi => neko_registry%get_field(extra_field_names(i))
-          call extra_fields%append(fi)
+          call extra_fields%assign(i, fi)
        end do
     end if
 
@@ -191,7 +192,7 @@ contains
     type(field_list_t), optional, intent(inout) :: extra_fields
     type(field_t), pointer :: si
     character(len=LOG_SIZE) :: msg
-    integer :: i
+    integer :: i, n_states
 
     call this%free()
 
@@ -207,26 +208,39 @@ contains
     call this%chkp_output%init(neko_case%chkp, this%filename, fmt = this%fmt, &
          overwrite = .true.)
 
+    n_states = 4
+    if (allocated(neko_case%scalars)) then
+       n_states = n_states + size(neko_case%scalars%scalar_fields)
+    end if
+    if (present(extra_fields)) then
+       n_states = n_states + extra_fields%size()
+    end if
+
+    call this%state_list%init(n_states)
+
     ! Assign fluid pointers
-    call this%state_list%append(neko_case%fluid%p)
-    call this%state_list%append(neko_case%fluid%u)
-    call this%state_list%append(neko_case%fluid%v)
-    call this%state_list%append(neko_case%fluid%w)
+    call this%state_list%assign(1, neko_case%fluid%p)
+    call this%state_list%assign(2, neko_case%fluid%u)
+    call this%state_list%assign(3, neko_case%fluid%v)
+    call this%state_list%assign(4, neko_case%fluid%w)
+    n_states = 4
 
     ! Assign scalar pointers
     if (allocated(neko_case%scalars)) then
        do i = 1, size(neko_case%scalars%scalar_fields)
           si => neko_case%scalars%scalar_fields(i)%scalar%s
-          call this%state_list%append(si)
+          call this%state_list%assign(n_states + i, si)
        end do
+       n_states = n_states + size(neko_case%scalars%scalar_fields)
     end if
 
     ! Assign any extra fields specified by the user
     if (present(extra_fields)) then
        do i = 1, extra_fields%size()
-          si => extra_fields%get(i)
-          call this%state_list%append(si)
+          si => extra_fields%get_by_index(i)
+          call this%state_list%assign(n_states + i, si)
        end do
+       n_states = n_states + extra_fields%size()
     end if
 
     ! Allocate the storage for the RAM checkpoints

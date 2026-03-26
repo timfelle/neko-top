@@ -6,8 +6,8 @@
         "output_at_end": false,
         "output_boundary": false,
         "time": {
-            "end_time": 1e-2,
-            "timestep": 5.0e-3
+            "end_time": 0.1,
+            "timestep": 5.0e-4
         },
         "numerics": {
             "time_order": 1,
@@ -16,7 +16,7 @@
         },
         "fluid": {
             "scheme": "pnpn",
-            "Re": 200.0,
+            "Re": 10.0,
             "initial_condition": {
                 "type": "uniform",
                 "value": [ 0.0, 0.0, 0.0 ]
@@ -52,7 +52,7 @@
                 }
             ],
             "output_control": "never",
-            // "output_format": "vtkhdf"
+            "output_format": "vtkhdf"
         },
         "scalar": {
             "enabled": true,
@@ -100,7 +100,8 @@
             }
         },
         "adjoint_fluid": {
-            // "output_format": "vtkhdf",
+            "output_control": "never",
+            "output_format": "vtkhdf",
             "initial_condition": {
                 "type": "uniform",
                 "value": [ 0.0, 0.0, 0.0 ]
@@ -138,14 +139,28 @@
                 "y_bounds": [ -1.0, 1.0 ],
                 "z_bounds": [ -1.0, 1.0 ]
             }
+        ],
+        "simulation_components": [
+            {
+                "type": "steady",
+                "tol": 1e-2,
+                "compute_control": "tsteps",
+                "compute_value": 5
+            }
         ]
+    },
+    "unsteady": false,
+    "checkpoints": {
+        "enabled": false,
+        "format": "hdf5",
+        "n_memory": 300
     },
     "optimization": {
         "design": {
             "type": "brinkman",
             "verbose_design": true,
             "verbose_sensitivity": true,
-            // "output_format": "vtkhdf",
+            "output_format": "vtkhdf",
             "mapping": [
                 {
                     "type": "PDE_filter",
@@ -153,8 +168,10 @@
                     "tol": 1e-15
                 },
                 {
-                    "type": "linear",
-                    "f_max": 5.0
+                    "type": "RAMP",
+                    "f_max": 100.0,
+                    "q": 3.0,
+                    "convex_up": true
                 }
             ],
             "initial_distribution": {
@@ -181,11 +198,7 @@
                 "xmax": 1.0
             },
             "checkpoint": {
-                "interval": 1,
-                // To see the transient behavior I was copying and pasting
-                // the neko executable, mesh and case file into a new folder
-                // and restarting from a desired iteration.
-                // "file": "../checkpoints/optimizer_checkpoint_00100.h5"
+                "interval": 1
             }
         },
         "objectives": [
@@ -193,7 +206,7 @@
                 "type": "scalar_mixing",
                 "mask_name": "objective_domain",
                 "phi_ref": 0.5,
-                "weight": 1.0,
+                "weight": 1.0
             },
             {
                 "type": "viscous_dissipation",
@@ -201,7 +214,7 @@
             },
             {
                 "type": "brinkman_dissipation",
-                "weight": 0.1,
+                "weight": 0.1
             }
         ]
     }

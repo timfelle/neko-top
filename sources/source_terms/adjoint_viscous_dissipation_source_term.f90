@@ -218,7 +218,11 @@ contains
     type(field_t), pointer :: fu, fv, fw
     type(field_t), pointer :: work
     integer :: temp_indices(1)
-    integer n
+    integer :: n
+
+    if (this%fields%size() .ne. 3) then
+       call neko_error("Adjoint viscous dissipation source term requires 3 fields.")
+    end if
 
     fu => this%fields%get_by_index(1)
     fv => this%fields%get_by_index(2)
