@@ -210,6 +210,11 @@ contains
     integer :: temp_indices_GL(3)
     integer :: n_GL, nel
 
+
+    if (this%fields%size() .ne. 3) then
+       call neko_error("Simple Brinkman source term requires 3 fields.")
+    end if
+
     fu => this%fields%get_by_index(1)
     fv => this%fields%get_by_index(2)
     fw => this%fields%get_by_index(3)

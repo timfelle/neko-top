@@ -121,7 +121,7 @@ contains
     end do
 
     ! Reset the time step counter
-    call neko_case%output_controller%set_counter(neko_case%time)
+    ! call neko_case%output_controller%set_counter(0)
 
     ! Restart the fields
     call neko_case%fluid%restart(neko_case%chkp)
