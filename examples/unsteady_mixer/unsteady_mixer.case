@@ -16,7 +16,7 @@
         },
         "fluid": {
             "scheme": "pnpn",
-            "Re": 200.0,
+            "Re": 10.0,
             "initial_condition": {
                 "type": "uniform",
                 "value": [ 0.0, 0.0, 0.0 ]
@@ -100,6 +100,7 @@
             }
         },
         "adjoint_fluid": {
+            "output_control": "never",
             "output_format": "vtkhdf",
             "initial_condition": {
                 "type": "uniform",
@@ -138,7 +139,15 @@
                 "y_bounds": [ -1.0, 1.0 ],
                 "z_bounds": [ -1.0, 1.0 ]
             }
-        ]
+        ],
+        // "simulation_components": [
+        //     {
+        //         "type": "steady",
+        //         "tol": 1e-6,
+        //         "compute_control": "tsteps",
+        //         "compute_value": 5
+        //     }
+        // ]
     },
     "unsteady": true,
     "checkpoints": {
@@ -190,10 +199,6 @@
             },
             "checkpoint": {
                 "interval": 1
-                // To see the transient behavior I was copying and pasting
-                // the neko executable, mesh and case file into a new folder
-                // and restarting from a desired iteration.
-                // "file": "../checkpoints/optimizer_checkpoint_00100.h5"
             }
         },
         "objectives": [
