@@ -62,7 +62,11 @@ fi
 # Generate mesh and run case
 
 echo "Generating mesh with dimensions: $Nx $Ny $Nz"
-genmeshbox 0 4 0 2 0 2 $Nx $Ny $Nz .false. .false. .false.
+if [ ! -f "box.nmsh" ]; then
+    genmeshbox 0 4 0 2 0 2 $Nx $Ny $Nz .false. .false. .false.
+else
+    echo "Mesh file 'box.nmsh' already exists. Skipping mesh generation."
+fi
 
 # End of file
 # ============================================================================ #
