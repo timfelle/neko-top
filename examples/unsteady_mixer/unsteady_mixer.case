@@ -189,6 +189,7 @@
             "type": "mma",
             "max_iterations": 100,
             "tolerance": 1.0e-13,
+            "restart_file": "checkpoints/optimizer_checkpoint_00016.h5",
             "mma": {
                 "scale": 1.0,
                 "asyinit": 0.25,

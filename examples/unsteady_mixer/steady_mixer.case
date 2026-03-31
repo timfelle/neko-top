@@ -164,7 +164,7 @@
             "mapping": [
                 {
                     "type": "PDE_filter",
-                    "r": 0.20,
+                    "r": 0.10,
                     "tol": 1e-15
                 },
                 {
@@ -189,6 +189,7 @@
             "type": "mma",
             "max_iterations": 100,
             "tolerance": 1.0e-13,
+            "restart_file": "checkpoints/optimizer_checkpoint_00031.h5",
             "mma": {
                 "scale": 1.0,
                 "asyinit": 0.25,
