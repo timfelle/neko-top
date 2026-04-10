@@ -155,7 +155,7 @@ if (DEFINED HDF5_DIR)
     set(CMAKE_PREFIX_PATH ${HDF5_DIR} ${CMAKE_PREFIX_PATH})
 endif()
 
-find_package(HDF5 REQUIRED COMPONENTS Fortran)
+find_package(HDF5 QUIET COMPONENTS Fortran)
 if (NOT HDF5_FOUND)
     pkg_check_modules(HDF5 QUIET IMPORTED_TARGET hdf5)
     if (NOT HDF5_FOUND)
@@ -164,10 +164,12 @@ if (NOT HDF5_FOUND)
 
     if (HDF5_FOUND)
         set(HDF5_PKG_FOUND TRUE)
+        set(HDF5_FOUND FALSE)
     endif()
 endif()
 
-if (HDF5_FOUND)
+if (HDF5_FOUND OR HDF5_PKG_FOUND)
+    set(HAVE_HDF5 TRUE)
     add_compile_definitions(HAVE_HDF5=1)
 endif()
 

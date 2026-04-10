@@ -111,7 +111,7 @@ contains
     type(case_t), intent(inout) :: neko_case
     integer :: lx = 0
     real(kind=rp) :: real_val = 0.0_rp
-    character(len=:), allocatable :: string_val, file_format, name, fmt
+    character(len=:), allocatable :: string_val, file_format, name
     character(len=:), allocatable :: norm_control, norm_file
     integer :: precision, integer_val, layout
     integer :: n_scalars_primal, n_scalars_adjoint, i
@@ -408,8 +408,8 @@ contains
          'case.adjoint_fluid.output_subdivide', logical_val, .false.)
     call this%f_out%file_%set_subdivide(logical_val)
 
-    call json_get(neko_case%params, 'case.adjoint_fluid.output_control', &
-         string_val)
+    call json_get_or_default(neko_case%params, &
+         'case.adjoint_fluid.output_control', string_val, 'never')
 
     if (trim(string_val) .eq. 'org') then
        ! yes, it should be real_val below for type compatibility
@@ -425,7 +425,8 @@ contains
        real_val = real(integer_val, kind=rp)
        call this%output_controller%add(this%f_out, real_val, string_val)
     else if (trim(string_val) .eq. 'simulationtime') then
-       call json_get_or_lookup(neko_case%params, 'case.adjoint_fluid.output_value', real_val)
+       call json_get_or_lookup(neko_case%params, &
+            'case.adjoint_fluid.output_value', real_val)
        call this%output_controller%add(this%f_out, real_val, string_val)
     else
        call neko_log%error('Unknown output control type for the fluid: ' // &

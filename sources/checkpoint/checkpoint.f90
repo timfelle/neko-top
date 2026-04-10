@@ -176,11 +176,15 @@ contains
           fi => neko_registry%get_field(extra_field_names(i))
           call extra_fields%assign(i, fi)
        end do
+       ! Create a field list for the extra fields
+       call this%init_from_components(neko_case, algorithm, n_saves_memory, &
+            path, filename, fmt, keep_checkpoints, extra_fields)
+    else
+       ! Create a field list without the extra fields
+       call this%init_from_components(neko_case, algorithm, n_saves_memory, &
+            path, filename, fmt, keep_checkpoints)
     end if
 
-    ! Create a field list for the extra fields
-    call this%init_from_components(neko_case, algorithm, n_saves_memory, path, &
-         filename, fmt, keep_checkpoints, extra_fields)
   end subroutine checkpoint_init_from_json
 
   !> Initialization from components
@@ -198,6 +202,7 @@ contains
     type(field_t), pointer :: si
     character(len=LOG_SIZE) :: msg
     integer :: i, n_states
+    logical :: exists
 
     call this%free()
 
@@ -210,9 +215,18 @@ contains
     if (present(fmt)) this%fmt = trim(fmt)
     if (present(keep_checkpoints)) this%keep_checkpoints = keep_checkpoints
 
+    inquire(file = trim(this%path), exist = exists)
+    if (.not. exists) then
+       call MPI_Barrier(NEKO_COMM)
+       if (pe_rank .eq. 0) then
+          call execute_command_line("mkdir -p '" // trim(this%path) // "'")
+       end if
+       call MPI_Barrier(NEKO_COMM)
+    end if
+
     ! Initialize the Neko checkpoint output
     call this%chkp_output%init(neko_case%chkp, this%filename, &
-            fmt = this%fmt,          overwrite = .true.)
+         fmt = this%fmt, path = this%path, overwrite = .true.)
 
     n_states = 4
     if (allocated(neko_case%scalars)) then

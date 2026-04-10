@@ -53,6 +53,7 @@ target_sources(neko-top
         ${CMAKE_CURRENT_SOURCE_DIR}/optimizer/optimizer.f90
         ${CMAKE_CURRENT_SOURCE_DIR}/optimizer/optimizer_factory.f90
         ${CMAKE_CURRENT_SOURCE_DIR}/optimizer/mma_optimizer.f90
+        ${CMAKE_CURRENT_SOURCE_DIR}/continuation/continuation_scheduler.f90
 )
 
 # ============================================================================ #
@@ -79,6 +80,7 @@ target_link_libraries(neko-top PUBLIC
     $<$<BOOL:${hipblas_FOUND}>:roc::hipblas>
     $<$<BOOL:${hipsolver_FOUND}>:roc::hipsolver>
     $<$<BOOL:${HDF5_PKG_FOUND}>:PkgConfig::hdf5>
+    $<$<BOOL:${HDF5_FOUND}>:HDF5::HDF5>
 )
 
 # ============================================================================ #
