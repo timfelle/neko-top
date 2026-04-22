@@ -21,7 +21,7 @@ function run {
     # Run the example
     printf "Executing Neko.\n"
     printf "See $logfile for the status output.\n"
-    export NEKO_LOG_FILE=$logfile
+    # export NEKO_LOG_FILE=$logfile
 
     # ------------------------------------------------------------------------ #
     # Set up the environment and find neko
@@ -45,10 +45,10 @@ function run {
         ./run.sh 2>error.log
 
     elif [[ -n "$SLURM_JOB_NAME" && -n "$CPU_BIND" ]]; then
-        srun -u --cpu-bind=${CPU_BIND} $neko $casefile 2>error.log
+        srun -u --cpu-bind=${CPU_BIND} $neko $casefile 1> $logfile 2>error.log
 
     elif command -v srun 2>&1 1>/dev/null; then
-        srun -u $neko $casefile 2>error.log
+        srun -u $neko $casefile 1> $logfile 2>error.log
 
     elif [ -n "$(which mpirun 2>/dev/null)" ]; then
         # Look for the number of cores to use
@@ -68,14 +68,14 @@ function run {
             ncores=1
         fi
 
-        mpirun --tag-output -n $ncores $neko $casefile 2>error.log
+        mpirun --tag-output -n $ncores $neko $casefile 1> $logfile 2>error.log
 
         # Remove all lines printed from mpi rank > 0 and remove the mpi tag
         sed -i '/^\[[0-9]*,[1-9]*\]/d' error.log
         sed -i 's/\[1,0\]<stderr>://g' error.log
 
     else
-        $neko $casefile 2>error.log
+        $neko $casefile 1> $logfile 2>error.log
 
     fi
     TIME_END=$(date +%s)

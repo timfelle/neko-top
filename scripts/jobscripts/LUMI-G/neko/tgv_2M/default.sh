@@ -17,8 +17,8 @@
 #SBATCH --partition=standard-g
 
 # Ask for n cores placed on R host.
-#SBATCH --nodes=16
-#SBATCH --ntasks=128
+#SBATCH --nodes=32
+#SBATCH --ntasks=256
 #SBATCH --tasks-per-node=8
 #SBATCH --gpus-per-node=8
 
