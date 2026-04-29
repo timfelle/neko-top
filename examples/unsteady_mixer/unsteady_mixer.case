@@ -6,13 +6,13 @@
         "output_at_end": false,
         "output_boundary": false,
         "time": {
-            "end_time": 10.0,
+            "end_time": 12.0,
             "timestep": 5.0e-4
         },
         "numerics": {
-            "time_order": 1,
-            "polynomial_order": 5,
-            "dealias": true
+            "time_order": 3,
+            "polynomial_order": 7,
+            "dealias": false
         },
         "fluid": {
             "scheme": "pnpn",
@@ -22,20 +22,20 @@
                 "value": [ 0.0, 0.0, 0.0 ]
             },
             "velocity_solver": {
-                "type": "cg",
+                "type": "fused_cg",
                 "preconditioner": {
                     "type": "jacobi"
                 },
-                "absolute_tolerance": 1e-4,
-                "max_iterations": 50
+                "absolute_tolerance": 1e-7,
+                "max_iterations": 800
             },
             "pressure_solver": {
                 "type": "gmres",
                 "preconditioner": {
                     "type": "hsmg"
                 },
-                "absolute_tolerance": 1e-4,
-                "max_iterations": 50
+                "absolute_tolerance": 1e-6,
+                "max_iterations": 800
             },
             "boundary_conditions": [
                 {
@@ -70,7 +70,7 @@
             },
             "boundary_conditions": [
                 {
-                    "type": "user",
+                    "type": "user_dirichlet",
                     "zone_indices": [ 1 ]
                 },
                 {
@@ -121,33 +121,25 @@
             {
                 "name": "optimization_domain",
                 "geometry": "box",
-                "x_bounds": [ 0.5, 3.5 ],
-                "y_bounds": [ -1.0, 3.0 ],
-                "z_bounds": [ -1.0, 3.0 ]
+                "x_bounds": [ 1.0, 3.0 ],
+                "y_bounds": [ 0.0, 1.0 ],
+                "z_bounds": [ 0.0, 1.0 ]
             },
             {
                 "name": "objective_domain",
                 "geometry": "box",
                 "x_bounds": [ 3.5, 6.5 ],
-                "y_bounds": [ -1.0, 3.0 ],
-                "z_bounds": [ -1.0, 3.0 ]
+                "y_bounds": [ 0.0, 1.0 ],
+                "z_bounds": [ 0.0, 1.0 ]
             },
             {
                 "name": "asym_IC",
                 "geometry": "box",
                 "x_bounds": [ 1.0, 2.0 ],
-                "y_bounds": [ -1.0, 1.0 ],
-                "z_bounds": [ -1.0, 1.0 ]
+                "y_bounds": [ 0.1, 0.5 ],
+                "z_bounds": [ 0.1, 0.5 ]
             }
-        ],
-        // "simulation_components": [
-        //     {
-        //         "type": "steady",
-        //         "tol": 1e-6,
-        //         "compute_control": "tsteps",
-        //         "compute_value": 5
-        //     }
-        // ]
+        ]
     },
     "unsteady": true,
     "checkpoints": {
@@ -164,7 +156,7 @@
             "mapping": [
                 {
                     "type": "PDE_filter",
-                    "r": 0.20,
+                    "r": 0.0625, // 1 Element radius
                     "tol": 1e-15
                 },
                 {
@@ -190,7 +182,6 @@
             "max_iterations": 200,
             "max_runtime": 171900.0,
             "tolerance": 1.0e-13,
-            "restart_file": "checkpoints/optimizer_checkpoint_00088.h5",
             "mma": {
                 "scale": 1.0,
                 "asyinit": 0.25,

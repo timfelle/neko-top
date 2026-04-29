@@ -26,7 +26,7 @@ function help() {
 }
 
 # Handle options
-Nx=64 && Ny=32 && Nz=32
+Nx=64 && Ny=16 && Nz=16
 for arg in "$@"; do
     if [ "${arg:0:2}" == "--" ]; then
         case ${arg:2} in
@@ -63,7 +63,7 @@ fi
 
 echo "Generating mesh with dimensions: $Nx $Ny $Nz"
 if [ ! -f "box.nmsh" ]; then
-    genmeshbox 0 4 0 2 0 2 $Nx $Ny $Nz .false. .false. .false.
+    genmeshbox 0 4 0 1 0 1 $Nx $Ny $Nz .false. .false. .false.
 else
     echo "Mesh file 'box.nmsh' already exists. Skipping mesh generation."
 fi
