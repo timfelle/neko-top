@@ -383,6 +383,11 @@ function find_neko() {
 
             git clone --depth 1 --branch $NEKO_VERSION \
                 https://github.com/ExtremeFLOW/neko.git $NEKO_DIR
+
+            # Apply Cray-specific stack patch when building on Cray systems
+            if [[ -n "${CRAYPE_VERSION:-}" || "${PE_ENV:-}" == "CRAY" || -d "/opt/cray" ]]; then
+                git -C "$NEKO_DIR" apply patches/cce_stack.patch
+            fi
         fi
 
         # Determine available features

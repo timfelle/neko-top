@@ -102,7 +102,9 @@
     "unsteady": true,
     "checkpoints": {
         "enabled": true,
-        "n_memory": 100
+        "n_memory": 500,
+        "format": "hdf5",
+        "keep_checkpoints": false
     },
     "optimization": {
         "design": {
@@ -132,7 +134,7 @@
         },
         "solver": {
             "type": "mma",
-            "max_iterations": 50,
+            "max_iterations": 5,
             "tolerance": 1.0e-12,
             "mma": {
                 "asyinit": 0.02,

@@ -4,9 +4,9 @@
         "mesh_file": "box.nmsh",
         "output_checkpoints": false,
         "output_at_end": false,
-        "output_boundary": true,
+        "output_boundary": false,
         "time": {
-            "end_time": 0.1,
+            "end_time": 1e-3,
             "timestep": 1e-4
         },
         "numerics": {
@@ -15,6 +15,7 @@
             "dealias": false
         },
         "adjoint_fluid": {
+            "output_format": "vtkhdf",
             "initial_condition": {
                 "type": "uniform",
                 "value": [ 0.0, 0.0, 0.0 ]
@@ -56,7 +57,8 @@
                     "zone_indices": [ 1, 2 ]
                 }
             ],
-            "output_control": "never"
+            "output_control": "never",
+            "output_format": "vtkhdf"
         },
         "simulation_components": [
             {
@@ -87,6 +89,7 @@
         "design": {
             "type": "brinkman",
             "dealias": false,
+            "output_format": "vtkhdf",
             "mapping": [
                 {
                     "type": "PDE_filter",

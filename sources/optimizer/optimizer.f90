@@ -401,17 +401,22 @@ contains
     ! Restart from checkpoint if available
     if (trim(this%checkpoint_file) .ne. '') then
        checkpoint_file = trim(this%checkpoint_file)
+
+    inquire(file = trim(checkpoint_file), exist = file_exists)
+    if (.not. file_exists) then
+       call neko_error('Checkpoint file not found')
+    end if
     else
        select case (trim(this%checkpoint_format))
-       case ('h5', 'hdf5', 'hf5', 'hdf')
-          checkpoint_file = trim(this%checkpoint_path) // &
-               'optimizer_rt_checkpoint.h5'
-       end select
+         case ('h5', 'hdf5', 'hf5', 'hdf')
+             checkpoint_file = trim(this%checkpoint_path) // &
+                  'optimizer_rt_checkpoint.h5'
+         end select
     end if
 
-    inquire(file = checkpoint_file, exist = file_exists)
+    inquire(file = trim(checkpoint_file), exist = file_exists)
     if (file_exists) then
-       call this%load_checkpoint(checkpoint_file, this%current_iteration, &
+       call this%load_checkpoint(trim(checkpoint_file), this%current_iteration, &
             design)
     end if
 
@@ -433,6 +438,7 @@ contains
 
     do while (this%current_iteration .lt. this%max_iterations)
        this%current_iteration = this%current_iteration + 1
+       if (pe_rank .eq. 0) write(*,*) "Iteration: ", this%current_iteration
        call profiler_start_region('Optimizer iteration')
        iteration_time = MPI_Wtime()
 
