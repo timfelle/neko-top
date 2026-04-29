@@ -1,0 +1,123 @@
+{
+    "version": 1.0,
+    "case": {
+        "mesh_file": "box.nmsh",
+        "output_checkpoints": false,
+        "output_at_end": false,
+        "output_boundary": false,
+        "time": {
+            "end_time": 5.0e-3,
+            "timestep": 1.0e-4
+        },
+        "numerics": {
+            "time_order": 3,
+            "polynomial_order": 7,
+            "dealias": false
+        },
+        "fluid": {
+            "name": "Fluid",
+            "scheme": "pnpn",
+            "Re": 10.0,
+            "initial_condition": {
+                "type": "uniform",
+                "value": [ 1.0, 0.0, 0.0 ]
+            },
+            "velocity_solver": {
+                "type": "fused_coupled_cg",
+                "preconditioner": {
+                    "type": "jacobi"
+                },
+                "absolute_tolerance": 1e-8,
+                "max_iterations": 100
+            },
+            "pressure_solver": {
+                "type": "gmres",
+                "preconditioner": {
+                    "type": "hsmg"
+                },
+                "absolute_tolerance": 1e-6,
+                "max_iterations": 100
+            },
+            "boundary_conditions": [
+                {
+                    "type": "user_velocity",
+                    "zone_indices": [ 1 ]
+                },
+                {
+                    "type": "no_slip",
+                    "zone_indices": [ 3, 4, 5, 6 ]
+                },
+                {
+                    "type": "outflow",
+                    "zone_indices": [ 2 ]
+                }
+            ],
+            "source_terms": [
+                {
+                    "type": "brinkman",
+                    "limits": [ 0.0, 1000.0 ],
+                    "penalty": 3.0,
+                    "objects": [
+                        {
+                            "type": "file",
+                            "file_name": "design_0.vtkhdf",
+                            "file_index": 0,
+                            "field_name": "PDE_filter_mapping"
+                        }
+                    ],
+                    "output": {
+                        "enable": true,
+                        "format": "vtkhdf"
+                    }
+                }
+            ],
+            "output_control": "tsteps",
+            "output_value": 1,
+            "output_format": "vtkhdf"
+        },
+        "scalar": {
+            "name": "Scalar",
+            "enabled": true,
+            "Pe": 2000.0,
+            "solver": {
+                "type": "cg",
+                "preconditioner": {
+                    "type": "jacobi"
+                },
+                "absolute_tolerance": 1e-6,
+                "max_iterations": 100
+            },
+            "initial_condition": {
+                "type": "user"
+            },
+            "boundary_conditions": [
+                {
+                    "type": "user_dirichlet",
+                    "zone_indices": [ 1 ]
+                },
+                {
+                    "type": "neumann",
+                    "flux": 0.0,
+                    "zone_indices": [ 2, 3, 4, 5, 6 ]
+                }
+            ]
+        },
+        "point_zones": [
+            {
+                "name": "asym_IC",
+                "geometry": "box",
+                "x_bounds": [ 1.5, 2.5 ],
+                "y_bounds": [ -1.0, 1.0 ],
+                "z_bounds": [ -1.0, 1.0 ]
+            }
+        ],
+        "simulation_components": [
+            {
+                "type": "steady",
+                "tol": 1e-6,
+                "compute_control": "tsteps",
+                "compute_value": 5
+            }
+        ]
+    }
+}
