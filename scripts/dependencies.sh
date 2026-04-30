@@ -387,6 +387,7 @@ function find_neko() {
             # Apply Cray-specific stack patch when building on Cray systems
             if [[ -n "${CRAYPE_VERSION:-}" || "${PE_ENV:-}" == "CRAY" || -d "/opt/cray" ]]; then
                 git -C "$NEKO_DIR" apply patches/cce_stack.patch
+                git -C "$NEKO_DIR" apply patches/cce_time_state.patch
             fi
         fi
 
