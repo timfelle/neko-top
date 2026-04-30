@@ -18,7 +18,8 @@
 
 # Ask for n cores placed on R host.
 #SBATCH --nodes=1
-#SBATCH --tasks-per-node=128
+#SBATCH --ntasks-per-node=16
+#SBATCH --cpus-per-task=8
 
 # Time specifications (dd-hh:mm:ss)
 #SBATCH --time 00-00:05:00
@@ -47,6 +48,9 @@ else
     printf "ERROR: No example supplied" >&2
     exit 1
 fi
+
+# Assign the number of threads to use for OpenMP parallel regions
+export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
 
 # ============================================================================ #
 # Select which GPU to map to which core
