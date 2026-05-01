@@ -2,6 +2,7 @@
     "version": 1.0,
     "case": {
         "mesh_file": "data_local/static_mixer/mixer_8x2x2.nmsh",
+        "element_size": 0.05,
         "output_directory": "fields",
         "output_boundary": false,
         "output_at_end": false,
