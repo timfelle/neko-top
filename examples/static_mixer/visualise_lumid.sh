@@ -80,9 +80,9 @@ for exp in "${experiments[@]}"; do
             fi
 
             # Create the gifs from the generated png files.
-            python $gifmaker --pattern Temperature_[0-9].png --fps 25 \
+            python $gifmaker --pattern Temperature_[0-9]*.png --fps 25 \
                 --quality high $result_root/$exp/visualisation/${color}/
-            python $gifmaker --pattern Velocity_[0-9].png --fps 25 \
+            python $gifmaker --pattern Velocity_[0-9]*.png --fps 25 \
                 --quality high $result_root/$exp/visualisation/${color}/
         fi
     done
