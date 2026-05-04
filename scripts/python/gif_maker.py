@@ -274,10 +274,7 @@ def parse_args() -> tuple[Path, Path, str, int, int, int, bool]:
     if args.fps <= 0:
         raise ValueError("fps must be greater than 0")
 
-    workspace = Path(__file__).resolve().parent
     input_folder = Path(args.input_folder)
-    if not input_folder.is_absolute():
-        input_folder = workspace / input_folder
     input_folder = input_folder.resolve()
 
     if not input_folder.exists() or not input_folder.is_dir():
@@ -289,8 +286,6 @@ def parse_args() -> tuple[Path, Path, str, int, int, int, bool]:
         output_folder = input_folder.parent
     else:
         output_folder = Path(args.output_folder)
-        if not output_folder.is_absolute():
-            output_folder = workspace / output_folder
         output_folder = output_folder.resolve()
     output_folder.mkdir(parents=True, exist_ok=True)
 
