@@ -45,7 +45,7 @@ module simulation_checkpoint
   use logger, only: neko_log, LOG_SIZE, NEKO_LOG_DEBUG
   use mpi_f08, only: MPI_WTIME, MPI_Barrier
   use comm, only: NEKO_COMM, pe_rank
-  use utils, only: neko_error
+  use utils, only: neko_error, mkdir
   use math, only: copy, rzero
   use profiler, only: profiler_start_region, profiler_end_region
   use neko_config, only: NEKO_BCKND_DEVICE
@@ -201,8 +201,7 @@ contains
     type(field_list_t), optional, intent(inout) :: extra_fields
     type(field_t), pointer :: si
     character(len=LOG_SIZE) :: msg
-    integer :: i, n_states
-    logical :: exists
+    integer :: i, n_states, ierr
 
     call this%free()
 
@@ -215,14 +214,10 @@ contains
     if (present(fmt)) this%fmt = trim(fmt)
     if (present(keep_checkpoints)) this%keep_checkpoints = keep_checkpoints
 
-    inquire(file = trim(this%path), exist = exists)
-    if (.not. exists) then
-       call MPI_Barrier(NEKO_COMM)
-       if (pe_rank .eq. 0) then
-          call execute_command_line("mkdir -p '" // trim(this%path) // "'")
-       end if
-       call MPI_Barrier(NEKO_COMM)
+    if (pe_rank .eq. 0) then
+       call mkdir(trim(this%path))
     end if
+    call MPI_Barrier(NEKO_COMM, ierr)
 
     ! Initialize the Neko checkpoint output
     call this%chkp_output%init(neko_case%chkp, this%filename, &

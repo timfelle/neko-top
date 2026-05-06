@@ -46,7 +46,7 @@ module optimizer
   use logger, only: neko_log
   use profiler, only: profiler_start_region, profiler_end_region
   use mpi_f08, only: MPI_Wtime, MPI_Allreduce, MPI_MAX
-  use utils, only: neko_error, filename_suffix
+  use utils, only: neko_error, filename_suffix, mkdir
   use csv_file, only: csv_file_t
   use vector, only: vector_t
   use json_utils, only: json_get_or_default
@@ -680,7 +680,7 @@ contains
     character(len=*), intent(in), optional :: format
     character(len=:), allocatable :: checkpoint_format
     character(len=256) :: file_path, file_base, file_ext, file_full
-    logical :: exist
+    integer :: ierr
 
     ! Set default behaviour, read from object if not provided
     if (.not. present(path)) file_path = trim(this%checkpoint_path)
@@ -698,10 +698,10 @@ contains
        file_path = trim(file_path) // '/'
     end if
 
-    inquire(file=file_path, exist=exist)
-    if (.not. exist) then
-       call execute_command_line('mkdir -p "' // trim(file_path) // '"')
+    if (pe_rank .eq. 0) then
+       call mkdir(trim(file_path))
     end if
+    call MPI_Barrier(NEKO_COMM, ierr)
 
     select case (trim(checkpoint_format))
     case ('h5', 'hdf5', 'hf5', 'hdf')
