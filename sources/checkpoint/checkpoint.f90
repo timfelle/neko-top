@@ -36,6 +36,7 @@ module simulation_checkpoint
   use num_types, only: rp, sp, dp
   use case, only: case_t
   use json_file_module, only: json_file
+  use host_array, only: host_array_t
   use json_utils, only: json_get, json_get_or_default
   use scalar_scheme, only: scalar_scheme_t
   use time_state, only: time_state_t
@@ -83,7 +84,7 @@ module simulation_checkpoint
 
      ! Field pointers
      type(field_list_t) :: state_list
-     type(host_array), dimension(:,:), allocatable :: state_storage
+     type(host_array_t), dimension(:,:), allocatable :: state_storage
 
      ! Structures to hold the checkpoint data
      type(chkp_output_t) :: chkp_output
@@ -111,15 +112,6 @@ module simulation_checkpoint
      !> Restore data from the ram checkpoint at index to the current state
      procedure, pass(this) :: load_data => checkpoint_load_data
   end type simulation_checkpoint_t
-
-  type :: host_array
-     real(kind=rp), allocatable :: data(:)
-     integer :: size = 0
-   contains
-     procedure, pass(this) :: init => host_array_init
-     procedure, pass(this) :: free => host_array_free
-     procedure, pass(this) :: is_allocated => host_array_is_allocated
-  end type host_array
 
   ! ========================================================================== !
   ! Module procedures for our algorithm implementations.
@@ -426,12 +418,12 @@ contains
     if (NEKO_BCKND_DEVICE .eq. 0) then
        do i = 1, this%state_list%size()
           si => this%state_list%get(i)
-          call copy(this%state_storage(index, i)%data, si%x, si%size())
+          call copy(this%state_storage(index, i)%x, si%x, si%size())
        end do
     else
        do i = 1, this%state_list%size()
           si => this%state_list%get(i)
-          call device_memcpy(this%state_storage(index, i)%data, si%x_d, &
+          call device_memcpy(this%state_storage(index, i)%x, si%x_d, &
                si%size(), DEVICE_TO_HOST, this%state_list%size() .eq. i)
        end do
     end if
@@ -457,12 +449,12 @@ contains
     if (NEKO_BCKND_DEVICE .eq. 0) then
        do i = 1, this%state_list%size()
           si => this%state_list%get(i)
-          call copy(si%x, this%state_storage(index, i)%data, si%size())
+          call copy(si%x, this%state_storage(index, i)%x, si%size())
        end do
     else
        do i = 1, this%state_list%size()
           si => this%state_list%get(i)
-          call device_memcpy(this%state_storage(index, i)%data, si%x_d, &
+          call device_memcpy(this%state_storage(index, i)%x, si%x_d, &
                si%size(), HOST_TO_DEVICE, this%state_list%size() .eq. i)
        end do
 
@@ -486,41 +478,11 @@ contains
 
     do i = 1, size(this%state_storage, 1)
        do j = 1, size(this%state_storage, 2)
-          call rzero(this%state_storage(i, j)%data, &
+          call rzero(this%state_storage(i, j)%x, &
                this%state_storage(i, j)%size)
        end do
     end do
 
   end subroutine checkpoint_reset
-
-  ! -------------------------------------------------------------------------- !
-  ! Host array routines
-
-  subroutine host_array_init(this, size)
-    class(host_array), intent(inout) :: this
-    integer, intent(in) :: size
-
-    call this%free()
-    this%size = size
-    allocate(this%data(size))
-    call rzero(this%data, this%size)
-
-  end subroutine host_array_init
-
-  subroutine host_array_free(this)
-    class(host_array), intent(inout) :: this
-
-    this%size = 0
-    if (allocated(this%data)) deallocate(this%data)
-
-  end subroutine host_array_free
-
-  pure function host_array_is_allocated(this) result(is_alloc)
-    class(host_array), intent(in) :: this
-    logical :: is_alloc
-
-    is_alloc = allocated(this%data)
-
-  end function host_array_is_allocated
 
 end module simulation_checkpoint

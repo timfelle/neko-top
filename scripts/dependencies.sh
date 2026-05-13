@@ -305,7 +305,7 @@ function find_parmetis() {
     if [[ $# -ge 1 ]]; then
         PARMETIS_DIR="$1"
     elif [ -z "$PARMETIS_DIR" ]; then
-        PARMETIS_DIR="parmetis"
+        return
     fi
 
     if [[ "${PARMETIS_DIR:0:1}" != "/" && "${PARMETIS_DIR:0:1}" != "~" ]]; then
