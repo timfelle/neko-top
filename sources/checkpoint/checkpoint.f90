@@ -479,7 +479,7 @@ contains
     do i = 1, size(this%state_storage, 1)
        do j = 1, size(this%state_storage, 2)
           call rzero(this%state_storage(i, j)%x, &
-               this%state_storage(i, j)%size)
+               this%state_storage(i, j)%size())
        end do
     end do
 
