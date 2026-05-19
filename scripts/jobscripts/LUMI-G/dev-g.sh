@@ -14,7 +14,7 @@
 # --  Technical Options
 
 # Queue name
-#SBATCH --partition=small-g
+#SBATCH --partition=dev-g
 
 # Ask for n cores placed on R host.
 #SBATCH --ntasks=2

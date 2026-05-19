@@ -17,7 +17,7 @@
 #SBATCH --partition=small-g
 
 # Ask for n cores placed on R host.
-#SBATCH --ntasks=1
+#SBATCH --ntasks=2
 #SBATCH --gpus-per-task=1
 #SBATCH --cpus-per-task=6
 
