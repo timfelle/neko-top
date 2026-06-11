@@ -761,6 +761,11 @@ contains
 
     !free all the initiated variables in this subroutine
     call this%scratch%relinquish(ind)
+
+    nullify(y, lambda, s, mu, rey, relambda, remu, res, dely, dellambda, dy, &
+         dlambda, ds, dmu, yold, lambdaold, sold, muold, x, xsi, eta, rex, &
+         rexsi, reeta, delx, diagx, dx, dxsi, deta, xold, xsiold, etaold, bb, &
+         GG, AA)
   end subroutine mma_subsolve_dpip_device
 
   !> solve the subproblem defined by this%pij, this%qij, etc. using dual
@@ -1051,6 +1056,9 @@ contains
     call device_copy(this%mu%x_d, mu%x_d, this%m)
 
     call this%scratch%relinquish(ind)
+
+    nullify(y, lambda, mu, relambda, remu, dlambda, dmu, gradlambda, zerom, dd,&
+         dummy_m, x, pjlambda, qjlambda, Ljjxinv, hijx, Hess)
   end subroutine mma_subsolve_dip_device
 
 end submodule mma_device

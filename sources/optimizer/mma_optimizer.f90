@@ -207,6 +207,8 @@ contains
 
     call neko_log%end_section()
 
+    nullify(x)
+
   end subroutine mma_optimizer_init_from_components
 
   ! Free resources associated with the MMA optimizer
@@ -276,6 +278,9 @@ contains
          constraint_value, constraint_sensitivities)
 
     call neko_scratch_registry%relinquish(indices)
+
+    nullify(x, constraint_value, objective_sensitivities, &
+         constraint_sensitivities)
   end subroutine mma_optimizer_initialize
 
   !> Function for computing a step in the optimization loop
@@ -369,6 +374,9 @@ contains
 
     ! Free local resources
     call neko_scratch_registry%relinquish(indices)
+
+    nullify(x, constraint_value, objective_sensitivities, &
+         constraint_sensitivities)
 
   end function mma_optimizer_step
 

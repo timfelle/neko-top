@@ -217,6 +217,8 @@ contains
        call mask_exterior_const(this%sensitivity, this%mask, 0.0_rp)
     end if
 
+    nullify(work)
+
   end subroutine volume_constraint_init_from_components
 
   !> Destructor.

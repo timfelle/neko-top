@@ -989,6 +989,9 @@ contains
            this%full_stress_formulation, this%strict_convergence)
 
     end associate
+
+    nullify(dx_p_adj, dy_p_adj, dz_p_adj, nx1, nx2, nx3, work1, work2)
+
     call profiler_end_region('Adjoint')
 
   end subroutine adjoint_fluid_pnpn_step
@@ -1221,6 +1224,8 @@ contains
     call MPI_Allreduce(MPI_IN_PLACE, this%prs_dirichlet, 1, &
          MPI_LOGICAL, MPI_LOR, NEKO_COMM)
 
+    nullify(bc_i, bc_object)
+
   end subroutine adjoint_fluid_pnpn_setup_bcs
 
   !> Write a field with boundary condition specifications
@@ -1350,6 +1355,8 @@ contains
     call bdry_file%write(bdry_field)
 
     call neko_scratch_registry%relinquish_field(temp_index)
+
+    nullify(bdry_field, bci)
   end subroutine adjoint_fluid_pnpn_write_boundary_conditions
 
   ! End of section to verify

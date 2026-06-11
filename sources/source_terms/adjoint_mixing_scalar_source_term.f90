@@ -200,6 +200,7 @@ contains
     call field_add2s2(fs, work, this%obj_scale / this%mask_volume)
     call neko_scratch_registry%relinquish_field(temp_indices)
 
+    nullify(fs, work)
 
   end subroutine adjoint_mixing_scalar_source_term_compute
 

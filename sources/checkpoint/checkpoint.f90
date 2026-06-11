@@ -185,6 +185,8 @@ contains
             path, filename, fmt, keep_checkpoints)
     end if
 
+    nullify(fi)
+
   end subroutine checkpoint_init_from_json
 
   !> Initialization from components
@@ -293,6 +295,8 @@ contains
     end do
 
     call neko_log%end_section()
+
+    nullify(si)
 
   end subroutine checkpoint_init_from_components
 

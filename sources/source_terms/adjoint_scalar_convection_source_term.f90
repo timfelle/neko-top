@@ -295,6 +295,9 @@ contains
 
     ! free the scratch
     call neko_scratch_registry%relinquish_field(temp_indices)
+
+    nullify(fu, fv, fw, dsdx, dsdy, dsdz, work, accumulate, fld_GL, s_GL, &
+         s_adj_GL)
   end subroutine adjoint_scalar_convection_source_term_compute
 
 end module adjoint_scalar_convection_source_term

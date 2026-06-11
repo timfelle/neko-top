@@ -306,6 +306,8 @@ contains
 
     end associate
 
+    nullify(u, v, w, fu, fv, fw, work)
+
   end subroutine adjoint_viscous_dissipation_source_term_compute
 
 end module adjoint_viscous_dissipation_source_term

@@ -285,6 +285,8 @@ contains
 
     call neko_scratch_registry%relinquish_field(temp_indices)
 
+    nullify(fu, fv, fw, work, accumulate, fld_GL, chi_GL)
+
   end subroutine simple_brinkman_source_term_compute
 
 end module simple_brinkman_source_term

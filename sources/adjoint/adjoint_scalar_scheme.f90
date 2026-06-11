@@ -392,7 +392,7 @@ contains
          solver_precon, precon_params)
 
     call neko_log%end_section()
-
+    nullify(params_selected)
   end subroutine adjoint_scalar_scheme_init
 
 
@@ -573,6 +573,8 @@ contains
             DEVICE_TO_HOST, sync=.false.)
     end if
 
+    nullify(nut, lambda_factor)
+
   end subroutine adjoint_scalar_scheme_update_material_properties
 
   !> Set lamdba and cp.
@@ -661,6 +663,8 @@ contains
        call device_memcpy(this%cp%x, this%cp%x_d, this%cp%size(), &
             DEVICE_TO_HOST, sync=.false.)
     end if
+
+    nullify(dummy_mp_ptr)
   end subroutine adjoint_scalar_scheme_set_material_properties
 
 end module adjoint_scalar_scheme

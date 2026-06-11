@@ -270,6 +270,8 @@ contains
 
     end if
 
+    nullify(tduxb, tdvxb, tdwxb, tduyb, tdvyb, tdwyb, tduzb, tdvzb, tdwzb)
+
   end subroutine adjoint_advection_no_dealias
 
   !> Compute a single component of

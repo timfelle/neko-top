@@ -270,6 +270,8 @@ contains
     ! this%chkp%abs2 => this%abx2
     ! this%chkp%slag => this%slag
 
+    nullify(bc_i)
+
   end subroutine adjoint_scalar_pnpn_init
 
   !> I envision the arguments to this func might need to be expanded
@@ -566,6 +568,8 @@ contains
           end if
        end do
     end if
+
+    nullify(bc_object, bc_i)
   end subroutine adjoint_scalar_pnpn_setup_bcs_
 
 end module adjoint_scalar_pnpn

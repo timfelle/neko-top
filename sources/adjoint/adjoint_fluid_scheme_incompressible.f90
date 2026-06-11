@@ -690,6 +690,8 @@ contains
        call device_memcpy(this%mu%x, this%mu%x_d, this%mu%size(), &
             DEVICE_TO_HOST, sync=.false.)
     end if
+
+    nullify(nut)
   end subroutine adjoint_fluid_scheme_update_material_properties
 
   !> Sets rho and mu
@@ -785,6 +787,8 @@ contains
        call device_memcpy(this%mu%x, this%mu%x_d, this%mu%size(), &
             DEVICE_TO_HOST, sync=.false.)
     end if
+
+    nullify(dummy_mp_ptr)
   end subroutine adjoint_fluid_scheme_set_material_properties
 
 end module adjoint_fluid_scheme_incompressible

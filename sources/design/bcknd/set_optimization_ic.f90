@@ -210,6 +210,8 @@ contains
     call set_optimization_ic_uniform(fld, base_value)
     call cfill_mask(fld%x, zone_value, size, zone%mask%get(), zone%size)
 
+    nullify(zone)
+
   end subroutine set_optimization_ic_point_zone
 
   !> Set the initial condition of the design based on a field.

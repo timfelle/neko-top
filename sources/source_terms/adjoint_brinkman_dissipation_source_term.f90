@@ -343,6 +343,8 @@ contains
 
     call neko_scratch_registry%relinquish_field(temp_indices)
 
+    nullify(fu, fv, fw, work, accumulate, fld_GL, chi_GL)
+
   end subroutine adjoint_brinkman_dissipation_source_term_compute
 
 end module adjoint_brinkman_dissipation_source_term

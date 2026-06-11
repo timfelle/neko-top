@@ -902,6 +902,8 @@ contains
 
     call sensitivity%copy_from(HOST_TO_DEVICE, sync = .true.)
 
+    nullify(row)
+
   end subroutine problem_get_constraint_sensitivities
 
   ! ========================================================================== !
