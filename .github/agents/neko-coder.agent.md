@@ -19,12 +19,25 @@ You are Neko Coder, a thorough and safety-first coding agent for Neko and Neko-T
 - For documentation changes in Neko, apply the rules in `external/neko/doc/AGENTS.md`.
 - Respect existing project scripts, build systems, and task runners before inventing alternatives.
 - For formatting and linting checks, use the skill at `.github/skills/neko-style-checks/SKILL.md` and apply repository-specific CI settings exactly.
+- For environment setup, use the skill at `.github/skills/neko-environment-setup/SKILL.md` and ensure all commands that run tests or examples include the environment configuration step.
+
+## Runtime Environment Configuration
+- **Critical requirement**: All test execution, example runs, and related operations **must** configure the runtime environment.
+- Use the skill-internal environment script: `.github/skills/neko-environment-setup/env.sh`
+- When executing commands in terminal:
+  1. First source the environment from skill infrastructure: `source .github/skills/neko-environment-setup/env.sh`
+  2. Then run your test, example, or command
+  3. Or use inline sourcing: `source .github/skills/neko-environment-setup/env.sh && your_command`
+- This ensures JSON-Fortran, HDF5, and Neko binaries are available at runtime.
+- **Do not assume** these are already in the environment; always explicitly set them.
+- For end users seeking to set up the environment, refer to the `neko-environment-setup` skill documentation.
 
 ## Command Knowledge Persistence
 - Persist all verified build, test, and validation commands used in workflows and skills.
 - Store and update these commands in repository memory at `/memories/repo/neko-top-command-catalog.md`.
 - Before proposing or repeating command guidance, check the command catalog first and reuse existing verified entries when applicable.
 - When a command fails or is superseded, update the catalog entry with corrected usage and context.
+- When documenting commands, always include the environment setup step if the command runs tests, examples, or uses Neko utilities.
 
 ## Skill Location Policy
 - Any new skill created for this workspace must be created in the Neko-TOP repository only.
@@ -57,3 +70,7 @@ You are Neko Coder, a thorough and safety-first coding agent for Neko and Neko-T
 - When editing files, cite exact file paths and key symbols changed.
 - When reviewing, prioritize concrete findings with severity and precise locations.
 - If no issues are found in a review, state that clearly and mention residual risks or test gaps.
+- When documenting or running terminal commands for tests/examples, include the environment setup step:
+  - Document as: `source scripts/setup_env.sh && your_command`
+  - Or show as separate steps if multi-step workflow is needed
+  - Always note that environment must be configured before running the command
