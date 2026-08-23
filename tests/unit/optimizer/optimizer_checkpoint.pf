@@ -90,7 +90,17 @@ contains
     ! own precision: the objective/design immediately after loading, before
     ! any further optimization steps. This is tight because it is only
     ! comparing HDF5-round-tripped state against its own pre-save snapshot.
-    real(kind=rp), parameter :: tol = 1.0e-8_rp
+    ! On CUDA this still needs a little headroom beyond true round-trip
+    ! precision: `prob%get_objective_value` right after loading involves a
+    ! fresh device-side reduction over the (bit-exact) restored design, and
+    ! GPU floating-point non-associativity alone reproducibly perturbs the
+    ! result by ~1.25e-8 here -- confirmed via a real isolated CUDA build
+    ! (RTX A3000 Laptop GPU, sm_86), consistent with an earlier RTX 2070
+    ! measurement of the same magnitude (see known-bugs-backlog.md item #8).
+    ! This is unrelated to the cold-vs-warm restart divergence tol_restart
+    ! (below) exists for -- it shows up immediately, before any further
+    ! optimization steps, purely from GPU reduction-order non-determinism.
+    real(kind=rp), parameter :: tol = 5.0e-8_rp
     ! Tolerance for the state after resuming optimization from the restored
     ! checkpoint (below). Only the design variable is checkpointed here --
     ! the flow-field (velocity/pressure) state is not -- so `opt%initialize`
