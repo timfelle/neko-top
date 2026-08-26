@@ -1,0 +1,295 @@
+! Verification that the adjoint scalar advection operator really is the
+! discrete adjoint of the forward scalar advection operator.
+!
+! Motivation: known-bugs-backlog item #6 -- the `passive_scalar` sensitivity
+! FD check sits on a floor (~2.4e-3 at polynomial_order 5) that is orders of
+! magnitude worse than the momentum-based objectives, grows under
+! h-refinement, and shrinks under p-refinement. A continuous-adjoint /
+! discrete-adjoint mismatch in the scalar advection operator would produce
+! exactly that signature, and nothing currently tests the two operators
+! against each other.
+!
+! The identity being tested. For any velocity field u,
+!
+!   int_Omega  r (u.grad)s  +  int_Omega  grad(r).(u s)  =  oint_dOmega r s (u.n)
+!
+! since the integrand of the sum is exactly div(r u s). The forward operator
+! (`compute_scalar`) discretises the first term; the adjoint operator
+! (`compute_adjoint_scalar`) discretises the second -- its own doc comment
+! describes it as "in weak form, int grad(r).u s^dagger". So with a velocity
+! chosen such that u.n = 0 on every boundary the surface term drops and the
+! discrete operators must satisfy
+!
+!   <forward(a), b>  =  <a, adjoint(b)>
+!
+! Note the sign: both routines accumulate a *right-hand side* contribution and
+! so both already carry the leading minus (the forward does fs -= B (u.grad)s).
+! Those two minus signs cancel in the pairing, so the identity is an equality
+! rather than the negation the integration-by-parts form might suggest.
+!
+! Both operators already carry their own mass-matrix weighting internally
+! (they accumulate B-weighted contributions into the passed rhs field), so
+! the pairing here is a plain dot product, not a B-weighted one.
+!
+! The velocity used is u = (sin(pi x / 2), 0, 0) on the two-element box
+! x in [0, 2], y in [0, 1], z in [0, 1]: u_x vanishes at x = 0 and x = 2, and
+! u_y = u_z = 0 everywhere, so u.n = 0 on all six faces. Note that u is NOT
+! divergence-free -- it does not need to be, since the identity above holds
+! for any u; only the vanishing normal flux matters.
+!
+! A failure here means the adjoint advection is not the transpose of the
+! forward advection, and every scalar-objective gradient is correspondingly
+! biased. A pass rules the operator pair out and points the remaining item #6
+! error elsewhere.
+module adv_adjoint_scalar_transpose
+  use mpi
+  use pfunit
+  use num_types, only: rp
+  use mesh, only: mesh_t
+  use point, only: point_t
+  use space, only: space_t, GLL
+  use dofmap, only: dofmap_t
+  use gather_scatter, only: gs_t
+  use field, only: field_t
+  use coefs, only: coef_t
+  use math, only: glsc2
+  use field_math, only: field_rzero
+  use adv_no_dealias, only: adv_no_dealias_t
+  ! NB: module name does not match its filename here
+  ! (sources/adjoint/adv_adjoint_no_dealias.f90 declares `adv_lin_no_dealias`).
+  use adv_lin_no_dealias, only: adv_lin_no_dealias_t
+  use scratch_registry, only: neko_scratch_registry
+  use comm, only: NEKO_COMM, pe_rank, pe_size, comm_init
+  use neko_config, only: NEKO_BCKND_DEVICE
+  use device, only: device_init, device_finalize, device_memcpy, &
+       HOST_TO_DEVICE, DEVICE_TO_HOST
+  implicit none
+
+  !> Polynomial order of the test space (order 7 => lx = 8).
+  integer, parameter :: LX = 8
+
+  !> Relative tolerance on the transpose identity. The two operators are built
+  !! from the same GLL quadrature and derivative matrices, so if one is truly
+  !! the transpose of the other the identity holds to round-off; this is
+  !! deliberately loose enough to absorb accumulation order but far tighter
+  !! than any modelling-level discrepancy.
+  real(kind=rp), parameter :: transpose_rtol = 1.0e-10_rp
+
+  @TestCase
+  type, extends(MPITestCase) :: test_adv_transpose
+   contains
+     procedure :: setUp
+     procedure :: tearDown
+  end type test_adv_transpose
+
+contains
+
+  subroutine setUp(this)
+    class(test_adv_transpose), intent(inout) :: this
+    if (NEKO_BCKND_DEVICE .eq. 1) then
+       call device_init
+    end if
+    call comm_init
+  end subroutine setUp
+
+  subroutine tearDown(this)
+    class(test_adv_transpose), intent(inout) :: this
+    if (NEKO_BCKND_DEVICE .eq. 1) then
+       call device_finalize
+    end if
+  end subroutine tearDown
+
+  !> Build a minimal two-element hex mesh (same fixture as the mapping tests).
+  !! Element 1 spans x in [0, 1], element 2 spans x in [1, 2], sharing the
+  !! x = 1 face.
+  subroutine gen_msh(msh)
+    type(mesh_t), intent(inout) :: msh
+    type(point_t) :: p(12)
+
+    call p(1)%init(0d0, 0d0, 0d0)
+    call p(1)%set_id(1)
+    call p(2)%init(1d0, 0d0, 0d0)
+    call p(2)%set_id(2)
+    call p(3)%init(0d0, 1d0, 0d0)
+    call p(3)%set_id(4)
+    call p(4)%init(1d0, 1d0, 0d0)
+    call p(4)%set_id(3)
+    call p(5)%init(2d0, 0d0, 0d0)
+    call p(5)%set_id(5)
+    call p(6)%init(2d0, 1d0, 0d0)
+    call p(6)%set_id(6)
+    call p(7)%init(0d0, 0d0, 1d0)
+    call p(7)%set_id(7)
+    call p(8)%init(1d0, 0d0, 1d0)
+    call p(8)%set_id(8)
+    call p(9)%init(1d0, 1d0, 1d0)
+    call p(9)%set_id(9)
+    call p(10)%init(0d0, 1d0, 1d0)
+    call p(10)%set_id(10)
+    call p(11)%init(2d0, 0d0, 1d0)
+    call p(11)%set_id(11)
+    call p(12)%init(2d0, 1d0, 1d0)
+    call p(12)%set_id(12)
+
+    call msh%init(3, 2)
+    call msh%add_element(1, 1, p(1), p(2), p(4), p(3), &
+         p(7), p(8), p(9), p(10))
+    call msh%add_element(2, 2, p(2), p(5), p(6), p(4), &
+         p(8), p(11), p(12), p(9))
+    call msh%generate_conn()
+
+  end subroutine gen_msh
+
+  !> Build the full SEM coefficient chain and the scratch registry the
+  !! advection routines draw temporaries from.
+  subroutine build_fixture(msh, Xh, dof, gs, coef)
+    type(mesh_t), intent(inout) :: msh
+    type(space_t), intent(inout) :: Xh
+    type(dofmap_t), intent(inout) :: dof
+    type(gs_t), intent(inout) :: gs
+    type(coef_t), intent(inout) :: coef
+
+    call gen_msh(msh)
+    call Xh%init(GLL, LX, LX, LX)
+    call dof%init(msh, Xh)
+    call gs%init(dof)
+    call coef%init(gs)
+    call neko_scratch_registry%init(dof = dof)
+
+  end subroutine build_fixture
+
+  !> Velocity with zero normal component on every boundary face, so the
+  !! surface term in the integration-by-parts identity vanishes.
+  !! @param u, v, w The velocity components to fill.
+  !! @param dof The dofmap supplying nodal coordinates.
+  subroutine set_tangential_velocity(u, v, w, dof)
+    type(field_t), intent(inout) :: u, v, w
+    type(dofmap_t), intent(in) :: dof
+    real(kind=rp), parameter :: pi = 4.0_rp * atan(1.0_rp)
+    integer :: i, n
+
+    n = dof%size()
+    do i = 1, n
+       u%x(i,1,1,1) = sin(0.5_rp * pi * dof%x(i,1,1,1))
+       v%x(i,1,1,1) = 0.0_rp
+       w%x(i,1,1,1) = 0.0_rp
+    end do
+
+    if (NEKO_BCKND_DEVICE .eq. 1) then
+       call device_memcpy(u%x, u%x_d, n, HOST_TO_DEVICE, .true.)
+       call device_memcpy(v%x, v%x_d, n, HOST_TO_DEVICE, .true.)
+       call device_memcpy(w%x, w%x_d, n, HOST_TO_DEVICE, .true.)
+    end if
+
+  end subroutine set_tangential_velocity
+
+  !> Fill a field with a smooth, non-symmetric pattern. Deterministic rather
+  !! than random so a failure is reproducible.
+  !! @param f The field to fill.
+  !! @param dof The dofmap supplying nodal coordinates.
+  !! @param phase Shifts the pattern so two calls give independent fields.
+  subroutine fill_pattern(f, dof, phase)
+    type(field_t), intent(inout) :: f
+    type(dofmap_t), intent(in) :: dof
+    real(kind=rp), intent(in) :: phase
+    integer :: i, n
+
+    n = dof%size()
+    do i = 1, n
+       f%x(i,1,1,1) = &
+            sin(1.7_rp * dof%x(i,1,1,1) + phase) * &
+            cos(2.3_rp * dof%y(i,1,1,1) - phase) + &
+            0.5_rp * dof%z(i,1,1,1) * dof%x(i,1,1,1)
+    end do
+
+    if (NEKO_BCKND_DEVICE .eq. 1) then
+       call device_memcpy(f%x, f%x_d, n, HOST_TO_DEVICE, .true.)
+    end if
+
+  end subroutine fill_pattern
+
+  ! ========================================================================== !
+
+  !> <forward(a), b> = -<a, adjoint(b)> for a boundary-tangential velocity.
+  @test(npes=[1])
+  subroutine test_adjoint_scalar_advection_is_transpose(this)
+    class(test_adv_transpose), intent(inout) :: this
+    type(mesh_t) :: msh
+    type(space_t) :: Xh
+    type(dofmap_t) :: dof
+    type(gs_t) :: gs
+    type(coef_t), target :: coef
+    type(adv_no_dealias_t) :: fwd
+    type(adv_lin_no_dealias_t) :: adj
+    type(field_t) :: u, v, w, a, b, fa, fb
+    real(kind=rp) :: lhs, rhs, denom
+    integer :: n, ierr
+
+    call MPI_Comm_dup(this%getMpiCommunicator(), NEKO_COMM%mpi_val, ierr)
+    pe_rank = this%getProcessRank()
+    pe_size = this%getNumProcesses()
+
+    call build_fixture(msh, Xh, dof, gs, coef)
+    n = dof%size()
+
+    call fwd%init(coef)
+    call adj%init(coef)
+
+    call u%init(dof, 'u')
+    call v%init(dof, 'v')
+    call w%init(dof, 'w')
+    call a%init(dof, 'a')
+    call b%init(dof, 'b')
+    call fa%init(dof, 'fa')
+    call fb%init(dof, 'fb')
+
+    call set_tangential_velocity(u, v, w, dof)
+    call fill_pattern(a, dof, 0.0_rp)
+    call fill_pattern(b, dof, 1.1_rp)
+
+    ! Both operators accumulate into their rhs argument, so start from zero.
+    call field_rzero(fa)
+    call field_rzero(fb)
+
+    call fwd%compute_scalar(u, v, w, a, fa, Xh, coef, n)
+    call adj%compute_adjoint_scalar(u, v, w, b, fb, Xh, coef, n)
+
+    if (NEKO_BCKND_DEVICE .eq. 1) then
+       call device_memcpy(fa%x, fa%x_d, n, DEVICE_TO_HOST, .true.)
+       call device_memcpy(fb%x, fb%x_d, n, DEVICE_TO_HOST, .true.)
+    end if
+
+    lhs = glsc2(fa%x, b%x, n)
+    rhs = glsc2(a%x, fb%x, n)
+
+    ! Report the raw numbers: if this ever fails, the ratio is far more
+    ! informative than the assertion message alone.
+    if (pe_rank .eq. 0) then
+       write(*, '(A,E20.12)') 'adv transpose: <fwd(a), b>      = ', lhs
+       write(*, '(A,E20.12)') 'adv transpose: <a, adj(b)>      = ', rhs
+       write(*, '(A,E20.12)') 'adv transpose: diff (want ~0)   = ', lhs - rhs
+       denom = max(abs(lhs), abs(rhs))
+       if (denom .gt. 0.0_rp) then
+          write(*, '(A,E20.12)') 'adv transpose: rel. residual    = ', &
+               abs(lhs - rhs) / denom
+       end if
+    end if
+
+    @assertRelativelyEqual(lhs, rhs, transpose_rtol)
+
+    call u%free()
+    call v%free()
+    call w%free()
+    call a%free()
+    call b%free()
+    call fa%free()
+    call fb%free()
+    call coef%free()
+    call gs%free()
+    call Xh%free()
+    call msh%free()
+    call neko_scratch_registry%free()
+
+  end subroutine test_adjoint_scalar_advection_is_transpose
+
+end module adv_adjoint_scalar_transpose
