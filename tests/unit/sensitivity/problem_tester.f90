@@ -137,7 +137,8 @@ program problem_tester
   ! the sensitivity computed by our method.
 
   call compute_sensitivity(prob, sim, des, sensitivities, &
-       i_max, perturbations, tolerance, trim(parameter_file), is_objective)
+       i_max, perturbations, tolerance, trim(parameter_file), is_objective, &
+       sim%fluid%gs_Xh)
 
   ! -------------------------------------------------------------------------- !
   ! Clean up the components
