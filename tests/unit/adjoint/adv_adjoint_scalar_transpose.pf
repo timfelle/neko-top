@@ -54,6 +54,13 @@ module adv_adjoint_scalar_transpose
   use coefs, only: coef_t
   use math, only: glsc2
   use field_math, only: field_rzero
+  use ax_product, only: ax_t, ax_helm_factory
+  use math, only: glsc3
+  use time_state, only: time_state_t
+  use interpolation, only: interpolator_t
+  use scratch_registry, only: scratch_registry_t
+  use adjoint_scalar_convection_source_term, only: &
+       adjoint_scalar_convection_source_term_t
   use adv_no_dealias, only: adv_no_dealias_t
   ! NB: module name does not match its filename here
   ! (sources/adjoint/adv_adjoint_no_dealias.f90 declares `adv_lin_no_dealias`).
@@ -291,5 +298,219 @@ contains
     call neko_scratch_registry%free()
 
   end subroutine test_adjoint_scalar_advection_is_transpose
+
+  ! ========================================================================== !
+
+  !> The scalar diffusion/Helmholtz operator must be symmetric.
+  !!
+  !! The adjoint scalar residual reuses Neko's Helmholtz `Ax` exactly as the
+  !! forward scalar does (`res%compute(Ax, s_adj, ...)` with h1 = lambda and
+  !! h2 = rho_cp * bd / dt). A symmetric operator is its own adjoint, so this
+  !! is what makes the diffusion half of the scalar adjoint exact "for free".
+  !! Asymmetric handling of h1/h2 would silently bias every scalar-objective
+  !! gradient, so it is worth pinning down rather than assuming.
+  @test(npes=[1])
+  subroutine test_scalar_helmholtz_is_symmetric(this)
+    class(test_adv_transpose), intent(inout) :: this
+    type(mesh_t) :: msh
+    type(space_t) :: Xh
+    type(dofmap_t) :: dof
+    type(gs_t) :: gs
+    type(coef_t), target :: coef
+    class(ax_t), allocatable :: Ax
+    type(field_t) :: a, b, Aa, Ab
+    real(kind=rp) :: lhs, rhs, denom
+    integer :: n, i, ierr
+
+    call MPI_Comm_dup(this%getMpiCommunicator(), NEKO_COMM%mpi_val, ierr)
+    pe_rank = this%getProcessRank()
+    pe_size = this%getNumProcesses()
+
+    call build_fixture(msh, Xh, dof, gs, coef)
+    n = dof%size()
+
+    call ax_helm_factory(Ax, full_formulation = .false.)
+
+    call a%init(dof, 'a')
+    call b%init(dof, 'b')
+    call Aa%init(dof, 'Aa')
+    call Ab%init(dof, 'Ab')
+
+    call fill_pattern(a, dof, 0.0_rp)
+    call fill_pattern(b, dof, 1.1_rp)
+
+    ! Representative, non-uniform coefficients: constant h1/h2 would not
+    ! exercise a coefficient-ordering bug.
+    do i = 1, n
+       coef%h1(i,1,1,1) = 0.05_rp + 0.01_rp * dof%x(i,1,1,1)
+       coef%h2(i,1,1,1) = 1.0_rp + 0.5_rp * dof%y(i,1,1,1)
+    end do
+    coef%ifh2 = .true.
+
+    call Ax%compute(Aa%x, a%x, coef, msh, Xh)
+    call Ax%compute(Ab%x, b%x, coef, msh, Xh)
+
+    lhs = glsc2(Aa%x, b%x, n)
+    rhs = glsc2(a%x, Ab%x, n)
+
+    if (pe_rank .eq. 0) then
+       write(*, '(A,E20.12)') 'helm symmetry: <Aa, b>          = ', lhs
+       write(*, '(A,E20.12)') 'helm symmetry: <a, Ab>          = ', rhs
+       denom = max(abs(lhs), abs(rhs))
+       if (denom .gt. 0.0_rp) then
+          write(*, '(A,E20.12)') 'helm symmetry: rel. residual    = ', &
+               abs(lhs - rhs) / denom
+       end if
+    end if
+
+    @assertRelativelyEqual(lhs, rhs, transpose_rtol)
+
+    call a%free()
+    call b%free()
+    call Aa%free()
+    call Ab%free()
+    call coef%free()
+    call gs%free()
+    call Xh%free()
+    call msh%free()
+    call neko_scratch_registry%free()
+
+  end subroutine test_scalar_helmholtz_is_symmetric
+
+  ! ========================================================================== !
+
+  !> The scalar->velocity coupling term must be the transpose of the forward
+  !! scalar advection's dependence on velocity.
+  !!
+  !! This is the term that carries *all* of a scalar objective's design
+  !! sensitivity: with it zeroed the analytic sensitivity collapses to ~2e-16
+  !! (measured 2026-08-25). The forward scalar equation contains
+  !! fs -= B (u.grad)s, whose linearisation in the velocity, in a direction
+  !! du, is
+  !!
+  !!   d(fs) = -B (du.grad)s
+  !!
+  !! The matching adjoint contribution to the *velocity* equation is the
+  !! transpose of that operator applied to s_adj, i.e. -s_adj grad(s), which
+  !! is exactly what adjoint_scalar_convection_source_term computes. Duality
+  !! then requires
+  !!
+  !!   <d(fs), s_adj>  ==  <du, B * coupling(s, s_adj)>
+  !!
+  !! The B on the right is applied here because the source-term *handler*
+  !! (source_term_handler_compute) multiplies the accumulated right-hand side
+  !! by the mass matrix, while the term itself writes pointwise values.
+  !!
+  !! Scalar advection is linear in the velocity, so d(fs) is obtained simply
+  !! by evaluating the forward operator with du substituted for u -- no
+  !! finite differencing, and hence no truncation error to trade against.
+  !!
+  !! Run with dealias = .false., which exercises the `grad` + `field_subcol3`
+  !! branch. That branch uses the element-local (discontinuous) gradient, the
+  !! same one the forward `conv1` uses, so it should be an exact transpose.
+  @test(npes=[1])
+  subroutine test_scalar_velocity_coupling_is_transpose(this)
+    class(test_adv_transpose), intent(inout) :: this
+    type(mesh_t) :: msh
+    type(space_t) :: Xh
+    type(dofmap_t) :: dof
+    type(gs_t) :: gs
+    type(coef_t), target :: coef
+    type(adv_no_dealias_t) :: fwd
+    type(adjoint_scalar_convection_source_term_t) :: coupling
+    type(field_t), target :: fu, fv, fw
+    type(field_t), pointer :: pfu, pfv, pfw
+    type(field_t), target :: s, s_adj
+    type(field_t) :: dux, duy, duz, dfs
+    type(time_state_t) :: time
+    ! Only dereferenced by the dealiased branch, which this test does not use.
+    type(interpolator_t), target :: dummy_interp
+    type(scratch_registry_t), target :: dummy_scratch
+    real(kind=rp) :: lhs, rhs, denom
+    integer :: n, ierr
+
+    call MPI_Comm_dup(this%getMpiCommunicator(), NEKO_COMM%mpi_val, ierr)
+    pe_rank = this%getProcessRank()
+    pe_size = this%getNumProcesses()
+
+    call build_fixture(msh, Xh, dof, gs, coef)
+    n = dof%size()
+
+    call fwd%init(coef)
+
+    call s%init(dof, 's')
+    call s_adj%init(dof, 's_adj')
+    call dux%init(dof, 'dux')
+    call duy%init(dof, 'duy')
+    call duz%init(dof, 'duz')
+    call dfs%init(dof, 'dfs')
+    call fu%init(dof, 'fu')
+    call fv%init(dof, 'fv')
+    call fw%init(dof, 'fw')
+
+    call fill_pattern(s, dof, 0.0_rp)
+    call fill_pattern(s_adj, dof, 1.1_rp)
+    call fill_pattern(dux, dof, 2.2_rp)
+    call fill_pattern(duy, dof, 3.3_rp)
+    call fill_pattern(duz, dof, 4.4_rp)
+
+    ! Left-hand side: linearise the forward scalar advection in the velocity
+    ! by evaluating it with du in place of u (it is linear in u).
+    call field_rzero(dfs)
+    call fwd%compute_scalar(dux, duy, duz, s, dfs, Xh, coef, n)
+
+    ! Right-hand side: the adjoint coupling term's contribution.
+    call field_rzero(fu)
+    call field_rzero(fv)
+    call field_rzero(fw)
+    pfu => fu
+    pfv => fv
+    pfw => fw
+    call coupling%init_from_components(pfu, pfv, pfw, s, s_adj, coef, &
+         coef, dummy_interp, .false., dummy_scratch)
+    call time%init(0.0_rp, 1.0_rp, 1.0e-3_rp)
+    call coupling%compute(time)
+
+    if (NEKO_BCKND_DEVICE .eq. 1) then
+       call device_memcpy(dfs%x, dfs%x_d, n, DEVICE_TO_HOST, .true.)
+       call device_memcpy(fu%x, fu%x_d, n, DEVICE_TO_HOST, .true.)
+       call device_memcpy(fv%x, fv%x_d, n, DEVICE_TO_HOST, .true.)
+       call device_memcpy(fw%x, fw%x_d, n, DEVICE_TO_HOST, .true.)
+    end if
+
+    lhs = glsc2(dfs%x, s_adj%x, n)
+    rhs = glsc3(dux%x, coef%B, fu%x, n) &
+         + glsc3(duy%x, coef%B, fv%x, n) &
+         + glsc3(duz%x, coef%B, fw%x, n)
+
+    if (pe_rank .eq. 0) then
+       write(*, '(A,E20.12)') 'coupling: <d(fs), s_adj>        = ', lhs
+       write(*, '(A,E20.12)') 'coupling: <du, B*coupling>      = ', rhs
+       denom = max(abs(lhs), abs(rhs))
+       if (denom .gt. 0.0_rp) then
+          write(*, '(A,E20.12)') 'coupling: rel. residual         = ', &
+               abs(lhs - rhs) / denom
+       end if
+    end if
+
+    @assertRelativelyEqual(lhs, rhs, transpose_rtol)
+
+    call coupling%free()
+    call s%free()
+    call s_adj%free()
+    call dux%free()
+    call duy%free()
+    call duz%free()
+    call dfs%free()
+    call fu%free()
+    call fv%free()
+    call fw%free()
+    call coef%free()
+    call gs%free()
+    call Xh%free()
+    call msh%free()
+    call neko_scratch_registry%free()
+
+  end subroutine test_scalar_velocity_coupling_is_transpose
 
 end module adv_adjoint_scalar_transpose
