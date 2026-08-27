@@ -151,10 +151,8 @@ contains
          dealias_sensitivity, .true.)
     call json_get_or_default(json, "dealias_forcing", &
          dealias_forcing, .true.)
-    call json_get_or_default(json, "start_time", start_time, &
-         simulation%neko_case%time%start_time)
-    call json_get_or_default(json, "end_time", end_time, &
-         simulation%neko_case%time%end_time)
+    call json_get_or_default(json, "start_time", start_time, 0.0_rp)
+    call json_get_or_default(json, "end_time", end_time, huge(0.0_rp))
 
     call this%init_from_attributes(design, simulation, weight, name, &
          mask_name, dealias_sensitivity, dealias_forcing, start_time, &

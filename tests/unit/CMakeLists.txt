@@ -50,6 +50,8 @@ add_subdirectory(mapping)
 # Create a file list of the pFUnit test sources. These should be relative paths.
 set(PFUNIT_TEST_SOURCES "" CACHE INTERNAL "List of pFUnit test source files.")
 
+list(APPEND PFUNIT_TEST_SOURCES problem/time_window.pf)
+
 if (hdf5_FOUND)
     list(APPEND PFUNIT_TEST_SOURCES mma/io_hdf5.pf)
 endif()

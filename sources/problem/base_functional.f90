@@ -43,7 +43,7 @@ module base_functional
   use time_state, only: time_state_t
   use vector, only: vector_t
   use utils, only: neko_error
-  use vector_math, only: vector_copy, vector_add2s1
+  use vector_math, only: vector_copy, vector_add2s1, vector_cmult
   implicit none
   private
 
@@ -77,6 +77,12 @@ module base_functional
      real(kind=rp) :: start_time = 0.0_rp
      !> Time window end for accumulation
      real(kind=rp) :: end_time = huge(0.0_rp)
+     !> Length of time actually sampled by `accumulate_value`, used to
+     !! normalise the running time average.
+     real(kind=rp) :: value_weight = 0.0_rp
+     !> Length of time actually sampled by `accumulate_sensitivity`, used to
+     !! normalise the running time average.
+     real(kind=rp) :: sensitivity_weight = 0.0_rp
 
    contains
 
@@ -229,6 +235,8 @@ contains
     class(base_functional_t), intent(inout) :: this
 
     this%value = 0.0_rp
+    this%value_old = 0.0_rp
+    this%value_weight = 0.0_rp
   end subroutine functional_reset_value
 
   !> Zero sensitivity of the function
@@ -236,39 +244,87 @@ contains
     class(base_functional_t), intent(inout) :: this
 
     this%sensitivity = 0.0_rp
+    this%sensitivity_weight = 0.0_rp
   end subroutine functional_reset_sensitivity
 
+  !> Whether a sample at the current time contributes to the average.
+  !!
+  !! A tolerance of a small fraction of the timestep is applied to both ends
+  !! of the window, so that a boundary placed exactly on a timestep is
+  !! included deterministically rather than at the mercy of the round-off
+  !! accumulated in `time%t`.
+  !! @param this The functional.
+  !! @param time The current time state.
+  !! @return Whether `time%t` lies inside the accumulation window.
+  pure function functional_in_window(this, time) result(inside)
+    class(base_functional_t), intent(in) :: this
+    type(time_state_t), intent(in) :: time
+    logical :: inside
+    real(kind=rp) :: tol
+
+    tol = 1.0e-6_rp * abs(time%dt)
+    inside = time%t .ge. this%start_time - tol .and. &
+         time%t .le. this%end_time + tol
+  end function functional_in_window
+
   !> Accumulate the value of the function
+  !!
+  !! The result is the running mean of the function over the part of the
+  !! functional's own time window that has been simulated so far, normalised
+  !! by the length of time actually sampled. It is therefore invariant to the
+  !! length of the run: extending `end_time` of the simulation past the
+  !! functional's window leaves the value unchanged, and a windowed
+  !! functional reports the mean over its window rather than over the run.
+  !! @param this The functional.
+  !! @param design The design.
+  !! @param time The current time state.
   subroutine functional_accumulate_value(this, design, time)
     class(base_functional_t), intent(inout) :: this
     class(design_t), intent(in) :: design
     type(time_state_t), intent(in) :: time
+    real(kind=rp) :: weight_old
 
-    if (time%t .lt. this%start_time .or. time%t .gt. this%end_time) return
+    if (.not. functional_in_window(this, time)) return
+
+    weight_old = this%value_weight
+    this%value_weight = weight_old + time%dt
+    if (this%value_weight .eq. 0.0_rp) return
 
     this%value_old = this%value
     call this%update_value(design)
 
-    ! could potentially use higher order trapezoidal/Simpson etc, but this
-    ! should suffice
-    this%value = this%value_old + this%value * time%dt / &
-         (time%end_time - time%start_time)
+    ! Rectangle rule; could potentially use higher order trapezoidal/Simpson
+    ! etc, but this should suffice.
+    this%value = (this%value_old * weight_old + this%value * time%dt) / &
+         this%value_weight
   end subroutine functional_accumulate_value
 
   !> Accumulate the sensitivity of the function
+  !!
+  !! Normalised exactly as `accumulate_value`, so that the sensitivity stays
+  !! consistent with the value it differentiates.
+  !! @param this The functional.
+  !! @param design The design.
+  !! @param time The current time state.
   subroutine functional_accumulate_sensitivity(this, design, time)
     class(base_functional_t), intent(inout) :: this
     class(design_t), intent(in) :: design
     type(time_state_t), intent(in) :: time
+    real(kind=rp) :: weight_old
 
-    if (time%t .lt. this%start_time .or. time%t .gt. this%end_time) return
+    if (.not. functional_in_window(this, time)) return
+
+    weight_old = this%sensitivity_weight
+    this%sensitivity_weight = weight_old + time%dt
+    if (this%sensitivity_weight .eq. 0.0_rp) return
 
     call vector_copy(this%sensitivity_old, this%sensitivity)
     call this%update_sensitivity(design)
 
-    ! could potentially use higher order trapezoidal/Simpson etc, but this
-    ! should suffice
-    call vector_add2s1(this%sensitivity, this%sensitivity_old, time%dt / &
-         (time%end_time - time%start_time))
+    ! Rectangle rule, matching `accumulate_value`.
+    call vector_cmult(this%sensitivity_old, &
+         weight_old / this%sensitivity_weight)
+    call vector_add2s1(this%sensitivity, this%sensitivity_old, &
+         time%dt / this%sensitivity_weight)
   end subroutine functional_accumulate_sensitivity
 end module base_functional

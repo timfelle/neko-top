@@ -46,16 +46,40 @@ have currently been implemented in `neko-top`·
 ## Objectives {#objectives}
 
 ### Time integration for unsteady objectives {#objectives_time_integration}
-For unsteady simulations, the instantaneous objective is time integrated as
+For unsteady simulations, the instantaneous objective is averaged over time,
 \f[
-\mathcal{F} = \int_0^T  f(t) dt,
+\mathcal{F} = \frac{1}{|W|} \int_W f(t) \, dt,
 \f]
-where \f$T\f$ is the final simulation time.
+where \f$W\f$ is the objective's own time window and \f$|W|\f$ its length.
+Averaging rather than integrating keeps the objective on the same scale as the
+instantaneous quantity it is built from.
 
-The time window can be restricted with the optional input parameters
-`start_time` and `end_time`. Their defaults are `0.0` and `+\infty`,
-respectively, meaning that the full simulated time horizon is used unless a
-smaller window is prescribed.
+The window can be restricted with the optional input parameters `start_time`
+and `end_time`. Their defaults are `0.0` and `+\infty`, so the full simulated
+horizon is used unless a smaller window is prescribed.
+
+The objective is sampled once per completed timestep, and \f$|W|\f$ is the
+total length of time actually sampled. A window is therefore truncated to the
+part of it that was simulated, and the reported number is the mean over what
+was simulated. In particular the average is normalised by the window, not by
+the length of the run, so **a windowed objective does not change when the run
+is made longer**: an objective windowed to \f$[2.5, 6.0]\f$ reports the same
+value whether the simulation stops at \f$t = 6\f$ or continues to \f$t = 20\f$.
+
+A window that never overlaps the simulated interval accumulates nothing. The
+objective then reports zero and a warning is written to the log.
+
+\warning Setting `end_time` to exactly the simulation's own `end_time` is not
+the same as leaving it at its `+\infty` default. The adjoint forcing terms that
+objectives register are gated by `source_term_t`'s time window, which compares
+against the simulation time without a tolerance, so the final step -- where the
+accumulated time lands a few ULP above the prescribed `end_time` -- silently
+loses its forcing and the sensitivity is wrong. Leave `end_time` unset unless a
+genuinely shorter window is wanted.
+
+The window only applies to unsteady problems. A steady problem evaluates its
+objectives once, on the converged field, so `start_time` and `end_time` have no
+effect there.
 
 For example,
 
@@ -69,7 +93,7 @@ For example,
 ```
 
 accumulates the scalar-mixing objective only over the interval
-\f$2.5 \le t \le 6.0\f$.
+\f$2.5 \le t \le 6.0\f$, and reports its mean over that interval.
 
 For the underlying adjoint formulation and how objective functions generate
 adjoint forcing terms, please refer to
