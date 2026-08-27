@@ -157,8 +157,10 @@ contains
          this%weight, weight, 1.0_rp)
     call json_get_or_default(json, "mask_name", mask_name, "")
     call json_get_or_default(json, "name", name, "Viscous dissipation")
-    call json_get_or_default(json, "start_time", start_time, 0.0_rp)
-    call json_get_or_default(json, "end_time", end_time, huge(0.0_rp))
+    call json_get_or_default(json, "start_time", start_time, &
+         simulation%neko_case%time%start_time)
+    call json_get_or_default(json, "end_time", end_time, &
+         simulation%neko_case%time%end_time)
 
     call this%init_from_attributes(design, simulation, weight, name, &
          mask_name, start_time, end_time)
