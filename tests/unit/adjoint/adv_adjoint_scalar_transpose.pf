@@ -62,6 +62,10 @@ module adv_adjoint_scalar_transpose
   use adjoint_scalar_convection_source_term, only: &
        adjoint_scalar_convection_source_term_t
   use adv_no_dealias, only: adv_no_dealias_t
+  use adv_dealias, only: adv_dealias_t
+  ! NB: module name does not match its filename
+  ! (sources/adjoint/adv_adjoint_dealias.f90 declares `adv_lin_dealias`).
+  use adv_lin_dealias, only: adv_lin_dealias_t
   ! NB: module name does not match its filename here
   ! (sources/adjoint/adv_adjoint_no_dealias.f90 declares `adv_lin_no_dealias`).
   use adv_lin_no_dealias, only: adv_lin_no_dealias_t
@@ -74,6 +78,9 @@ module adv_adjoint_scalar_transpose
 
   !> Polynomial order of the test space (order 7 => lx = 8).
   integer, parameter :: LX = 8
+
+  !> Dealiased (over-integration) order, the usual 3/2 rule applied to LX.
+  integer, parameter :: LXD = (3 * LX) / 2
 
   !> Relative tolerance on the transpose identity. The two operators are built
   !! from the same GLL quadrature and derivative matrices, so if one is truly
@@ -512,5 +519,100 @@ contains
     call neko_scratch_registry%free()
 
   end subroutine test_scalar_velocity_coupling_is_transpose
+
+  ! ========================================================================== !
+
+  !> Same transpose identity as the first test, but for the DEALIASED operator
+  !! pair -- which is what the production passive_scalar case actually runs
+  !! (numerics.dealias = true).
+  !!
+  !! This path is structurally very different from the non-dealiased one: the
+  !! fields are interpolated up to a GL space of order LXD, the product is
+  !! formed there, and the result is mapped back down and assembled with a
+  !! gather-scatter followed by a division by the assembled mass matrix. Any
+  !! of those steps failing to mirror its forward counterpart would break the
+  !! transpose specifically at element interfaces -- which is where the
+  !! measured FD-vs-adjoint error is worst (2.4x the interior-dof error, see
+  !! known-bugs-backlog item #6).
+  !!
+  !! Velocity is boundary-tangential for the same reason as before, so the
+  !! surface term drops and the identity is exact rather than approximate.
+  @test(npes=[1])
+  subroutine test_dealiased_adjoint_scalar_advection_is_transpose(this)
+    class(test_adv_transpose), intent(inout) :: this
+    type(mesh_t) :: msh
+    type(space_t) :: Xh
+    type(dofmap_t) :: dof
+    type(gs_t) :: gs
+    type(coef_t), target :: coef
+    type(adv_dealias_t) :: fwd
+    type(adv_lin_dealias_t) :: adj
+    type(field_t) :: u, v, w, a, b, fa, fb
+    real(kind=rp) :: lhs, rhs, denom
+    integer :: n, ierr
+
+    call MPI_Comm_dup(this%getMpiCommunicator(), NEKO_COMM%mpi_val, ierr)
+    pe_rank = this%getProcessRank()
+    pe_size = this%getNumProcesses()
+
+    call build_fixture(msh, Xh, dof, gs, coef)
+    n = dof%size()
+
+    call fwd%init(LXD, coef)
+    call adj%init(LXD, coef)
+
+    call u%init(dof, 'u')
+    call v%init(dof, 'v')
+    call w%init(dof, 'w')
+    call a%init(dof, 'a')
+    call b%init(dof, 'b')
+    call fa%init(dof, 'fa')
+    call fb%init(dof, 'fb')
+
+    call set_tangential_velocity(u, v, w, dof)
+    call fill_pattern(a, dof, 0.0_rp)
+    call fill_pattern(b, dof, 1.1_rp)
+
+    call field_rzero(fa)
+    call field_rzero(fb)
+
+    call fwd%compute_scalar(u, v, w, a, fa, Xh, coef, n)
+    call adj%compute_adjoint_scalar(u, v, w, b, fb, Xh, coef, n)
+
+    if (NEKO_BCKND_DEVICE .eq. 1) then
+       call device_memcpy(fa%x, fa%x_d, n, DEVICE_TO_HOST, .true.)
+       call device_memcpy(fb%x, fb%x_d, n, DEVICE_TO_HOST, .true.)
+    end if
+
+    lhs = glsc2(fa%x, b%x, n)
+    rhs = glsc2(a%x, fb%x, n)
+
+    if (pe_rank .eq. 0) then
+       write(*, '(A,E20.12)') 'dealias transpose: <fwd(a), b>  = ', lhs
+       write(*, '(A,E20.12)') 'dealias transpose: <a, adj(b)>  = ', rhs
+       write(*, '(A,E20.12)') 'dealias transpose: diff         = ', lhs - rhs
+       denom = max(abs(lhs), abs(rhs))
+       if (denom .gt. 0.0_rp) then
+          write(*, '(A,E20.12)') 'dealias transpose: rel. resid.  = ', &
+               abs(lhs - rhs) / denom
+       end if
+    end if
+
+    @assertRelativelyEqual(lhs, rhs, transpose_rtol)
+
+    call u%free()
+    call v%free()
+    call w%free()
+    call a%free()
+    call b%free()
+    call fa%free()
+    call fb%free()
+    call coef%free()
+    call gs%free()
+    call Xh%free()
+    call msh%free()
+    call neko_scratch_registry%free()
+
+  end subroutine test_dealiased_adjoint_scalar_advection_is_transpose
 
 end module adv_adjoint_scalar_transpose
