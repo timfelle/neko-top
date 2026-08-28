@@ -81,6 +81,19 @@ The window only applies to unsteady problems. A steady problem evaluates its
 objectives once, on the converged field, so `start_time` and `end_time` have no
 effect there.
 
+The two paths agree where they overlap: an unsteady objective windowed to the
+final timestep alone reports exactly what the steady path reports for the same
+run, because a one-sample average is the sample. Selecting that single step is
+easier than it looks. The time loop stops at the *first* step that reaches the
+simulation's `end_time`, so unless `end_time` falls exactly on a step it is
+overshot by up to one `dt` -- a run with `end_time` \f$0.0475\f$ and `dt`
+\f$0.005\f$ takes ten steps and finishes at \f$t = 0.05\f$. A window whose
+`start_time` is the simulation's own `end_time` therefore captures precisely
+that last step and nothing before it. Choosing an `end_time` that does not
+land on a step boundary also removes any dependence on which side of the
+comparison round-off in the accumulated time falls, which otherwise decides
+whether a run takes ten steps or eleven.
+
 For example,
 
 ```json

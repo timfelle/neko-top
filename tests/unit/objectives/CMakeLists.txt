@@ -5,6 +5,7 @@ set(CMAKE_FOLDER "Tests/Unit/Objectives")
 set(test_list
     "time_window_run_length.case"
     "time_window_equivalence.case"
+    "steady_unsteady_equivalence.case"
 )
 
 # Path to the common driver source
