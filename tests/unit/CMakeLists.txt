@@ -40,6 +40,7 @@ add_dependencies(Tests Unit)
 
 # Add the more complex tests that require additional setup or dependencies.
 add_subdirectory(sensitivity)
+add_subdirectory(objectives)
 add_subdirectory(checkpointing)
 add_subdirectory(optimizer)
 add_subdirectory(mapping)
