@@ -89,12 +89,12 @@ genuine steady state inside a unit test's budget.
 | setting | value | why |
 |---------|-------|-----|
 | `Re` | `5.0` | At the sibling cases' `Re = 50` the fluid residual is still `9e-6` at `t = 3.0`, 39 s of run time short of the `1e-6` it needs. At `Re = 5` it converges at `t ≈ 1.27`. |
-| `Pe` | `0.25` | The scalar is the slower of the two. Its relaxation is diffusive, and the domain's long axis sets the rate, so `Pe` buys convergence time directly. |
+| `Pe` | `0.25` | The scalar is the slower of the two by a long way. Measured on this case: at the sibling cases' `Pe = 100` its residual is still `2.5e-2` at the end of the run and falling by only a few percent per `0.25` of time; `Pe = 5` and `Pe = 1` also fail to converge inside the budget. At `Pe = 0.25` it reaches `1.1e-8`. |
 | `timestep` | `0.01` | Twice the sibling cases', halving the step count. |
 | `f_max` | `50.0` | Halved alongside the timestep, so the Brinkman penalty keeps the `chi * dt` of `0.5` the other cases run at. Raising `dt` without this is what blows a Brinkman case up. |
 | `end_time` | `1.995` | Half a step off a boundary, so the run is a deterministic 200 steps ending at `t = 2.0`. See the note on step boundaries below. |
-| `scalar_coupled` | `true` | Without it `steady_simcomp` declares convergence on the velocity and pressure residuals alone and freezes the fluid while the scalar is still moving, so the objective is evaluated on a scalar that has not settled. |
-| `target_concentration` | `0.2` | The scalar is conserved here, so it relaxes to the domain mean of `0.5` — which is the default target. The objective would converge to zero and the comparison would be between two zeros. |
+| `scalar_coupled` | `true` | Without it `steady_simcomp` declares convergence on the velocity and pressure residuals alone and freezes the fluid while the scalar is still moving. At `Pe = 0.25` the fluid is in fact the binding criterion, so this changes nothing here — it is a guard against a future retune quietly reintroducing the trap, not load-bearing today. |
+| `target_concentration` | `0.2` | The converged scalar sits very close to `0.5`, which is the default target, so on the default the objective collapses to `2.2e-4`. The scalar's absolute drift across the window is ~`2e-12` either way, so that collapse turns a `6e-11` relative difference into `9e-9` — past the tolerance. Measured, not reasoned: the run with the default target fails. |
 
 `require_steady_state` makes the driver assert that each run really did
 converge, by checking that `steady_simcomp` froze the fluid. A run that
@@ -103,9 +103,16 @@ rather than as what it is.
 
 ### What it measures
 
-Convergence at `t ≈ 1.27` (the last logged residual is `1.1e-6` at
-`t = 1.25`); the window is `[1.5, 2.0]`, 51 samples, so it sits about 23 steps
-clear of the freeze.
+Convergence at `t ≈ 1.27`; the window is `[1.5, 2.0]`, 51 samples, so it
+sits about 23 steps clear of the freeze. At the last logged step before the
+freeze, `t = 1.25`, the residuals are `1.1e-6` on the velocity (the binding
+one, against a `1e-6` tolerance) and `1.1e-8` on the scalar — the scalar is
+some ninety times better converged than it needs to be, so the choice of `Pe`
+is not sitting on a cliff edge.
+
+The scalar boundary conditions are the sibling cases' unchanged: zero-flux
+Neumann on all six zones, with the same `point_zone` initial condition. Only
+`Pe` and the objective's target differ.
 
 | objective | steady | unsteady average | relative difference |
 |-----------|--------|------------------|---------------------|
