@@ -6,7 +6,7 @@
         "output_at_end": false,
         "output_boundary": false,
         "time": {
-            "end_time": 2.495,
+            "end_time": 19.995,
             "timestep": 0.01
         },
         "numerics": {
@@ -73,7 +73,7 @@
         },
         "scalar": {
             "enabled": true,
-            "Pe": 1.0,
+            "Pe": 100.0,
             "output_control": "never",
             "solver": {
                 "type": "cg",
@@ -211,6 +211,22 @@
                     0.25,
                     0.75
                 ]
+            },
+            {
+                "name": "outlet_region",
+                "geometry": "box",
+                "x_bounds": [
+                    1.5,
+                    2.0
+                ],
+                "y_bounds": [
+                    0.0,
+                    1.0
+                ],
+                "z_bounds": [
+                    0.0,
+                    1.0
+                ]
             }
         ],
         "simulation_components": [
@@ -219,7 +235,7 @@
                 "tol": 1e-06,
                 "compute_control": "tsteps",
                 "compute_value": 1,
-                "scalar_coupled": true,
+                "scalar_coupled": false,
                 "log_frequency": 25
             }
         ]
@@ -271,21 +287,28 @@
         "objectives": [
             {
                 "type": "viscous_dissipation",
-                "name": "viscous [2.0, 2.5]",
+                "name": "viscous [19, 20]",
                 "weight": 1.0,
-                "start_time": 1.995
+                "start_time": 18.995
             },
             {
                 "type": "brinkman_dissipation",
-                "name": "brinkman [2.0, 2.5]",
+                "name": "brinkman [19, 20]",
                 "weight": 1.0,
-                "start_time": 1.995
+                "start_time": 18.995
             },
             {
                 "type": "scalar_mixing",
-                "name": "mixing [2.0, 2.5]",
+                "name": "mixing [19, 20]",
                 "weight": 1.0,
-                "start_time": 1.995
+                "start_time": 18.995
+            },
+            {
+                "type": "scalar_mixing",
+                "name": "mixing outlet [19, 20]",
+                "weight": 1.0,
+                "start_time": 18.995,
+                "mask_name": "outlet_region"
             }
         ]
     }

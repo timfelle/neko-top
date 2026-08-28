@@ -7,7 +7,7 @@ They replace the former `examples/time_test`, which covered the same matrix but
 could only be inspected by hand.
 
 The tests are tagged as `unit`, so they are mandatory for CI to pass. Together
-they take about 34 s, almost all of it in `steady_unsteady_converged`, which
+they take about 44 s, almost all of it in `steady_unsteady_converged`, which
 has to run a flow to a genuine steady state.
 
 ## Common files
@@ -88,11 +88,12 @@ two were free to disagree about which field they evaluate, or when.
 
 `examples/time_test` ran two species into the domain either side of a smooth
 split, carried them through with the flow, and let them leave through the
-outlet, with every other face insulated. The conversion to unit tests replaced
-that with a zero-flux condition on **all six** faces and a `point_zone` initial
-blob. That is a different problem: the scalar is no longer fed, so instead of
-mixing two streams it is a trapped blob being stirred, and its only route to a
-steady state is slow diffusive relaxation.
+outlet, with every other face insulated. The point was to represent the first
+iteration of an optimization: a clear split at the inlet, still a clear split
+at the outlet, the design having done nothing yet. The conversion to unit
+tests replaced that with a zero-flux condition on **all six** faces and a
+`point_zone` initial blob, which is a different problem — a conserved blob
+being stirred, whose only route to a steady state is slow diffusion.
 
 This case restores the original: `user_dirichlet` on the inlet, zero-flux
 Neumann on the other five zones, and the same profile as the initial condition
@@ -106,85 +107,109 @@ steepness of 20 rather than 200. The example ran 32x8x8 at polynomial order 5;
 these tests run 8x4x4 at order 3, thirteen points across the split, where 200
 would be a step function in all but name and would ring.
 
-The other cases in this directory still carry the simplified scalar setup.
-They are relative comparisons within a single case, so it does not affect what
-they assert.
+### The split has to survive to the outlet
+
+This is the property that decides `Pe`, and it is worth stating as a number
+rather than an intention. For the `k = 20` profile, a scalar that reached the
+outlet completely unmixed would give a `scalar_mixing` objective of `0.1000`;
+one mixed to uniformity would give `0`. Measured over the whole domain:
+
+| `Pe` | objective | fraction of the split preserved |
+|------|-----------|---------------------------------|
+| `1` | `0.00869` | 9% |
+| `100` | `0.08169` | 82% |
+
+At `Pe = 1` the split is gone by the outlet, which is the opposite of the
+first-iteration state the case is supposed to represent. `Pe = 100`, the value
+the sibling cases already use, keeps it. Restricted to the outlet fifth of the
+domain the figure is 68%, so the two streams are still clearly separated where
+it matters.
+
+The objectives include both forms: one over the whole domain and one masked to
+`outlet_region`, as the example masked its own to `objective_domain`.
 
 ### Why the rest of the case looks the way it does
 
-The boundary conditions are the example's. The numbers are this test's own,
-each one measured rather than inherited.
+The boundary conditions and `Pe` are the example's. The rest is this test's,
+each number measured rather than inherited.
 
 | setting | value | why |
 |---------|-------|-----|
 | `Re` | `5.0` | At the sibling cases' `Re = 50` the fluid residual is still `9e-6` at `t = 3.0`, 39 s of run time short of the `1e-6` it needs. At `Re = 5` it reaches that by `t ≈ 1.27`. |
-| `Pe` | `1.0` | Even with the influx restored, `Pe = 100` leaves the scalar residual at `7.3e-3` at `t = 1.75`, decaying at only ~1.1 per unit time — that is advective flushing past the no-slip walls, and it would need some eight more time units. `Pe = 1` adds diffusive damping on top and converges with the run. `Pe = 10` is not enough. |
-| `timestep` | `0.01` | Twice the sibling cases', halving the step count. |
-| `f_max` | `50.0` | Halved alongside the timestep, so the Brinkman penalty keeps the `chi * dt` of `0.5` the other cases run at. Raising `dt` without this is what blows a Brinkman case up. |
-| `end_time` | `2.495` | 250 steps, ending at `t = 2.50`, half a step off a boundary. The window needs to open well after convergence: at `[1.7, 2.0]` the scalar is still drifting and the paths disagree by `2.7e-9`. |
-| scalar `absolute_tolerance` | `1e-12` | The single most important number here. See below. |
-| `scalar_coupled` | `true` | The scalar is the last thing to converge (`4.0e-6` at `t = 1.25`, against the velocity's `1.1e-6`), so this moves the freeze from `t ≈ 1.27` to `t ≈ 1.40`. |
+| `timestep` | `0.01` | Not free. At `Pe = 100` there is no diffusion to damp grid-scale advection, and `dt = 0.02` — a perfectly comfortable CFL of 0.58 for the fluid — makes the *scalar* diverge, reaching a residual of `6e36`. It also saves less than it looks, since larger steps need more solver iterations: 600 steps at `0.02` cost 28 s against 33 s for 1000 at `0.01`. |
+| `f_max` | `50.0` | Halved alongside the timestep, so the Brinkman penalty keeps the `chi * dt` of `0.5` the other cases run at. |
+| `end_time` | `19.995` | 2000 steps, ending at `t = 20.0`, half a step off a boundary. See below — this is set by how long the scalar takes to stop drifting, not by the fluid. |
+| scalar `absolute_tolerance` | `1e-12` | The solver's own noise, not the physics, was the floor. See below. |
+| `scalar_coupled` | `false` | So the fluid freezes as soon as *it* has converged, at `t ≈ 1.27`, rather than waiting 18 more time units for the scalar. See below. |
 
 `require_steady_state` makes the driver assert that each run really did
-converge, by checking that `steady_simcomp` froze the fluid. A run that
-quietly fell short would otherwise show up as an unexplained value mismatch
-rather than as what it is.
+converge, by checking that `steady_simcomp` froze the fluid.
 
-### The scalar solver tolerance was the floor, not the physics
+### Why the run is 20 time units long, and why that is still cheap
+
+The fluid settles almost immediately. The scalar does not: at `Pe = 100` its
+approach to steady state is advective flushing past the no-slip walls, which
+e-folds about every 0.74 time units, and it starts five decades away. Measured
+directly, as the disagreement between the two paths for the same objective
+windowed at three places in one run:
+
+| window | relative difference |
+|--------|---------------------|
+| `[8, 9]` | `1.7e-5` |
+| `[11, 12]` | `4.2e-7` |
+| `[14, 15]` | `4.8e-9` |
+
+Clean exponential decay, which is why the window sits at `[19, 20]`.
+
+The length is affordable because `scalar_coupled` is off. The fluid is
+genuinely converged at `t ≈ 1.27`, `steady_simcomp` freezes it there, and the
+remaining 1870 steps skip the fluid solve entirely — around 10 ms a step
+against 33 ms unfrozen. Two runs of 2000 steps cost 35 s. Leaving
+`scalar_coupled` on would keep re-solving an already-converged fluid for
+another 18 time units at four times the cost, for the same answer.
+
+That is the one place this case departs from the advice in item 24 of the
+workspace bug backlog, and deliberately: it does not use the freeze to
+certify that the scalar has settled. The comparison itself does that, far more
+strictly than a residual threshold would.
+
+### The scalar solver tolerance was a floor, not the physics
 
 Worth its own note, because it looked like a convergence problem and was not.
 With the scalar solver at the `1e-9` this case inherited, the two paths would
-not agree better than about `7.5e-10` however long the run went: moving the
-window from `[1.7, 2.0]` to `[2.0, 2.5]` improved it only from `1.2e-9`, far
-less than the residual had dropped over the same stretch. That plateau is
-per-step solver noise. The steady path reads one field; the unsteady path
-averages 51 of them, so the noise partly averages out of one side and not the
-other, and no amount of extra convergence closes the gap.
-
-Tightening the scalar solver to `1e-12` drops the disagreement by a factor of
-ten, to `7.1e-11`. Only then does lengthening the run help, and both are
-needed: with the tight solver but the shorter window the paths disagree by
-`2.7e-9`, which is genuine drift.
+not agree better than about `7.5e-10` however long the run went — lengthening
+the window moved it far less than the residual had dropped over the same
+stretch. That plateau is per-step solver noise. The steady path reads one
+field; the unsteady path averages a hundred of them, so the noise partly
+averages out of one side and not the other, and no amount of extra convergence
+closes the gap. Tightening the scalar solver to `1e-12` removed it.
 
 ### What it measures
 
-The run converges at `t ≈ 1.40`; the window is `[2.0, 2.5]`, 51 samples, so it
-opens some 60 steps clear of the freeze.
+The fluid converges and freezes at `t ≈ 1.27`; the window is `[19, 20]`, 101
+samples.
 
 | objective | steady | unsteady average | relative difference |
 |-----------|--------|------------------|---------------------|
-| viscous dissipation | `3.08157224180632` | `3.08157224180632` | `0` |
-| Brinkman dissipation | `0.390671242140563` | `0.390671242140563` | `0` |
-| scalar mixing | `0.00869153216816066` | `0.00869153216877701` | `7.1e-11` |
+| viscous dissipation | `3.08157224397083` | `3.08157224397084` | `3e-15` |
+| Brinkman dissipation | `0.390671241523987` | `0.390671241523987` | `0` |
+| scalar mixing, whole domain | `0.0816932164195727` | `0.0816932164201648` | `7.2e-12` |
+| scalar mixing, outlet | `0.0681432496150257` | `0.0681432496173393` | `3.4e-11` |
 
-The two velocity-based objectives are bit-identical, and that is not luck:
+The two velocity-based objectives agree to round-off because
 `steady_simcomp` freezes the fluid on convergence, so the velocity field is
 literally constant across the window and the average of a constant is that
 constant. It also means the test checks its own margin — had the freeze landed
-inside the window, these two would stop agreeing exactly.
+inside the window, these two would stop agreeing.
 
 The scalar is converged but never frozen (freezing it is an open `@todo` in
-`steady_simcomp`), so it keeps relaxing through the window. `7.1e-11` is what
-is left of that once the solver floor is out of the way, against a `1e-9`
-tolerance, the same one the other tests here use.
+`steady_simcomp`), so it keeps relaxing through the window. The two scalar
+figures are what is left of that, against a `1e-9` tolerance, the same one the
+other tests here use — 138x and 29x of margin.
 
-The test costs 22 s, the most expensive in this directory by a wide margin,
-which is the price of a real steady state.
-
-### What `scalar_coupled` is and is not doing
-
-It changes when the run freezes — `t ≈ 1.40` with it, `t ≈ 1.27` without —
-because the scalar converges last. It does **not** change this test's outcome:
-run with `scalar_coupled: false`, the scalar objective still agrees to
-`7.1e-11`, because the window opens at `t = 2.0`, long after either freeze.
-What does change is the two velocity objectives, which shift in the tenth
-digit, being frozen from a slightly earlier field.
-
-It stays because it is the right setting for a case carrying a scalar
-objective, and because it makes the freeze mean "everything has settled"
-rather than "the velocity has". Leaving it off is the trap described in item
-24 of the workspace bug backlog; this case is simply not arranged to fall into
-it.
+The test costs 35 s, by far the most expensive in this directory, which is the
+price of a scalar that both reaches a steady state and still looks like the
+problem it is meant to represent.
 
 ## `steady_unsteady_final_step`
 
