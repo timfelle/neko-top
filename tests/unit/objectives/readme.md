@@ -33,6 +33,41 @@ an internal augmented-Lagrangian objective of its own, which the driver skips.
 The driver calls `problem_t%compute` and never `compute_sensitivity`, so no
 adjoint is solved. That is what keeps these affordable as unit tests.
 
+## The scalar setup, restored from the example
+
+`examples/time_test` ran two species into the domain either side of a smooth
+split, carried them through with the flow, and let them leave through the
+outlet, with every other face insulated, and measured mixing over a zone at
+the far end. The point was the first iteration of an optimization: a clear
+split entering, still a clear split leaving, the design having done nothing
+yet.
+
+The conversion to unit tests had no user module to carry the inflow profile,
+so it substituted a zero-flux condition on **all six** faces, a `point_zone`
+initial blob, and an unmasked objective. That is a different problem — a
+conserved blob being stirred, whose only route to a steady state is slow
+diffusion, measured over the whole domain.
+
+All four cases here now run the original setup: `user_dirichlet` on the inlet,
+zero-flux Neumann on the other five zones, the same profile as the initial
+condition so no run opens with a transient it then has to sit through, and
+`scalar_mixing` masked to `outlet_region` — the equivalent of the example's
+`objective_domain`. `objectives_user.f90` holds the profile, and the driver
+registers it on `sim%neko_case%user` before `sim%init`, which works because
+`user_intf_init` only substitutes its own defaults for pointers still null.
+No `makeneko` is involved.
+
+The split uses a logistic profile in `z`, as the example did, but with a
+steepness of 20 rather than 200. The example ran 32x8x8 at polynomial order 5;
+these tests run 8x4x4 at order 3, thirteen points across the split, where 200
+would be a step function in all but name and would ring.
+
+For that profile a completely unmixed scalar gives a `scalar_mixing` objective
+of `0.1000`, and a uniformly mixed one gives `0`. The three short cases all
+report about `0.099` at the outlet — the split fully intact, since the flow
+has barely developed — and `steady_unsteady_converged`, which runs to a steady
+state, reports `0.0681`, or 68% of the split still there.
+
 ## `time_window_run_length`
 
 The regression guard. Every objective is given the closed window
@@ -43,7 +78,11 @@ The values must therefore be identical.
 This is the property that was broken before: accumulation was normalised by
 the *simulation's* window rather than the objective's own, so doubling the run
 halved every windowed objective. Against that code all three objectives fail
-here with a relative difference of exactly `0.5`.
+here with a relative difference of exactly `0.5` — re-checked after the
+scalar setup was restored, by putting the old normalisation back into
+`functional_accumulate_value` and rerunning. The property is independent of
+what the objectives are worth, so the restored physics neither strengthens
+nor weakens this guard.
 
 The tolerance is `1e-9`. Two independent runs of the same case agree to about
 `1e-11` — the residual is the iterative solvers, not the windowing — so this
@@ -84,29 +123,6 @@ Nothing checked this before. The steady path was reachable from
 `tests/unit/sensitivity` but never compared against the unsteady one, so the
 two were free to disagree about which field they evaluate, or when.
 
-### The scalar setup is the example's, restored
-
-`examples/time_test` ran two species into the domain either side of a smooth
-split, carried them through with the flow, and let them leave through the
-outlet, with every other face insulated. The point was to represent the first
-iteration of an optimization: a clear split at the inlet, still a clear split
-at the outlet, the design having done nothing yet. The conversion to unit
-tests replaced that with a zero-flux condition on **all six** faces and a
-`point_zone` initial blob, which is a different problem — a conserved blob
-being stirred, whose only route to a steady state is slow diffusion.
-
-This case restores the original: `user_dirichlet` on the inlet, zero-flux
-Neumann on the other five zones, and the same profile as the initial condition
-so the run does not open with a transient it then has to sit through.
-`objectives_user.f90` holds the profile, and the driver registers it on
-`sim%neko_case%user` before `sim%init`, which works because `user_intf_init`
-only substitutes its own defaults for pointers still null.
-
-The split uses a logistic profile in `z`, as the example did, but with a
-steepness of 20 rather than 200. The example ran 32x8x8 at polynomial order 5;
-these tests run 8x4x4 at order 3, thirteen points across the split, where 200
-would be a step function in all but name and would ring.
-
 ### The split has to survive to the outlet
 
 This is the property that decides `Pe`, and it is worth stating as a number
@@ -125,8 +141,9 @@ the sibling cases already use, keeps it. Restricted to the outlet fifth of the
 domain the figure is 68%, so the two streams are still clearly separated where
 it matters.
 
-The objectives include both forms: one over the whole domain and one masked to
-`outlet_region`, as the example masked its own to `objective_domain`.
+This is the only case here carrying `scalar_mixing` twice, once unmasked and
+once masked to `outlet_region`. The unmasked one is what the `Pe` table above
+is measured on; the masked one is what the example actually optimized.
 
 ### Why the rest of the case looks the way it does
 

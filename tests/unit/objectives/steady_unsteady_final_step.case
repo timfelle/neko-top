@@ -84,17 +84,20 @@
                 "max_iterations": 200
             },
             "initial_condition": {
-                "type": "point_zone",
-                "base_value": 0.0,
-                "zone_value": 1.0,
-                "zone_name": "scalar_split"
+                "type": "user",
+                "value": 0.0
             },
             "boundary_conditions": [
+                {
+                    "type": "user_dirichlet",
+                    "zone_indices": [
+                        1
+                    ]
+                },
                 {
                     "type": "neumann",
                     "flux": 0.0,
                     "zone_indices": [
-                        1,
                         2,
                         3,
                         4,
@@ -178,22 +181,6 @@
                 ]
             },
             {
-                "name": "scalar_split",
-                "geometry": "box",
-                "x_bounds": [
-                    0.0,
-                    2.0
-                ],
-                "y_bounds": [
-                    0.5,
-                    1.0
-                ],
-                "z_bounds": [
-                    0.0,
-                    1.0
-                ]
-            },
-            {
                 "name": "initial_blob",
                 "geometry": "box",
                 "x_bounds": [
@@ -207,6 +194,22 @@
                 "z_bounds": [
                     0.25,
                     0.75
+                ]
+            },
+            {
+                "name": "outlet_region",
+                "geometry": "box",
+                "x_bounds": [
+                    1.5,
+                    2.0
+                ],
+                "y_bounds": [
+                    0.0,
+                    1.0
+                ],
+                "z_bounds": [
+                    0.0,
+                    1.0
                 ]
             }
         ],
@@ -279,7 +282,8 @@
                 "type": "scalar_mixing",
                 "name": "mixing final step",
                 "weight": 1.0,
-                "start_time": 0.0475
+                "start_time": 0.0475,
+                "mask_name": "outlet_region"
             }
         ]
     }
