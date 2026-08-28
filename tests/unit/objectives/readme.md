@@ -7,7 +7,8 @@ They replace the former `examples/time_test`, which covered the same matrix but
 could only be inspected by hand.
 
 The tests are tagged as `unit`, so they are mandatory for CI to pass. Together
-they take about nine seconds.
+they take about 35 s, almost all of it in `steady_unsteady_converged`, which
+has to run a flow to a genuine steady state.
 
 ## Common files
 
@@ -19,13 +20,15 @@ they take about nine seconds.
 
 With `compare_steady` set it also runs the case with `simulation_t%unsteady`
 cleared — the flag `problem_t%compute` branches on — and requires that result
-to agree with the unsteady ones.
+to agree with the unsteady ones. `require_steady_state` additionally asserts
+that every run reached a steady state, which is what makes a window average
+comparable to a single converged field at all.
 
 Only the objectives declared in the case file are checked. `problem_t` appends
 an internal augmented-Lagrangian objective of its own, which the driver skips.
 
 The driver calls `problem_t%compute` and never `compute_sensitivity`, so no
-adjoint is solved. That is what keeps these cheap enough to be unit tests.
+adjoint is solved. That is what keeps these affordable as unit tests.
 
 ## `time_window_run_length`
 
@@ -65,66 +68,112 @@ cancels out of a within-run comparison. It passes against the pre-fix code.
 `time_window_run_length` is what guards that; this one pins down what each
 window form means.
 
-## `steady_unsteady_equivalence`
+## `steady_unsteady_converged`
 
-The only test here that runs the steady path at all. It is the same case as
-`time_window_run_length` — same mesh, physics, timestep and design — with a
-`steady` simulation component added and every objective windowed to the final
-timestep alone. It is run twice: once steady, where `problem_t%compute` skips
-accumulation entirely and evaluates each objective on the final field, and once
-unsteady, where each objective is accumulated over its window. A one-sample
-average is that sample, so the two must agree exactly.
+The steady and the unsteady approach are two ways of putting a number on the
+same problem, and once that problem has reached a steady state they must give
+the same number. This test is that statement: the flow is run to convergence,
+the steady path evaluates each objective on the converged field, the unsteady
+path averages the same objective over a window lying inside the converged
+tail, and the two are required to agree.
 
-Before this test the steady path was reachable from `tests/unit/sensitivity`
-but never compared against the unsteady one, so nothing caught the two
-diverging in what they evaluate or when.
+Nothing checked this before. The steady path was reachable from
+`tests/unit/sensitivity` but never compared against the unsteady one, so the
+two were free to disagree about which field they evaluate, or when.
 
-The steady run goes first, which matters more than it sounds. Both runs write
-into the same objectives, so a steady path that quietly stopped evaluating them
-would, running second, still be holding the unsteady run's numbers and would
-agree with it. Running first it reports the objectives' initial zero instead.
+### Why the case looks the way it does
+
+Every parameter that differs from `time_window_run_length` is there to get a
+genuine steady state inside a unit test's budget.
+
+| setting | value | why |
+|---------|-------|-----|
+| `Re` | `5.0` | At the sibling cases' `Re = 50` the fluid residual is still `9e-6` at `t = 3.0`, 39 s of run time short of the `1e-6` it needs. At `Re = 5` it converges at `t ≈ 1.27`. |
+| `Pe` | `0.25` | The scalar is the slower of the two. Its relaxation is diffusive, and the domain's long axis sets the rate, so `Pe` buys convergence time directly. |
+| `timestep` | `0.01` | Twice the sibling cases', halving the step count. |
+| `f_max` | `50.0` | Halved alongside the timestep, so the Brinkman penalty keeps the `chi * dt` of `0.5` the other cases run at. Raising `dt` without this is what blows a Brinkman case up. |
+| `end_time` | `1.995` | Half a step off a boundary, so the run is a deterministic 200 steps ending at `t = 2.0`. See the note on step boundaries below. |
+| `scalar_coupled` | `true` | Without it `steady_simcomp` declares convergence on the velocity and pressure residuals alone and freezes the fluid while the scalar is still moving, so the objective is evaluated on a scalar that has not settled. |
+| `target_concentration` | `0.2` | The scalar is conserved here, so it relaxes to the domain mean of `0.5` — which is the default target. The objective would converge to zero and the comparison would be between two zeros. |
+
+`require_steady_state` makes the driver assert that each run really did
+converge, by checking that `steady_simcomp` froze the fluid. A run that
+quietly fell short would otherwise show up as an unexplained value mismatch
+rather than as what it is.
+
+### What it measures
+
+Convergence at `t ≈ 1.27` (the last logged residual is `1.1e-6` at
+`t = 1.25`); the window is `[1.5, 2.0]`, 51 samples, so it sits about 23 steps
+clear of the freeze.
+
+| objective | steady | unsteady average | relative difference |
+|-----------|--------|------------------|---------------------|
+| viscous dissipation | `3.08157224397083` | `3.08157224397083` | `0` |
+| Brinkman dissipation | `0.390671241523987` | `0.390671241523987` | `0` |
+| scalar mixing | `0.0514533959878988` | `0.0514533959908935` | `5.8e-11` |
+
+The two velocity-based objectives are bit-identical, and that is not luck:
+`steady_simcomp` freezes the fluid on convergence, so the velocity field is
+literally constant across the window and the average of a constant is that
+constant. It also means the test checks its own margin — had the freeze landed
+inside the window, these two would stop agreeing exactly.
+
+The scalar is converged but not frozen (freezing it is an open `@todo` in
+`steady_simcomp`), so it keeps relaxing through the window and its average
+lags the endpoint slightly. `5.8e-11` is that drift. The tolerance is `1e-9`,
+as for the other tests here, which leaves the scalar an order of magnitude of
+headroom and the other two objectives all of it.
+
+The test costs 26 s, the most expensive in this directory by a wide margin,
+which is the price of a real steady state.
+
+## `steady_unsteady_final_step`
+
+The same steady-versus-unsteady comparison with convergence taken out of it.
+The case is `time_window_run_length` unchanged apart from a `steady`
+simulation component and a window holding the final timestep alone; a
+one-sample average is that sample, so the two paths must agree exactly
+whatever the flow is doing. It costs 3 s.
+
+This exists to localise a failure of `steady_unsteady_converged`. If both
+fail, the two paths disagree about which field they evaluate. If only the
+converged one fails, the paths are fine and the run is not reaching a steady
+state. An unconverged run is also the stricter comparison of the two: a frozen
+field gives the same objective at every step near the end, so a path sampling
+the wrong step would slip through, whereas a field still in motion catches it.
+
+### Ordering, and why it matters
+
+Both tests run the steady path first. Every run leaves its values in the same
+objectives, so a steady path that quietly stopped evaluating them would,
+running second, still be holding the unsteady run's numbers and would agree
+with it. Running first it reports the objectives' initial zero instead.
 Checked by deleting the `update_objectives` call from `problem_compute`'s
 steady branch: the test fails with a relative difference of exactly `1.0`.
+With the other order it passed.
 
-### How the single-sample window is made robust
+### Step boundaries
 
-`end_time` is `0.0475` against a `dt` of `0.005`, deliberately off a step
-boundary. The time loop stops at the first step reaching `end_time`, so the run
-takes ten steps and finishes at `t = 0.05`, and every objective's `start_time`
-of `0.0475` admits that step and no other. Both ends of the accepted interval
-sit half a timestep from a sample, so no amount of round-off in the accumulated
-time can change which steps are counted.
+`steady_unsteady_final_step` runs to `end_time = 0.0475` against a `dt` of
+`0.005`, deliberately off a step boundary. The time loop stops at the first
+step reaching `end_time`, so the run takes ten steps and finishes at
+`t = 0.05`, and every objective's `start_time` of `0.0475` admits that step
+and no other. Both ends of the accepted interval sit half a timestep from a
+sample, so no amount of round-off in the accumulated time can change which
+steps are counted.
 
 An `end_time` sitting *on* a step boundary is what to avoid, and not for a
 subtle reason: with `end_time = 0.05` and `dt = 0.005` the accumulated time
 after ten steps lands just below `0.05`, the loop takes an eleventh step, and
-the run ends at `t = 0.055`. The window then holds two samples while the steady
-path still evaluates one, and the objectives disagree by 0.3%, 10% and 0.2% —
-a real failure with a thoroughly misleading cause. It is written up as item 26
-of the workspace bug backlog; the underlying overshoot is Neko's, not this
-test's.
+the run ends at `t = 0.055`. The window then holds two samples while the
+steady path still evaluates one, and the objectives disagree by 0.3%, 10% and
+0.2% — a real failure with a thoroughly misleading cause. The underlying
+overshoot is Neko's, not this test's.
 
-Measured agreement between the two paths is `4e-13`, `4e-12` and `6e-14`
-relative, which is the same floor two identical unsteady runs of this case
-reach. The tolerance is `1e-9`, as for the other two tests.
-
-### Why the flow is not run to convergence
-
-Comparing a converged steady solution against an unsteady average over the
-converged tail is the more physical statement, but it is not what this test
-does, for two measured reasons. The fluid residual on this case is still
-`9e-6` at `t = 3.0` against the `1e-6` the `steady` component wants, and one
-run to `t = 3.0` costs 39 s — two of them would dominate the whole unit lane.
-And the scalar does not converge here at all: its residual is *rising* at
-`t = 3.0`, because `steady_simcomp` freezes only the fluid and this case's
-scalar has zero-flux conditions on every face, so it is merely stirred around a
-conserved total. The tolerance on such a comparison would be a statement about
-how converged the run happened to be, not about the objective machinery.
-
-The unconverged run used here is also the stricter comparison of the two. A
-frozen field would give the same objective value at every step near the end, so
-a path that sampled the wrong step would still pass; a field that is still
-moving will not.
+Measured agreement between the two paths, with the window right, is `4e-13`,
+`4e-12` and `6e-14` relative, the same floor two identical unsteady runs of
+this case reach.
 
 ## Choosing window boundaries in new cases
 

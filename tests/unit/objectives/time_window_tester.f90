@@ -21,7 +21,9 @@
 !!    objective on the final field rather than accumulating it over the run
 !!    -- and must agree with the unsteady runs. The case file is responsible
 !!    for choosing windows that make the two comparable; see the readme in
-!!    this directory.
+!!    this directory. `require_steady_state` additionally asserts that each
+!!    run actually reached a steady state, which is what makes a window
+!!    average comparable to a single converged field in the first place.
 program time_window_tester
 
   use simulation_m, only: simulation_t
@@ -65,7 +67,7 @@ program time_window_tester
   type(vector_t) :: values
 
   real(kind=rp) :: tolerance, reference, difference
-  logical :: pairwise, compare_steady, failed
+  logical :: pairwise, compare_steady, require_steady_state, failed
   integer :: n_runs, n_unsteady, first_unsteady
   integer :: n_objectives, n_declared, i, j
   ! Wider than LOG_SIZE: these lines carry full-precision values.
@@ -93,6 +95,9 @@ program time_window_tester
        'optimization.time_window_test.pairwise', pairwise, .false.)
   call json_get_or_default(parameters, &
        'optimization.time_window_test.compare_steady', compare_steady, .false.)
+  call json_get_or_default(parameters, &
+       'optimization.time_window_test.require_steady_state', &
+       require_steady_state, .false.)
 
   ! -------------------------------------------------------------------------- !
   ! Initialization of the components
@@ -167,6 +172,15 @@ program time_window_tester
      call prob%compute(des, sim)
      call prob%get_all_objective_values(values)
      results(i, :) = values%x
+
+     ! A comparison across the two paths only means anything once the run has
+     ! settled. Say so directly rather than leaving it to be inferred from a
+     ! value mismatch: the `steady` simulation component freezes the fluid on
+     ! convergence, so an unfrozen fluid here is a run that never got there.
+     if (require_steady_state .and. .not. sim%neko_case%fluid%freeze) then
+        call neko_error('The run finished without reaching a steady ' // &
+             'state; lengthen it, or loosen the "steady" component''s tol.')
+     end if
 
      call neko_log%end_section()
   end do
