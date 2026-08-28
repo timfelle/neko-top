@@ -35,27 +35,36 @@ adjoint is solved. That is what keeps these affordable as unit tests.
 
 ## The scalar setup, restored from the example
 
-`examples/time_test` ran two species into the domain either side of a smooth
-split, carried them through with the flow, and let them leave through the
-outlet, with every other face insulated, and measured mixing over a zone at
-the far end. The point was the first iteration of an optimization: a clear
-split entering, still a clear split leaving, the design having done nothing
-yet.
+`examples/time_test` drove a paraboloid velocity profile into the duct
+carrying two species split either side of a smooth interface, let them leave
+through the outlet with every other face insulated and no-slip, and measured
+mixing over a zone at the far end. The point was the first iteration of an
+optimization: a clear split entering, still a clear split leaving, the design
+having done nothing yet.
 
-The conversion to unit tests had no user module to carry the inflow profile,
-so it substituted a zero-flux condition on **all six** faces, a `point_zone`
-initial blob, and an unmasked objective. That is a different problem — a
-conserved blob being stirred, whose only route to a steady state is slow
-diffusion, measured over the whole domain.
+The conversion to unit tests had no user module to carry either profile, so it
+substituted a uniform velocity plug, a zero-flux condition on **all six**
+faces for the scalar, a `point_zone` initial blob, and an unmasked objective.
+That is a different problem — a conserved blob being stirred, whose only route
+to a steady state is slow diffusion, measured over the whole domain.
 
-All four cases here now run the original setup: `user_dirichlet` on the inlet,
-zero-flux Neumann on the other five zones, the same profile as the initial
-condition so no run opens with a transient it then has to sit through, and
-`scalar_mixing` masked to `outlet_region` — the equivalent of the example's
-`objective_domain`. `objectives_user.f90` holds the profile, and the driver
-registers it on `sim%neko_case%user` before `sim%init`, which works because
-`user_intf_init` only substitutes its own defaults for pointers still null.
-No `makeneko` is involved.
+All four cases here now run the original setup, held in
+`objectives_user.f90`. The driver registers it on `sim%neko_case%user` before
+`sim%init`, which works because `user_intf_init` only substitutes its own
+defaults for pointers still null. No `makeneko` is involved.
+
+- **Velocity:** `user_velocity` on the inlet, `36 y(y-1) z(z-1)`. The shape is
+  matched to the duct: it vanishes on all four walls, so it agrees with the
+  no-slip condition applied there, where a uniform plug is discontinuous at
+  the inlet edges. The factor 36 makes the mean one, so the duct carries unit
+  flow rate — the same as the plug it replaces. Its peak is 2.25, but the CFL
+  only moves from 0.29 to 0.36, since the plug had the steeper near-wall
+  gradients.
+- **Scalar:** `user_dirichlet` on the inlet, zero-flux Neumann on the other
+  five zones, and the same profile as the initial condition so no run opens
+  with a transient it then has to sit through.
+- **Objective:** `scalar_mixing` masked to `outlet_region`, the equivalent of
+  the example's `objective_domain`.
 
 The split uses a logistic profile in `z`, as the example did, but with a
 steepness of 20 rather than 200. The example ran 32x8x8 at polynomial order 5;
@@ -66,7 +75,7 @@ For that profile a completely unmixed scalar gives a `scalar_mixing` objective
 of `0.1000`, and a uniformly mixed one gives `0`. The three short cases all
 report about `0.099` at the outlet — the split fully intact, since the flow
 has barely developed — and `steady_unsteady_converged`, which runs to a steady
-state, reports `0.0681`, or 68% of the split still there.
+state, reports `0.0648`, or 65% of the split still there.
 
 ## `time_window_run_length`
 
@@ -133,13 +142,15 @@ one mixed to uniformity would give `0`. Measured over the whole domain:
 | `Pe` | objective | fraction of the split preserved |
 |------|-----------|---------------------------------|
 | `1` | `0.00869` | 9% |
-| `100` | `0.08169` | 82% |
+| `100` | `0.07725` | 77% |
 
 At `Pe = 1` the split is gone by the outlet, which is the opposite of the
 first-iteration state the case is supposed to represent. `Pe = 100`, the value
 the sibling cases already use, keeps it. Restricted to the outlet fifth of the
-domain the figure is 68%, so the two streams are still clearly separated where
-it matters.
+domain the figure is 65%, so the two streams are still clearly separated where
+it matters. (The `Pe = 1` figure was measured against the plug inflow, before
+the paraboloid was restored; the paraboloid shears a little harder, so every
+number here is slightly lower than it was.)
 
 This is the only case here carrying `scalar_mixing` twice, once unmasked and
 once masked to `outlet_region`. The unmasked one is what the `Pe` table above
@@ -208,12 +219,12 @@ samples.
 
 | objective | steady | unsteady average | relative difference |
 |-----------|--------|------------------|---------------------|
-| viscous dissipation | `3.08157224397083` | `3.08157224397084` | `3e-15` |
-| Brinkman dissipation | `0.390671241523987` | `0.390671241523987` | `0` |
-| scalar mixing, whole domain | `0.0816932164195727` | `0.0816932164201648` | `7.2e-12` |
-| scalar mixing, outlet | `0.0681432496150257` | `0.0681432496173393` | `3.4e-11` |
+| viscous dissipation | `3.29060805369292` | `3.29060805369292` | `0` |
+| Brinkman dissipation | `0.575829630750006` | `0.575829630750006` | `0` |
+| scalar mixing, whole domain | `0.0772496512776399` | `0.0772496512779822` | `4.4e-12` |
+| scalar mixing, outlet | `0.0647557680999154` | `0.0647557681012532` | `2.1e-11` |
 
-The two velocity-based objectives agree to round-off because
+The two velocity-based objectives are bit-identical because
 `steady_simcomp` freezes the fluid on convergence, so the velocity field is
 literally constant across the window and the average of a constant is that
 constant. It also means the test checks its own margin — had the freeze landed
@@ -222,7 +233,7 @@ inside the window, these two would stop agreeing.
 The scalar is converged but never frozen (freezing it is an open `@todo` in
 `steady_simcomp`), so it keeps relaxing through the window. The two scalar
 figures are what is left of that, against a `1e-9` tolerance, the same one the
-other tests here use — 138x and 29x of margin.
+other tests here use — 226x and 48x of margin.
 
 The test costs 35 s, by far the most expensive in this directory, which is the
 price of a scalar that both reaches a steady state and still looks like the
