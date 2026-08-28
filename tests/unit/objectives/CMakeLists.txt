@@ -9,8 +9,12 @@ set(test_list
     "steady_unsteady_final_step.case"
 )
 
-# Path to the common driver source
-set(OBJECTIVES_DRIVER ${CMAKE_CURRENT_SOURCE_DIR}/time_window_tester.f90)
+# Path to the common driver source, plus the user module carrying the
+# scalar inflow that `steady_unsteady_converged` needs.
+set(OBJECTIVES_DRIVER
+    ${CMAKE_CURRENT_SOURCE_DIR}/objectives_user.f90
+    ${CMAKE_CURRENT_SOURCE_DIR}/time_window_tester.f90
+)
 
 # ============================================================================ #
 # Use a private .mod folder to avoid clashes with other test targets

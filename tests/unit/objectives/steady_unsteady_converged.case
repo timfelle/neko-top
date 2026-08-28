@@ -6,7 +6,7 @@
         "output_at_end": false,
         "output_boundary": false,
         "time": {
-            "end_time": 1.995,
+            "end_time": 2.495,
             "timestep": 0.01
         },
         "numerics": {
@@ -73,28 +73,31 @@
         },
         "scalar": {
             "enabled": true,
-            "Pe": 0.25,
+            "Pe": 1.0,
             "output_control": "never",
             "solver": {
                 "type": "cg",
                 "preconditioner": {
                     "type": "jacobi"
                 },
-                "absolute_tolerance": 1e-09,
+                "absolute_tolerance": 1e-12,
                 "max_iterations": 200
             },
             "initial_condition": {
-                "type": "point_zone",
-                "base_value": 0.0,
-                "zone_value": 1.0,
-                "zone_name": "scalar_split"
+                "type": "user",
+                "value": 0.0
             },
             "boundary_conditions": [
+                {
+                    "type": "user_dirichlet",
+                    "zone_indices": [
+                        1
+                    ]
+                },
                 {
                     "type": "neumann",
                     "flux": 0.0,
                     "zone_indices": [
-                        1,
                         2,
                         3,
                         4,
@@ -268,22 +271,21 @@
         "objectives": [
             {
                 "type": "viscous_dissipation",
-                "name": "viscous [1.5, 2.0]",
+                "name": "viscous [2.0, 2.5]",
                 "weight": 1.0,
-                "start_time": 1.495
+                "start_time": 1.995
             },
             {
                 "type": "brinkman_dissipation",
-                "name": "brinkman [1.5, 2.0]",
+                "name": "brinkman [2.0, 2.5]",
                 "weight": 1.0,
-                "start_time": 1.495
+                "start_time": 1.995
             },
             {
                 "type": "scalar_mixing",
-                "name": "mixing [1.5, 2.0]",
+                "name": "mixing [2.0, 2.5]",
                 "weight": 1.0,
-                "start_time": 1.495,
-                "target_concentration": 0.2
+                "start_time": 1.995
             }
         ]
     }

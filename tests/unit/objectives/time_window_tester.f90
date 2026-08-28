@@ -42,6 +42,7 @@ program time_window_tester
   ! Modules specific to this test
   use num_types, only: rp
   use vector, only: vector_t
+  use objectives_user, only: objectives_user_setup
   implicit none
 
   ! JSON related arguments
@@ -101,6 +102,10 @@ program time_window_tester
 
   ! -------------------------------------------------------------------------- !
   ! Initialization of the components
+
+  ! Register the user-defined scalar inflow before the case is built. Only
+  ! the cases that ask for it in their boundary conditions will call it.
+  call objectives_user_setup(sim%neko_case%user)
 
   call sim%init(parameters)
   call des%init(design_parameters, sim)
