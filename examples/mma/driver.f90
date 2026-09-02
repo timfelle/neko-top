@@ -76,9 +76,9 @@ program usrneko
   call xcoord%init(nloc)
   call ycoord%init(nloc)
   call zcoord%init(nloc)
-  xcoord%x = reshape(neko_field%dof%x, [nloc])
-  ycoord%x = reshape(neko_field%dof%y, [nloc])
-  zcoord%x = reshape(neko_field%dof%z, [nloc])
+  xcoord%x = reshape(neko_field%dof%x%x, [nloc])
+  ycoord%x = reshape(neko_field%dof%y%x, [nloc])
+  zcoord%x = reshape(neko_field%dof%z%x, [nloc])
 
   if (NEKO_BCKND_DEVICE .eq. 1) then
      call device_memcpy(xcoord%x, xcoord%x_d, nloc, &
