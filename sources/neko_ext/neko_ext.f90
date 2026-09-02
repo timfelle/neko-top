@@ -168,6 +168,16 @@ contains
     call json_get(neko_case%params, 'case.fluid.initial_condition', &
          json_subdict)
 
+    ! Zero the pressure before applying the initial condition, mirroring the
+    ! state a freshly initialised case starts from. Most `set_flow_ic` types
+    ! (`uniform`, `expression`, `blasius`, `point_zone`) take `p` but never
+    ! write to it, so without this the pressure would survive the reset and
+    ! carry the previous design iteration's field into the next forward
+    ! solve. That makes the objective a function of the optimisation history
+    ! rather than of the design alone. Types that do define a pressure (e.g.
+    ! `field`) still overwrite this, since the zeroing happens first.
+    call field_rzero(p)
+
     if (trim(string_val) .ne. 'user') then
        call set_flow_ic(u, v, w, p, &
             neko_case%fluid%c_Xh, neko_case%fluid%gs_Xh, &
@@ -336,6 +346,9 @@ contains
          'case.adjoint_fluid.initial_condition.type', string_val)
     call json_get(neko_case%params, 'case.adjoint_fluid.initial_condition', &
          json_subdict)
+
+    ! Zero the adjoint pressure first, for the same reason as in `reset`.
+    call field_rzero(p_adj)
 
     if (trim(string_val) .ne. 'user') then
        call set_flow_ic(u_adj, v_adj, w_adj, p_adj, &
