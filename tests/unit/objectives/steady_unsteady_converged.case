@@ -6,8 +6,8 @@
         "output_at_end": false,
         "output_boundary": false,
         "time": {
-            "end_time": 19.995,
-            "timestep": 0.01
+            "end_time": 15.9975,
+            "timestep": 0.005
         },
         "numerics": {
             "time_order": 3,
@@ -16,12 +16,12 @@
         },
         "fluid": {
             "scheme": "pnpn",
-            "Re": 5.0,
+            "Re": 200.0,
             "output_control": "never",
             "initial_condition": {
                 "type": "uniform",
                 "value": [
-                    0.0,
+                    1.0,
                     0.0,
                     0.0
                 ]
@@ -44,7 +44,12 @@
             },
             "boundary_conditions": [
                 {
-                    "type": "user_velocity",
+                    "type": "velocity_value",
+                    "value": [
+                        1.0,
+                        0.0,
+                        0.0
+                    ],
                     "zone_indices": [
                         1
                     ]
@@ -56,7 +61,12 @@
                     ]
                 },
                 {
-                    "type": "no_slip",
+                    "type": "velocity_value",
+                    "value": [
+                        1.0,
+                        0.0,
+                        0.0
+                    ],
                     "zone_indices": [
                         3,
                         4,
@@ -68,7 +78,7 @@
         },
         "scalar": {
             "enabled": true,
-            "Pe": 100.0,
+            "Pe": 1000.0,
             "output_control": "never",
             "solver": {
                 "type": "cg",
@@ -192,11 +202,27 @@
                 ]
             },
             {
-                "name": "outlet_region",
+                "name": "objective_domain",
                 "geometry": "box",
                 "x_bounds": [
                     1.5,
                     2.0
+                ],
+                "y_bounds": [
+                    0.0,
+                    1.0
+                ],
+                "z_bounds": [
+                    0.0,
+                    1.0
+                ]
+            },
+            {
+                "name": "inlet_region",
+                "geometry": "box",
+                "x_bounds": [
+                    0.0,
+                    0.5
                 ],
                 "y_bounds": [
                     0.0,
@@ -238,8 +264,9 @@
             "output_format": "fld",
             "mapping": [
                 {
+                    // f_max*dt = 0.5, matching the other cases here.
                     "type": "RAMP",
-                    "f_max": 50.0
+                    "f_max": 100.0
                 }
             ],
             "initial_distribution": {
@@ -266,28 +293,35 @@
         "objectives": [
             {
                 "type": "viscous_dissipation",
-                "name": "viscous [19, 20]",
+                "name": "viscous [15, 16]",
                 "weight": 1.0,
-                "start_time": 18.995
+                "start_time": 14.9975
             },
             {
                 "type": "brinkman_dissipation",
-                "name": "brinkman [19, 20]",
+                "name": "brinkman [15, 16]",
                 "weight": 1.0,
-                "start_time": 18.995
+                "start_time": 14.9975
             },
             {
                 "type": "scalar_mixing",
-                "name": "mixing [19, 20]",
+                "name": "mixing whole domain [15, 16]",
                 "weight": 1.0,
-                "start_time": 18.995
+                "start_time": 14.9975
             },
             {
                 "type": "scalar_mixing",
-                "name": "mixing outlet [19, 20]",
+                "name": "mixing downstream [15, 16]",
                 "weight": 1.0,
-                "start_time": 18.995,
-                "mask_name": "outlet_region"
+                "start_time": 14.9975,
+                "mask_name": "objective_domain"
+            },
+            {
+                "type": "scalar_mixing",
+                "name": "mixing inlet [15, 16]",
+                "weight": 1.0,
+                "start_time": 14.9975,
+                "mask_name": "inlet_region"
             }
         ]
     }

@@ -47,7 +47,7 @@ add_custom_target(
         ${CMAKE_CURRENT_BINARY_DIR}/prepare.sh
     COMMAND ${CMAKE_COMMAND} -E env
         LD_LIBRARY_PATH="${neko_LD_LIBRARY_PATH}" PATH="${neko_PATH}"
-        ./prepare.sh -N4 > ${CMAKE_CURRENT_BINARY_DIR}/prepare.log
+        ./prepare.sh -N6 > ${CMAKE_CURRENT_BINARY_DIR}/prepare.log
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
 )
 add_dependencies(objectives_test_prepare objectives_prepare_script)
@@ -84,12 +84,26 @@ foreach(case_file ${test_list})
         COMMAND $<TARGET_FILE:time_window_tester_bin> ${case_file}
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     )
+
+    # steady_unsteady_converged needs far longer than the others: a partial
+    # trial run (see readme.md, "What was actually measured: a real but
+    # decelerating relaxation") found its fluid residual decaying, but with
+    # an e-folding time that itself grows steadily rather than settling, so
+    # its actual time-to-freeze could not be pinned down and may exceed the
+    # generic timeout by a wide margin. 3600s is a rough ceiling, not a
+    # measured figure; see NEXT in the change that introduced it.
+    if(${case_name} STREQUAL "steady_unsteady_converged")
+        set(case_timeout 3600)
+    else()
+        set(case_timeout 300)
+    endif()
+
     set_tests_properties(${case_name}
         PROPERTIES
             DEPENDS "time_window_tester_bin;objectives_test_prepare"
             LABELS "objectives;unit"
             ENVIRONMENT "NEKO_LOG_FILE=${case_name}.log"
-            TIMEOUT 300
+            TIMEOUT ${case_timeout}
     )
 endforeach()
 

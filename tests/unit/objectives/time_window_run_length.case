@@ -16,12 +16,12 @@
         },
         "fluid": {
             "scheme": "pnpn",
-            "Re": 50.0,
+            "Re": 200.0,
             "output_control": "never",
             "initial_condition": {
                 "type": "uniform",
                 "value": [
-                    0.0,
+                    1.0,
                     0.0,
                     0.0
                 ]
@@ -44,7 +44,12 @@
             },
             "boundary_conditions": [
                 {
-                    "type": "user_velocity",
+                    "type": "velocity_value",
+                    "value": [
+                        1.0,
+                        0.0,
+                        0.0
+                    ],
                     "zone_indices": [
                         1
                     ]
@@ -56,7 +61,12 @@
                     ]
                 },
                 {
-                    "type": "no_slip",
+                    "type": "velocity_value",
+                    "value": [
+                        1.0,
+                        0.0,
+                        0.0
+                    ],
                     "zone_indices": [
                         3,
                         4,
@@ -68,7 +78,7 @@
         },
         "scalar": {
             "enabled": true,
-            "Pe": 100.0,
+            "Pe": 1000.0,
             "output_control": "never",
             "solver": {
                 "type": "cg",
@@ -192,11 +202,27 @@
                 ]
             },
             {
-                "name": "outlet_region",
+                "name": "objective_domain",
                 "geometry": "box",
                 "x_bounds": [
                     1.5,
                     2.0
+                ],
+                "y_bounds": [
+                    0.0,
+                    1.0
+                ],
+                "z_bounds": [
+                    0.0,
+                    1.0
+                ]
+            },
+            {
+                "name": "inlet_region",
+                "geometry": "box",
+                "x_bounds": [
+                    0.0,
+                    0.5
                 ],
                 "y_bounds": [
                     0.0,
@@ -230,6 +256,7 @@
             "output_format": "fld",
             "mapping": [
                 {
+                    // f_max*dt = 0.5, matching the other cases here.
                     "type": "RAMP",
                     "f_max": 100.0
                 }
@@ -272,11 +299,19 @@
             },
             {
                 "type": "scalar_mixing",
-                "name": "mixing [0.02,0.04]",
+                "name": "mixing downstream [0.02,0.04]",
                 "weight": 1.0,
                 "start_time": 0.02,
                 "end_time": 0.04,
-                "mask_name": "outlet_region"
+                "mask_name": "objective_domain"
+            },
+            {
+                "type": "scalar_mixing",
+                "name": "mixing inlet [0.02,0.04]",
+                "weight": 1.0,
+                "start_time": 0.02,
+                "end_time": 0.04,
+                "mask_name": "inlet_region"
             }
         ]
     }
