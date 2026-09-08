@@ -54,7 +54,7 @@ module adv_adjoint_scalar_transpose
   use coefs, only: coef_t
   use math, only: glsc2
   use field_math, only: field_rzero
-  use ax_product, only: ax_t, ax_helm_factory
+  use ax_product, only: ax_t, ax_helm_allocator
   use math, only: glsc3
   use time_state, only: time_state_t
   use interpolation, only: interpolator_t
@@ -336,7 +336,7 @@ contains
     call build_fixture(msh, Xh, dof, gs, coef)
     n = dof%size()
 
-    call ax_helm_factory(Ax, full_formulation = .false.)
+    call ax_helm_allocator(Ax, type_name = "standard")
 
     call a%init(dof, 'a')
     call b%init(dof, 'b')
