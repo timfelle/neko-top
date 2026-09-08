@@ -62,6 +62,7 @@ module neko_ext
   use field_math, only: field_rzero, field_copy
   use fluid_pnpn, only: fluid_pnpn_t
   use adjoint_fluid_pnpn, only: adjoint_fluid_pnpn_t
+  use scalar_pnpn, only: scalar_pnpn_t
 
   implicit none
 
@@ -213,6 +214,15 @@ contains
        end if
        ! zero out RHS
        call field_rzero(neko_case%scalars%scalar_fields(1)%scalar%f_Xh)
+       ! zero out the Adams-Bashforth history, mirroring the fluid above.
+       ! Without this a second forward run inherits the extrapolation terms
+       ! from the end of the previous one, and its scalar trajectory differs.
+       select type (s_scheme => &
+            neko_case%scalars%scalar_fields(1)%scalar)
+       type is (scalar_pnpn_t)
+          call field_rzero(s_scheme%abx1)
+          call field_rzero(s_scheme%abx2)
+       end select
        ! reset the forward scalar
        call json_get(neko_case%params, &
             'case.scalar.initial_condition.type', string_val)
