@@ -50,7 +50,7 @@ module problem
   use json_module, only: json_file
   use json_utils, only: json_extract_item, json_get, json_get_or_default
   use simulation_m, only: simulation_t
-  use logger, only: neko_log, LOG_SIZE
+  use logger, only: neko_log
   use math, only: copy
   use time_state, only: time_state_t
   use vector_math, only: vector_add2, vector_cfill
@@ -547,19 +547,34 @@ contains
   !!
   !! Such an objective accumulates nothing and reports zero, which is easy to
   !! mistake for a well-performing design. Say so rather than staying silent.
+  !!
+  !! The name goes on the first line, so that several misconfigured
+  !! objectives read as name-then-explanation pairs instead of leaving the
+  !! reader to infer the pairing from adjacency. Both lines are concatenated
+  !! straight into `neko_log%warning`, which takes an assumed-length string.
+  !! Composing them with an internal write into a `LOG_SIZE` buffer instead
+  !! would abort the run with an end-of-record error as soon as the
+  !! case-supplied name pushed the message past 79 characters, turning the
+  !! silent failure this warning exists to catch into a hard crash.
+  !!
+  !! `log_warning` frames a message as `*** WARNING: ` + message + `  ***`,
+  !! 18 characters of decoration, so the name-bearing line renders at
+  !! `48 + len_trim(name)` columns -- at most 73 for the present
+  !! `character(len=25)` name. Should `base_functional_t%name` ever be
+  !! widened past 31 characters (backlog #41), the rendered line would
+  !! exceed `LOG_SIZE` again and this wording would need shortening.
   !! @param this The problem.
   subroutine problem_check_objective_windows(this)
     class(problem_t), intent(inout) :: this
-    character(len=LOG_SIZE) :: log_buf
     integer :: i
 
     do i = 1, this%n_objectives
        if (this%objective_list(i)%objective%value_weight .gt. 0.0_rp) cycle
 
-       write (log_buf, '(A,A,A)') "Objective '", &
-            trim(this%objective_list(i)%objective%name), &
-            "' was never sampled; its time window misses the run."
-       call neko_log%warning(trim(log_buf))
+       call neko_log%warning("Objective '" // &
+            trim(this%objective_list(i)%objective%name) // &
+            "' was never sampled")
+       call neko_log%warning("Its time window misses the run.")
     end do
   end subroutine problem_check_objective_windows
 
