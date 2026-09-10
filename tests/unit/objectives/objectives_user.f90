@@ -1,22 +1,30 @@
 !> @file objectives_user.f90
-!! User-defined scalar inflow for the objective time-window tests.
+!! User-defined inflow for the objective time-window tests.
 !!
-!! Restores the scalar setup `examples/time_test` used before it became these
+!! Restores the setup `examples/time_test` used before it became these
 !! tests, and matches `examples/unsteady_mixer`, this suite's reference
-!! physics: two species split either side of a smooth interface enter the
-!! duct and leave through the outlet, with every other face insulated for
-!! the scalar.
+!! physics: a paraboloid velocity profile enters the duct, carrying two
+!! species split either side of a smooth interface, which leave through the
+!! outlet. Every other face is insulated for the scalar and no-slip for the
+!! velocity.
 !!
-!! The velocity side of `examples/time_test` (a paraboloid inflow, no-slip
-!! walls) is deliberately *not* restored here. These tests instead use a
-!! uniform freestream velocity, expressed entirely in the case file via
-!! `velocity_value` (see the readme), so this module carries no velocity
-!! routine at all -- only the scalar Dirichlet inflow and initial condition,
-!! which are unaffected by that substitution.
+!! Both halves matter. The velocity profile is shaped to the duct: it
+!! vanishes on all four walls, so it agrees with the no-slip condition there
+!! instead of being discontinuous at the inlet edges the way a uniform plug
+!! is. The scalar influx is what gives the scalar a steady state on the
+!! residence time rather than a slow diffusive relaxation, and what makes
+!! `scalar_mixing` measure mixing rather than the decay of a trapped blob.
 !!
-!! The conversion to unit tests originally replaced the scalar inflow with a
-!! zero-flux condition on all six faces plus a `point_zone` initial blob;
-!! that was reverted in favour of the example's actual scalar setup.
+!! The conversion to unit tests originally replaced the velocity inflow with
+!! a uniform plug and the scalar inflow with a zero-flux condition on all six
+!! faces plus a `point_zone` initial blob; both were reverted in favour of
+!! the example's actual inflow. A later change tried substituting a uniform
+!! freestream `velocity_value` (case-file only, no user routine) for this
+!! paraboloid, on the theory that removing the no-slip boundary layer would
+!! speed up the fluid's and the scalar's approach to a steady/converged
+!! state. Measurement showed the opposite -- see this directory's readme.md,
+!! "Reverting the freestream substitution" -- so the paraboloid velocity
+!! inflow is restored here.
 module objectives_user
   use num_types, only: rp
   use field, only: field_t
@@ -45,6 +53,12 @@ module objectives_user
   !> Height at which the two species meet.
   real(kind=rp), parameter :: split_height = 0.5_rp
 
+  !> Peak of the inflow velocity profile.
+  !!
+  !! 36 is not arbitrary: it makes the mean of `y(y-1)z(z-1)` over the unit
+  !! square equal one, so the duct carries unit flow rate.
+  real(kind=rp), parameter :: velocity_scale = 36.0_rp
+
 contains
 
   !> Register the user routines on a case's `user_t`.
@@ -56,7 +70,7 @@ contains
   subroutine objectives_user_setup(user)
     type(user_t), intent(inout) :: user
 
-    user%dirichlet_conditions => scalar_inflow
+    user%dirichlet_conditions => inflow
     user%initial_conditions => scalar_initial_condition
   end subroutine objectives_user_setup
 
@@ -71,33 +85,70 @@ contains
          (1.0_rp + exp(-split_steepness * (z - split_height)))
   end function split_profile
 
-  !> Impose the scalar split on the inlet boundary.
+  !> The streamwise velocity at a point on the inlet face.
   !!
-  !! The only `user_dirichlet` boundary any case in this directory declares
-  !! is the scalar inlet, so this is never called for velocity.
+  !! A paraboloid over the duct cross-section, shaped so that it vanishes on
+  !! all four walls and agrees with the no-slip condition applied there.
+  !! @param y Spanwise coordinate.
+  !! @param z Height.
+  !! @return The streamwise velocity.
+  pure function velocity_profile(y, z) result(u)
+    real(kind=rp), intent(in) :: y
+    real(kind=rp), intent(in) :: z
+    real(kind=rp) :: u
+
+    u = velocity_scale * y * (y - 1.0_rp) * z * (z - 1.0_rp)
+  end function velocity_profile
+
+  !> Impose the inflow profiles on the inlet boundary.
+  !!
+  !! Handles the velocity fields and the scalar `s`, told apart by the first
+  !! field's name, and leaves anything else untouched.
   !! @param fields The fields the boundary condition applies to.
   !! @param bc The boundary condition, carrying the mask.
   !! @param time The current time state.
-  subroutine scalar_inflow(fields, bc, time)
+  subroutine inflow(fields, bc, time)
     type(field_list_t), intent(inout) :: fields
     type(field_dirichlet_t), intent(in) :: bc
     type(time_state_t), intent(in) :: time
-    type(field_t), pointer :: s
+    type(field_t), pointer :: u, v, w, s
     integer :: i, idx
 
-    if (fields%items(1)%ptr%name .ne. 's') return
+    if (fields%items(1)%ptr%name .eq. 'u') then
+       u => fields%get("u")
+       v => fields%get("v")
+       w => fields%get("w")
 
-    s => fields%get("s")
-    call s%copy_from(DEVICE_TO_HOST, sync = .true.)
+       call u%copy_from(DEVICE_TO_HOST, sync = .false.)
+       call v%copy_from(DEVICE_TO_HOST, sync = .false.)
+       call w%copy_from(DEVICE_TO_HOST, sync = .true.)
 
-    do i = 1, bc%msk(0)
-       idx = bc%msk(i)
-       s%x(idx, 1, 1, 1) = split_profile(s%dof%z(idx, 1, 1, 1))
-    end do
+       do i = 1, bc%msk(0)
+          idx = bc%msk(i)
+          u%x(idx, 1, 1, 1) = velocity_profile(u%dof%y(idx, 1, 1, 1), &
+               u%dof%z(idx, 1, 1, 1))
+          v%x(idx, 1, 1, 1) = 0.0_rp
+          w%x(idx, 1, 1, 1) = 0.0_rp
+       end do
 
-    call s%copy_from(HOST_TO_DEVICE, sync = .true.)
-    nullify(s)
-  end subroutine scalar_inflow
+       call u%copy_from(HOST_TO_DEVICE, sync = .false.)
+       call v%copy_from(HOST_TO_DEVICE, sync = .false.)
+       call w%copy_from(HOST_TO_DEVICE, sync = .true.)
+
+       nullify(u, v, w)
+    else if (fields%items(1)%ptr%name .eq. 's') then
+       s => fields%get("s")
+       call s%copy_from(DEVICE_TO_HOST, sync = .true.)
+
+       do i = 1, bc%msk(0)
+          idx = bc%msk(i)
+          s%x(idx, 1, 1, 1) = split_profile(s%dof%z(idx, 1, 1, 1))
+       end do
+
+       call s%copy_from(HOST_TO_DEVICE, sync = .true.)
+       nullify(s)
+    end if
+  end subroutine inflow
 
   !> Start the scalar from the same split the inflow imposes.
   !!

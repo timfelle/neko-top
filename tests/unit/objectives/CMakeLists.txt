@@ -2,15 +2,19 @@
 set(CMAKE_FOLDER "Tests/Unit/Objectives")
 
 # Provide a list of .case files
+#
+# steady_unsteady_converged.case moved to tests/regression/objectives/: it is
+# inherently expensive at representative Pe (reaching a true steady state is
+# dominated by the solid's interior, not tunable away), so it no longer gates
+# CI. See that directory's CMakeLists.txt and this directory's readme.md.
 set(test_list
     "time_window_run_length.case"
     "time_window_equivalence.case"
-    "steady_unsteady_converged.case"
     "steady_unsteady_final_step.case"
 )
 
 # Path to the common driver source, plus the user module carrying the
-# scalar inflow that `steady_unsteady_converged` needs.
+# inflow every case here needs.
 set(OBJECTIVES_DRIVER
     ${CMAKE_CURRENT_SOURCE_DIR}/objectives_user.f90
     ${CMAKE_CURRENT_SOURCE_DIR}/time_window_tester.f90
@@ -85,25 +89,12 @@ foreach(case_file ${test_list})
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     )
 
-    # steady_unsteady_converged needs far longer than the others: a partial
-    # trial run (see readme.md, "What was actually measured: a real but
-    # decelerating relaxation") found its fluid residual decaying, but with
-    # an e-folding time that itself grows steadily rather than settling, so
-    # its actual time-to-freeze could not be pinned down and may exceed the
-    # generic timeout by a wide margin. 3600s is a rough ceiling, not a
-    # measured figure; see NEXT in the change that introduced it.
-    if(${case_name} STREQUAL "steady_unsteady_converged")
-        set(case_timeout 3600)
-    else()
-        set(case_timeout 300)
-    endif()
-
     set_tests_properties(${case_name}
         PROPERTIES
             DEPENDS "time_window_tester_bin;objectives_test_prepare"
             LABELS "objectives;unit"
             ENVIRONMENT "NEKO_LOG_FILE=${case_name}.log"
-            TIMEOUT ${case_timeout}
+            TIMEOUT 300
     )
 endforeach()
 

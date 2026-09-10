@@ -21,7 +21,7 @@
             "initial_condition": {
                 "type": "uniform",
                 "value": [
-                    1.0,
+                    0.0,
                     0.0,
                     0.0
                 ]
@@ -44,12 +44,7 @@
             },
             "boundary_conditions": [
                 {
-                    "type": "velocity_value",
-                    "value": [
-                        1.0,
-                        0.0,
-                        0.0
-                    ],
+                    "type": "user_velocity",
                     "zone_indices": [
                         1
                     ]
@@ -61,12 +56,7 @@
                     ]
                 },
                 {
-                    "type": "velocity_value",
-                    "value": [
-                        1.0,
-                        0.0,
-                        0.0
-                    ],
+                    "type": "no_slip",
                     "zone_indices": [
                         3,
                         4,
@@ -222,7 +212,7 @@
                 "geometry": "box",
                 "x_bounds": [
                     0.0,
-                    0.5
+                    0.25
                 ],
                 "y_bounds": [
                     0.0,
@@ -301,7 +291,7 @@
             },
             {
                 "type": "scalar_mixing",
-                "name": "mixing downstream final step",
+                "name": "mixing down final step",
                 "weight": 1.0,
                 "start_time": 0.0475,
                 "mask_name": "objective_domain"

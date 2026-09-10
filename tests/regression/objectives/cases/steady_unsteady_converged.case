@@ -6,7 +6,22 @@
         "output_at_end": false,
         "output_boundary": false,
         "time": {
-            "end_time": 15.9975,
+            // Measured under the current no-slip/paraboloid physics (a
+            // separate scratch run of this case, with compare_steady and
+            // require_steady_state disabled and end_time extended to
+            // 99.9975): the fluid froze (steady simcomp's tol = 1e-6 met)
+            // at t ~= 12.7. end_time is set well past that so the objective
+            // window below sits inside the converged tail, not to
+            // extrapolate to a residual floor. A first attempt with a
+            // [49,50] window missed tolerance in the unmasked "mixing
+            // whole" objective (2.01e-9 rel. diff vs the 1e-9 tolerance):
+            // a t=300 diagnostic run showed [49,50] was still only
+            // converged to ~1e-9 between-window drift there, versus
+            // ~1e-12 by [99,100]. Landing at t = 100.0 deliberately half
+            // a timestep short of a step boundary (see readme.md,
+            // "Choosing window boundaries") to avoid the one-extra-step
+            // overshoot documented there.
+            "end_time": 99.9975,
             "timestep": 0.005
         },
         "numerics": {
@@ -21,7 +36,7 @@
             "initial_condition": {
                 "type": "uniform",
                 "value": [
-                    1.0,
+                    0.0,
                     0.0,
                     0.0
                 ]
@@ -44,12 +59,7 @@
             },
             "boundary_conditions": [
                 {
-                    "type": "velocity_value",
-                    "value": [
-                        1.0,
-                        0.0,
-                        0.0
-                    ],
+                    "type": "user_velocity",
                     "zone_indices": [
                         1
                     ]
@@ -61,12 +71,7 @@
                     ]
                 },
                 {
-                    "type": "velocity_value",
-                    "value": [
-                        1.0,
-                        0.0,
-                        0.0
-                    ],
+                    "type": "no_slip",
                     "zone_indices": [
                         3,
                         4,
@@ -222,7 +227,7 @@
                 "geometry": "box",
                 "x_bounds": [
                     0.0,
-                    0.5
+                    0.25
                 ],
                 "y_bounds": [
                     0.0,
@@ -293,34 +298,34 @@
         "objectives": [
             {
                 "type": "viscous_dissipation",
-                "name": "viscous [15, 16]",
+                "name": "viscous [99,100]",
                 "weight": 1.0,
-                "start_time": 14.9975
+                "start_time": 98.9975
             },
             {
                 "type": "brinkman_dissipation",
-                "name": "brinkman [15, 16]",
+                "name": "brinkman [99,100]",
                 "weight": 1.0,
-                "start_time": 14.9975
+                "start_time": 98.9975
             },
             {
                 "type": "scalar_mixing",
-                "name": "mixing whole domain [15, 16]",
+                "name": "mixing whole [99,100]",
                 "weight": 1.0,
-                "start_time": 14.9975
+                "start_time": 98.9975
             },
             {
                 "type": "scalar_mixing",
-                "name": "mixing downstream [15, 16]",
+                "name": "mixing down [99,100]",
                 "weight": 1.0,
-                "start_time": 14.9975,
+                "start_time": 98.9975,
                 "mask_name": "objective_domain"
             },
             {
                 "type": "scalar_mixing",
-                "name": "mixing inlet [15, 16]",
+                "name": "mixing inlet [99,100]",
                 "weight": 1.0,
-                "start_time": 14.9975,
+                "start_time": 98.9975,
                 "mask_name": "inlet_region"
             }
         ]
