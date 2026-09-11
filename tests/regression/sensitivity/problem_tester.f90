@@ -21,7 +21,8 @@ program problem_tester
   use matrix, only: matrix_t
   use math, only: abscmp, copy, glmax
   use comm, only: pe_rank
-  use sensitivity, only: compute_sensitivity
+  use sensitivity, only: compute_sensitivity, fd_read_perturbations, &
+       fd_read_central_difference
   use user, only: user_setup
   implicit none
 
@@ -40,9 +41,16 @@ program problem_tester
   ! Test specific variables. The tolerance may be overridden per case via the
   ! optional JSON key `optimization.fd_test_tolerance`; it defaults to a value
   ! appropriate for the fully steady-state-converged regression cases.
+  !
+  ! The perturbation sweep and the one-sided/central choice are likewise
+  ! optional per case (`optimization.fd_test_perturbations` and
+  ! `optimization.fd_test_central_difference`, each also overridable from the
+  ! environment for a sweep driven across several cases at once), and default
+  ! to the historical four-point one-sided sweep. See `fd_read_perturbations`
+  ! and `fd_read_central_difference` in tests/shared/sensitivity.f90.
   real(kind=rp) :: tolerance
-  real(kind=rp), parameter :: perturbations(4) = [ &
-       1e-1_rp, 1e-2_rp, 1e-3_rp, 1e-4_rp]
+  real(kind=rp), allocatable :: perturbations(:)
+  logical :: use_central
 
   type(vector_t) :: sensitivities
   type(matrix_t) :: constraint_sensitivity
@@ -56,7 +64,11 @@ program problem_tester
   logical :: is_objective
   character(len=12) :: nobj_str, ncon_str
 
-  ! DIAGNOSTIC MODE (temporary) -- see NEKO_TOP_DBG_PROBE below.
+  ! DIAGNOSTIC MODE (temporary) -- see NEKO_TOP_DBG_PROBE below. Note that
+  ! probe mode always uses this single fixed perturbation: the configurable
+  ! sweep (NEKO_TOP_FD_PERTURBATIONS / optimization.fd_test_perturbations)
+  ! is deliberately ignored under NEKO_TOP_DBG_PROBE=1 to keep the probe
+  ! cost at one extra leg per dof class.
   logical :: probe_mode
   character(len=32) :: probe_env
   integer :: probe_stat, i_probe, i_probe_int, i_probe_face, i_probe_bdry
@@ -82,6 +94,8 @@ program problem_tester
   call json_get(parameters, 'optimization.design', design_parameters)
   call json_get_or_default(parameters, 'optimization.fd_test_tolerance', &
        tolerance, 1e-3_rp)
+  call fd_read_perturbations(parameters, perturbations)
+  call fd_read_central_difference(parameters, use_central)
 
   ! -------------------------------------------------------------------------- !
   ! Initialization of the components
@@ -235,28 +249,31 @@ program problem_tester
 
      call compute_sensitivity(prob, sim, des, sensitivities, &
           i_probe_int, probe_perturbations, tolerance, &
-          trim(parameter_file), is_objective, sim%fluid%gs_Xh)
+          trim(parameter_file), is_objective, sim%fluid%gs_Xh, use_central)
      call compute_sensitivity(prob, sim, des, sensitivities, &
           i_probe_face, probe_perturbations, tolerance, &
-          trim(parameter_file), is_objective, sim%fluid%gs_Xh)
+          trim(parameter_file), is_objective, sim%fluid%gs_Xh, use_central)
      call compute_sensitivity(prob, sim, des, sensitivities, &
           i_probe_bdry, probe_perturbations, tolerance, &
-          trim(parameter_file), is_objective, sim%fluid%gs_Xh)
+          trim(parameter_file), is_objective, sim%fluid%gs_Xh, use_central)
 
      deallocate(sel, on_bdry)
-  else
+  end if
 
   ! -------------------------------------------------------------------------- !
   ! Loop over the perturbations and compare the finite difference estimate with
   ! the sensitivity computed by our method.
 
-  call compute_sensitivity(prob, sim, des, sensitivities, &
-       i_max, perturbations, tolerance, trim(parameter_file), is_objective, &
-       sim%fluid%gs_Xh)
+  if (.not. probe_mode) then
+     call compute_sensitivity(prob, sim, des, sensitivities, &
+          i_max, perturbations, tolerance, trim(parameter_file), &
+          is_objective, sim%fluid%gs_Xh, use_central)
   end if
 
   ! -------------------------------------------------------------------------- !
   ! Clean up the components
+
+  if (allocated(perturbations)) deallocate(perturbations)
 
   call sensitivities%free()
   call constraint_sensitivity%free()
