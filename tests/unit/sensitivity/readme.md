@@ -61,14 +61,119 @@ takes two optional keys under `optimization`, alongside `fd_test_tolerance`:
   needs the design variable to sit strictly inside its bounds. Defaults to
   `false`, the one-sided forward difference.
 
-Both can also be set from the environment, which overrides the case file and
-lets one sweep be driven across several cases without editing any of them:
-`NEKO_TOP_FD_PERTURBATIONS="1e-1,5e-2,1e-2"` and `NEKO_TOP_FD_CENTRAL=1`
+- `fd_test_mode`: `dof` (the default) to probe a single design degree of
+  freedom, or `directional` for the Taylor test described below. See
+  "Which direction the sweep differentiates along".
+
+All three can also be set from the environment, which overrides the case file
+and lets one sweep be driven across several cases without editing any of them:
+`NEKO_TOP_FD_PERTURBATIONS="1e-1,5e-2,1e-2"`, `NEKO_TOP_FD_CENTRAL=1`
 (strictly `1`/`true`/`yes`/`on` or `0`/`false`/`no`/`off` — anything else is
-an error, never a silent false). The unit driver keeps its own fixed
-eight-point sweep. Under the regression driver's diagnostic probe mode
+an error, never a silent false) and `NEKO_TOP_FD_MODE=directional`. The unit
+driver keeps its own fixed eight-point sweep and is always in `dof` mode.
+Under the regression driver's diagnostic probe mode
 (`NEKO_TOP_DBG_PROBE=1`) the perturbation sweep is deliberately ignored: the
 probes always use a single fixed perturbation of `1e-3`.
+
+## Which direction the sweep differentiates along
+
+### `dof` mode, and why the probed index is now always printed
+
+The default sweep perturbs one design degree of freedom — the driver's
+`maxloc(abs(sensitivities%x))`. That argmax **moves** whenever the sensitivity
+field moves, so two runs of the same case can silently differentiate with
+respect to two *different* design variables, which makes every cross-run
+comparison unsound. Measured on this suite: at one timestep on one problem the
+relative error spanned 0.42% to 23% purely by which dof the lottery selected.
+
+Every run therefore now prints the dof it actually probed, in every mode:
+
+```
+ FD probe: mode = dof -- global design index 1276 (rank 1, local index 340)
+ FD probe: design value    1.000000, location [   0.410654   0.589346   0.160654]
+ FD probe: reproduce this exact dof in another run by setting NEKO_TOP_FD_PROBE_INDEX to the number above.
+```
+
+`NEKO_TOP_FD_PROBE_INDEX=<n>` pins the probe to that exact dof instead of the
+argmax, which is what makes two runs comparable. The index is a 1-based index
+into the globally concatenated design vector (the owning rank's offset plus its
+local index), and is reproducible for a given mesh **and rank count** — the
+scope in which two runs compare anyway. Run the same number on a different
+number of ranks and it names a different dof; check the coordinates printed
+beside it rather than assuming. It is ignored (with a warning) in
+`directional` mode, which probes no single dof, and under
+`NEKO_TOP_DBG_PROBE=1`, which selects its own dofs by class.
+
+### `directional` mode: the Taylor test
+
+`NEKO_TOP_FD_MODE=directional` (or `"fd_test_mode": "directional"`) perturbs
+the **whole** design along the normalised sensitivity direction `s = g/||g||`
+and compares the finite difference against the projected analytic value
+`<g, s>`. That validates the entire gradient field in one sweep instead of one
+lottery-selected component of it, and it raises the finite-difference signal by
+roughly `||g||/|g_i|`, which buys back round-off headroom the single-dof probe
+does not have. The single-dof probe is the one-hot special case of the same
+code path (`fd_run_sweep`/`evaluate_perturbed` take a direction vector), so the
+two cannot drift apart.
+
+The step is clamped so that `x ± eps*s` stays in `[0,1]` at every design
+coordinate, and a clamp is reported (`FD sweep: requested step … clamped to
+…`) rather than silently substituted; a clamp below 1/1000 of the requested
+perturbation is an error, since that sweep point is no longer the one that was
+asked for. A design sitting **on** a bound has no room at all, so
+`directional` mode needs a design initialised strictly inside its bounds —
+`tests/regression/sensitivity/cases/passive_scalar_interior.case` uses 0.3/0.7
+for exactly this reason, and the 0/1 indicator designs most cases here use will
+error out instead.
+
+### The inner product, and why it is not weighted by B again
+
+**The design-space inner product used is the plain Euclidean one on the
+assembled nodal design coefficients, for both the normalisation and the
+projection.** This is the crux of the test: an inconsistency here silently
+invalidates it.
+
+The reasoning: both drivers call
+`design%convert_to_directional_derivative(sensitivities)` before handing the
+field to this harness, and that routine post-multiplies the adjoint's L2 Riesz
+representative by the mass matrix (`col2(vec, coef%B)`, see
+`sources/design/design_types/design_brinkman.f90`, added in commit `f870a46`
+"Directional derivative vs gradient (#383)"). So what arrives here is already
+`g = B g_L2`: the vector of partial derivatives with respect to the *nodal
+coefficients*, not a function on the domain. Those coefficients are exactly
+what the finite difference perturbs, so
+
+    <g, s>_2 = s^T B g_L2 = ∫ g_L2 s dΩ
+
+— the Euclidean pairing on coefficients **is** the B-weighted L2 pairing of
+the underlying functions, expressed in the variables being perturbed. Applying
+B a second time would count the mass matrix twice and is precisely the
+inconsistency to avoid. (Note `project_sensitivity`, the *other* scaling added
+in `f870a46`, multiplies by the scalar average mass `avg_B` and exists only to
+stop MMA producing lumpy designs on non-uniform meshes; it is a deliberate
+change of inner product for the optimiser and is not part of this test.)
+
+Two further details make it exact rather than approximately right:
+
+- the direction is built from the **assembled** gradient
+  (`gs_h%op(..., GS_OP_ADD)`), so it is single-valued on shared dofs. A
+  multi-valued direction would not be a perturbation of any real design
+  variable;
+- the projection pairs the *unassembled* per-copy sensitivities with that
+  single-valued direction. Since `Σ_j g_j s_j = Σ_I s_I Σ_{j ∈ copies(I)} g_j`,
+  this is the assembled Euclidean inner product without ever dividing by a
+  multiplicity — and for a one-hot direction it reduces exactly to the
+  assembled derivative at the single dof, which is what `dof` mode has always
+  compared against. The norm, by contrast, *does* weight by the inverse
+  multiplicity, so each design variable is counted once rather than once per
+  element touching it.
+
+The normalisation is itself a free scaling — any non-zero multiple of `g`
+would do. What is load-bearing is that `<g,s>` uses exactly the same `s` that
+is added to the design, which it does by construction: `s` is built once and
+used for both. The run reports `||g||_2` and `<g,s>` side by side, and with a
+consistent inner product they are the same number, so an inconsistency shows
+up in the log rather than staying silent.
 
 Currently, we have added tests for the following components:
 
