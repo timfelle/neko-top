@@ -10,9 +10,12 @@ binary="$1"
 case_file="$2"
 case_name="$(basename "$case_file")"
 
-# This suite runs realistic (~1000-timestep) forward+adjoint solves per
-# perturbation and is not meant to gate every PR. It is opt-in: unset (or
-# empty) NEKO_TOP_RUN_SENSITIVITY_REGRESSION means "skip", matching how
+# This script is shared by both tiers of the sensitivity regression lane
+# (see CMakeLists.txt). The *fast* tier forces
+# NEKO_TOP_RUN_SENSITIVITY_REGRESSION=1 via each test's ENVIRONMENT
+# property, so it always opts in and never hits the check below. The *slow*
+# tier does not, so it depends on the ambient environment: unset (or empty)
+# NEKO_TOP_RUN_SENSITIVITY_REGRESSION means "skip", matching how
 # run_valgrind_check.sh skips when the `valgrind` tool itself is absent, but
 # here the gate is an explicit choice rather than a tool-availability check.
 if [[ -z "${NEKO_TOP_RUN_SENSITIVITY_REGRESSION:-}" ]]; then
