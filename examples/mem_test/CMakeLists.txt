@@ -1,5 +1,5 @@
 # Simple setup to compile the current example.
-set(DRIVER_TYPE "neko-user")
+set(DRIVER_TYPE "topopt-user")
 set(EXTRA_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/user.f90
 )
