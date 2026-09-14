@@ -47,7 +47,7 @@ function run {
     # Run the example
     printf "Executing Neko.\n" > ./output.log
     printf "See $logfile for the status output.\n"
-    export NEKO_LOG_FILE=$logfile
+    # export NEKO_LOG_FILE=$logfile
 
     # ------------------------------------------------------------------------ #
     # Set up the environment and find neko
