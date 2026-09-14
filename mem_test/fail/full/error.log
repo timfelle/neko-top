@@ -1,0 +1,23 @@
+[2026-09-14T17:14:38.596] error: Detected 1 oom_kill event in StepId=22035606.1. Some of the step tasks have been OOM Killed.
+[2026-09-14T17:14:38.598] error: Detected 1 oom_kill event in StepId=22035606.1. Some of the step tasks have been OOM Killed.
+[2026-09-14T17:14:38.621] error: Detected 1 oom_kill event in StepId=22035606.1. Some of the step tasks have been OOM Killed.
+[2026-09-14T17:14:38.645] error: Detected 1 oom_kill event in StepId=22035606.1. Some of the step tasks have been OOM Killed.
+[2026-09-14T17:14:38.669] error: Detected 1 oom_kill event in StepId=22035606.1. Some of the step tasks have been OOM Killed.
+[2026-09-14T17:14:38.687] error: Detected 1 oom_kill event in StepId=22035606.1. Some of the step tasks have been OOM Killed.
+srun: error: nid005477: task 23: Out Of Memory
+srun: Terminating StepId=22035606.1
+[2026-09-14T17:14:38.701] error: *** STEP 22035606.1 ON nid005475 CANCELLED AT 2026-09-14T17:14:38 DUE TO TASK FAILURE ***
+[2026-09-14T17:14:38.719] error: Detected 1 oom_kill event in StepId=22035606.1. Some of the step tasks have been OOM Killed.
+[2026-09-14T17:14:38.766] error: Detected 1 oom_kill event in StepId=22035606.1. Some of the step tasks have been OOM Killed.
+[2026-09-14T17:14:38.784] error: Detected 1 oom_kill event in StepId=22035606.1. Some of the step tasks have been OOM Killed.
+[2026-09-14T17:14:38.828] error: Detected 1 oom_kill event in StepId=22035606.1. Some of the step tasks have been OOM Killed.
+[2026-09-14T17:14:38.874] error: Detected 1 oom_kill event in StepId=22035606.1. Some of the step tasks have been OOM Killed.
+[2026-09-14T17:14:38.904] error: Detected 1 oom_kill event in StepId=22035606.1. Some of the step tasks have been OOM Killed.
+[2026-09-14T17:14:39.142] error: Detected 1 oom_kill event in StepId=22035606.1. Some of the step tasks have been OOM Killed.
+srun: error: nid005475: tasks 0-2,5,7: Terminated
+srun: error: nid007287: tasks 121,123,125-127: Terminated
+srun: error: nid007283: tasks 88,91,93,95: Terminated
+srun: error: nid005475: tasks 3-4,6: Terminated
+srun: error: nid007287: tasks 120,122,124: Terminated
+srun: error: nid007283: tasks 89-90,92,94: Terminated
+srun: Force Terminated StepId=22035606.1
