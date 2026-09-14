@@ -510,13 +510,70 @@ still constructs the same objects:
 
 ## Resuming on another machine
 
-Everything needed is committed. The worktrees and builds are not: they live
-under `/tmp` and will be gone. Recreate them with `build_pair.sh`, which is
-idempotent and skips work already done.
+### What is NOT in the repository
 
-1. Build and check the working tree, in **double precision**. `prepare.env`
-   should carry `--enable-real=dp`; a single-precision build will not compile
-   Neko-TOP.
+Three things this investigation depends on are gitignored, so a fresh
+checkout does not have them. All three are reproducible.
+
+**1. The meshes. `data_local/` is gitignored.** `mem_test/bisect/bisect.case`
+and every `mem_test` case reference `data_local/static_mixer/mixer_*.nmsh`.
+These are plain boxes: `x` in [0, 4], `y` in [0, 1], `z` in [0, 1], with
+`Nx x Ny x Nz` cells and no periodicity, which is where the naming comes
+from. Regenerate any of them with Neko's own tool:
+
+```bash
+export LD_LIBRARY_PATH=external/json-fortran/lib:external/hdf5/lib:$LD_LIBRARY_PATH
+external/neko/bin/genmeshbox 0 4 0 1 0 1 <Nx> <Ny> <Nz> .false. .false. .false.
+mv box.nmsh data_local/static_mixer/mixer_<Nx>x<Ny>x<Nz>.nmsh
+```
+
+Verified: a regenerated `16x4x4` gives 646.8 MB against 642 to 648 MB for
+the archived one, so it is equivalent for this purpose. It is *not*
+byte-identical, most likely a generator version difference, so do not expect
+checksums to match. The `LD_LIBRARY_PATH` is needed or the tool fails to find
+`libjsonfortran`.
+
+**2. The build environment. `prepare.env` is gitignored.** What matters:
+
+```bash
+export CMAKE_GENERATOR="Ninja"
+export CMAKE_BUILD_TYPE="Debug"
+export CUDA_DIR="/usr/local/cuda"          # or the HIP equivalent
+export HDF5_DIR="hdf5"
+export NEKO_DIR="<repo>/external/neko"
+export NEKO_FCFLAGS="-g -w -O2"
+export NEKO_CUDA_ARCH="-arch=sm_75"        # match the local GPU
+export NEKO_CUDA_CFLAGS="-g -w -O3"
+export NEKO_CONFIG_FLAGS="--enable-real=dp --enable-openmp"
+export CUDA_ARCH="75"
+export OMP_NUM_THREADS="16"
+```
+
+**`--enable-real=dp` is not optional.** Neko-TOP does not compile in a
+single-precision build; Neko keeps time quantities in `dp` while Neko-TOP
+declares the receiving variables at working precision, and
+`-Werror=conversion` rejects about fourteen sites. The cluster is double
+precision anyway.
+
+**3. `external/`, also gitignored**, holding Neko itself and the vendored
+dependencies. `setup.sh` fetches and builds them.
+
+### One thing that is easy to get wrong
+
+`examples/mem_test/CMakeLists.txt` selects `topopt-user`, so the example
+builds `sources/drivers/topopt-user.f90`, **not** `topopt.f90`. All three
+drivers are instrumented, but if you add a probe and see no output, check
+which driver the example actually uses. `easy-E` is the example that
+exercises `neko-user.f90`.
+
+### Procedure
+
+The worktrees and builds live under `/tmp` and will be gone. Recreate them
+with `build_pair.sh`, which is idempotent and skips work already done.
+
+1. Recreate `prepare.env` and `external/` per above, and obtain or regenerate
+   at least `data_local/static_mixer/mixer_16x4x4.nmsh`. Build in **double
+   precision**.
 2. Sanity-check the probes: `ninja -C build mem_test`, then from the
    repository root
    `./mem_test/bisect/measure.sh examples/mem_test/neko mem_test/bisect/bisect.case`.
@@ -657,6 +714,12 @@ Newest last. Keep entries to a line or two.
   and exercised. The known-good anchor pair builds. HEAD measures 645.7 MB on
   the bisect case. The anchor measurement is blocked on case-file schema
   drift; details and three ways forward are in the bisect section above.
+- **2026-09-14** — Handoff audit. Found that `data_local/`, `prepare.env` and
+  `external/` are all gitignored, so a fresh checkout lacks the meshes and the
+  build configuration. All three are now documented and reproducible: the
+  mixer meshes are `genmeshbox` boxes over [0,4]x[0,1]x[0,1], verified by
+  regenerating `16x4x4` and measuring 646.8 MB against the archived mesh's
+  642 to 648 MB band.
 - **_next_** — (1) Resolve the anchor case-schema incompatibility and get the
   anchor number, which decides whether the regression is in the range.
   (2) Run the ladder on LUMI with the probes for the per-rank component
