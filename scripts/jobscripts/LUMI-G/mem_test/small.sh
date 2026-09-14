@@ -54,7 +54,7 @@ fi
 # Select which GPU to map to which core
 source functions.sh
 
-export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
+export OMP_NUM_THREADS=1
 export MPICH_GPU_SUPPORT_ENABLED=1
 # export NEKO_GS_STRTGY=3
 # export NEKO_GS_COMM=MPI
