@@ -46,6 +46,8 @@ program topopt_user
   use neko_top, only: neko_top_register_types
   use user, only: user_setup
   use continuation_scheduler, only: nekotop_continuation
+  use memory_probe, only: memory_probe_report, setup_only_requested
+  use logger, only: neko_log
 
   implicit none
 
@@ -71,7 +73,9 @@ program topopt_user
   call date_and_time(time = time, date = date)
   call neko_init()
   call neko_job_info(date, time)
+  call memory_probe_report('neko_init')
   call neko_top_register_types()
+  call memory_probe_report('register_types')
 
   ! -------------------------------------------------------------------------- !
   ! Read the parameters file as the first terminal argument
@@ -83,32 +87,42 @@ program topopt_user
   ! Read the parameters file
   parameters = json_read_file(trim(parameter_file))
   call json_get(parameters, 'optimization.design', design_parameters)
+  call memory_probe_report('read_case')
 
   ! -------------------------------------------------------------------------- !
   ! Initialization of the components
 
   ! initialize the global continuation_scheduler object (nekotop_continuation)
   call nekotop_continuation%init(parameters)
+  call memory_probe_report('continuation_init')
 
   ! initialize the user additions for the forward (through the neko interface)
   call user_setup(sim%neko_case%user)
 
   ! initialize the simulation
   call sim%init(parameters)
+  call memory_probe_report('simulation_init')
 
   ! initialize the design
   call design_factory(des, design_parameters, sim)
+  call memory_probe_report('design_factory')
 
   ! initialize the problem
   call prob%init(parameters, des, sim)
+  call memory_probe_report('problem_init')
 
   ! initialize the optimizer
   call optimizer_factory(opt, parameters, prob, des, sim)
+  call memory_probe_report('optimizer_factory')
 
   ! -------------------------------------------------------------------------- !
   ! Execute the optimization
 
-  call opt%run(prob, des, sim)
+  if (setup_only_requested()) then
+     call neko_log%message('NEKOTOP_SETUP_ONLY set, stopping after setup.')
+  else
+     call opt%run(prob, des, sim)
+  end if
 
   ! -------------------------------------------------------------------------- !
   ! Clean up the components

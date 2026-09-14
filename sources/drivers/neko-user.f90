@@ -38,6 +38,8 @@ program usrneko
   use user, only: user_setup
   use user_access_singleton, only: neko_user_access
   use neko_top, only: neko_top_register_types
+  use memory_probe, only: memory_probe_report, setup_only_requested
+  use logger, only: neko_log
   implicit none
 
   type(case_t), target :: C
@@ -46,7 +48,14 @@ program usrneko
   call user_setup(C%user)
   call neko_init(C)
   call neko_user_access%init(C)
-  call neko_solve(C)
+  call memory_probe_report('simulation_init')
+
+  if (setup_only_requested()) then
+     call neko_log%message('NEKOTOP_SETUP_ONLY set, stopping after setup.')
+  else
+     call neko_solve(C)
+  end if
+
   call neko_finalize(C)
 
 

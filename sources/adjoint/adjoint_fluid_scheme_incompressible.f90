@@ -35,9 +35,10 @@
 !> Fluid formulations
 module adjoint_fluid_scheme_incompressible
   use adjoint_fluid_scheme, only: adjoint_fluid_scheme_t
+  use memory_probe, only: memory_probe_report
   use gather_scatter, only: gs_t, GS_OP_MIN, GS_OP_MAX
   use neko_config, only: NEKO_BCKND_DEVICE
-  use num_types, only: rp, i8
+  use num_types, only: rp, dp, i8
   use adjoint_source_term, only: adjoint_source_term_t
   use field, only: field_t
   use space, only: space_t, GLL, GL
@@ -179,19 +180,32 @@ contains
     ! NOTE. This shouldn't require remaking all this stuff. What should be
     ! changed on the neko side is a way of initializing a coef FULLY (ie, Bs)
     ! with just a space.
+    ! Probed object by object: the Gauss-space half of this block is the
+    ! largest thing Neko-TOP adds over plain Neko, and the failing runs die
+    ! inside it. Measuring each object separately is what turns that from an
+    ! inference off the log ordering into a number.
+    call memory_probe_report('adj before spaces')
+
     call this%dm_Xh%init(msh, this%Xh)
+    call memory_probe_report('adj dm_Xh')
     call this%dm_Xh_GL%init(msh, this%Xh_GL)
+    call memory_probe_report('adj dm_Xh_GL')
 
     call this%gs_Xh%init(this%dm_Xh)
+    call memory_probe_report('adj gs_Xh')
     call this%gs_Xh_GL%init(this%dm_Xh_GL)
+    call memory_probe_report('adj gs_Xh_GL')
 
     call this%c_Xh%init(this%gs_Xh)
+    call memory_probe_report('adj c_Xh')
     call this%c_Xh_GL%init(this%gs_Xh_GL)
+    call memory_probe_report('adj c_Xh_GL')
 
     call this%GLL_to_GL%init(this%Xh_GL, this%Xh)
 
     ! Overintegration scratch registry (5 should be sufficient)
     call this%scratch_GL%init(5, 2, this%dm_Xh_GL)
+    call memory_probe_report('adj scratch_GL')
 
     ! Assign a name
     call json_get_or_default(params, 'case.fluid.name', this%name, "fluid")
@@ -658,8 +672,12 @@ contains
     real(kind=rp), intent(in) :: dt
     real(kind=rp) :: c
 
-    c = cfl(dt, this%u_adj%x, this%v_adj%x, this%w_adj%x, &
-         this%Xh, this%c_Xh, this%msh%nelv, this%msh%gdim)
+    ! Neko's cfl generic takes and returns dp regardless of the build's
+    ! working precision, so convert explicitly. Without this the module does
+    ! not compile in a single-precision build, where rp and dp differ and no
+    ! specific procedure matches.
+    c = real(cfl(real(dt, dp), this%u_adj%x, this%v_adj%x, this%w_adj%x, &
+         this%Xh, this%c_Xh, this%msh%nelv, this%msh%gdim), rp)
 
   end function adjoint_compute_cfl
 
