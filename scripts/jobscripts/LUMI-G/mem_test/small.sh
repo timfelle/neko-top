@@ -56,8 +56,8 @@ source functions.sh
 
 export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
 export MPICH_GPU_SUPPORT_ENABLED=1
-export NEKO_GS_STRTGY=3
-export NEKO_GS_COMM=MPI
+# export NEKO_GS_STRTGY=3
+# export NEKO_GS_COMM=MPI
 
 run $example
 
