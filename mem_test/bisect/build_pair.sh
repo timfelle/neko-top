@@ -258,11 +258,45 @@ echo "=== neko-top: configure ==="
 # via OpenMP::OpenMP_Fortran, so this flag is redundant-but-harmless there
 # (same libgomp.so, just named twice on the link line; the dynamic linker
 # de-dupes the DT_NEEDED entry).
+
+# -DCMAKE_CUDA_ARCHITECTURES on the command line (cuda only): same class of
+# problem as the -lstdc++/-lgomp flags above -- an old Neko-TOP commit
+# lacking CMake plumbing that a later commit added. sources/CMakeLists.txt
+# only sets CMAKE_CUDA_ARCHITECTURES from $CUDA_ARCH itself `if(DEFINED
+# ENV{CUDA_ARCH})`; that `if` was added after the anchor commit (99033428,
+# 2026-05-20) -- confirmed absent via `git show 99033428:sources/CMakeLists.txt`
+# -- so at the anchor CMake falls back to CMake/CUDA-13's own default
+# architecture (sm_75) for Neko-TOP's own five .cu translation units
+# (RAMP_mapping.cu, SIMP_mapping.cu, heaviside_mapping.cu, mma.cu,
+# math_ext.cu), while Neko's own device code (57 cubins) still gets sm_86
+# from Neko's own `configure`'s CUDA_ARCH, which predates this plumbing
+# entirely. The two halves of one binary then embed two different
+# architectures for the same GPU. At runtime the driver has no native SASS
+# for the five sm_75 kernels and JITs the embedded compute_75 PTX instead,
+# which fails on this driver (max CUDA 13.2) against nvcc 13.3's PTX ISA:
+# "the provided PTX was compiled with an unsupported toolchain" in
+# math_ext.cu:66 -- confirmed by `cuobjdump --list-elf` on the anchor-cuda
+# binary showing exactly 57 sm_86 + 5 sm_75 cubins, matching the 5 .cu
+# files above, versus 69/69 sm_86 in the top-cuda binary (which already
+# gets CMAKE_CUDA_ARCHITECTURES from its CMakeLists.txt's env-var read).
+# Passing it as a command-line -D instead takes precedence over whatever
+# (if anything) the target commit's own CMakeLists.txt does with it, so it
+# works uniformly at every commit in the bisect range, not just the ones
+# that added the env-var plumbing. Derived from the same auto-detected
+# CUDA_ARCH_NUM used for Neko's own CUDA_ARCH above, so it tracks whatever
+# GPU this script is actually run on rather than hardcoding this machine's
+# 86.
+cmake_extra_args=()
+if [ "$BISECT_BACKEND" = cuda ]; then
+    cmake_extra_args+=(-DCMAKE_CUDA_ARCHITECTURES="$CUDA_ARCH_NUM")
+fi
+
 cmake -S "$OUT/nt" -B "$OUT/nt-build" -G Ninja \
     -DCMAKE_BUILD_TYPE=Debug \
     -DBUILD_TESTING=OFF \
     -DBUILD_DOCS=OFF \
     -DCMAKE_Fortran_STANDARD_LIBRARIES="-lstdc++ -lgomp" \
+    "${cmake_extra_args[@]}" \
     >"$OUT/nt_configure.log" 2>&1 || {
     echo "CONFIGURE FAILED"; tail -30 "$OUT/nt_configure.log"; exit 1; }
 
