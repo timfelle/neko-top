@@ -238,11 +238,31 @@ echo "=== neko-top: configure ==="
 # former is appended AFTER the objects, which is where -lstdc++ has to sit.
 # No backend flag needed here: sources/CMakeLists.txt reads DEVICE_TYPE from
 # Neko's installed neko.pc, so it follows the Neko build above automatically.
+#
+# -lgomp is appended here for the same reason as -lstdc++: Neko is configured
+# --enable-openmp above, so libneko.a's objects (comm.F90, dofmap.f90,
+# coef.f90, schwarz.f90, cpu_opgrad.f90, fdm_cpu.f90, device_mpi.c, ...)
+# reference omp_get_thread_num/omp_get_num_threads/GOMP_parallel/GOMP_barrier,
+# and something has to put libgomp on the final link line. Neko's own
+# neko.pc carries `-fopenmp` in Cflags (verified identical across the April,
+# May and September pairs -- this is not a neko.pc regression), but pkg-config
+# Cflags never reach CMake's *link* step, only compilation of Neko-TOP's own
+# sources, and neko.pc's Libs: line has never carried -lgomp/-fopenmp at any
+# of those commits either. Neko-TOP's own sources/CMakeLists.txt separately
+# gained `find_package(OpenMP REQUIRED COMPONENTS Fortran)` +
+# `target_link_libraries(... OpenMP::OpenMP_Fortran)` sometime between the
+# April ALE-adjacent commits (6b20dfb, b334750 -- neither has it) and the May
+# anchor (99033428, which does) -- confirmed by grepping CMakeLists.txt at
+# each worktree. Pairs built before that CMake change have no other path to
+# libgomp, hence the link failure; pairs built after it already get libgomp
+# via OpenMP::OpenMP_Fortran, so this flag is redundant-but-harmless there
+# (same libgomp.so, just named twice on the link line; the dynamic linker
+# de-dupes the DT_NEEDED entry).
 cmake -S "$OUT/nt" -B "$OUT/nt-build" -G Ninja \
     -DCMAKE_BUILD_TYPE=Debug \
     -DBUILD_TESTING=OFF \
     -DBUILD_DOCS=OFF \
-    -DCMAKE_Fortran_STANDARD_LIBRARIES="-lstdc++" \
+    -DCMAKE_Fortran_STANDARD_LIBRARIES="-lstdc++ -lgomp" \
     >"$OUT/nt_configure.log" 2>&1 || {
     echo "CONFIGURE FAILED"; tail -30 "$OUT/nt_configure.log"; exit 1; }
 
