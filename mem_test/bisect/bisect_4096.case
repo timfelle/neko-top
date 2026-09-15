@@ -1,7 +1,7 @@
 {
   "version": 1.0,
   "case": {
-    "mesh_file": "data_local/static_mixer/mixer_16x4x4.nmsh",
+    "mesh_file": "data_local/static_mixer/mixer_64x8x8.nmsh",
     "output_checkpoints": false,
     "output_at_end": false,
     "output_boundary": false,
