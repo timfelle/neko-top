@@ -24,14 +24,26 @@ case that has dealiasing switched off, and it is built unconditionally. That
 is real waste, but `git log -S` shows it is longstanding, so it is not the
 regression itself.
 
-**Open.** Which change increased consumption. Bisect tooling is written and the
-known-good anchor pair builds, but the anchor measurement is blocked on
-case-file schema drift. Resolving that is the next step and it decides
-everything else.
+**Answered, for the searched range — and the answer is no.** The bisect
+anchor measurement this investigation was blocked on since it was written now
+exists. On `bisect_4096.case` (4,096 elements, 2 ranks, CPU backend, double
+precision, three runs each): anchor `f1ca7b11d64`/`99033428` (2026-05-26/
+05-20) medians **2067.7 MB**; top endpoint `865225094`/`0cd5a6d`
+(2026-09-08) medians **1979.9 MB**. The anchor is **87.8 MB higher**, about
+55x the 1.6 MB run-to-run spread. **Per-element host memory cost has
+improved by about 4.2% since May, not regressed, for this case at this size
+on this backend.** Full result, scope and an open contradiction it does not
+resolve: see "The anchor measurement, and what it found" under Bisecting,
+below.
 
-**Not yet done.** No cluster run with the probes. The per-rank component budget
-on real problem sizes is still missing, and the historical baseline from the
-May benchmarks has not been recovered.
+**Not yet done, and this is what stops "no regression" from being the final
+word.** No cluster run with the probes, so the per-rank component budget on
+real problem sizes is still missing and the historical May-benchmark baseline
+has not been recovered. More pointedly: no CPU-vs-CUDA control has been run,
+so a **device-side** regression — invisible to the CPU measurement above,
+since pinned/managed allocations are not compiled into a CPU build — remains
+entirely unaddressed, and the cluster failure this investigation exists to
+explain is HIP, at double the element count measured here.
 
 ## Context
 
@@ -45,7 +57,9 @@ output under `mem_test/pass/` and `mem_test/fail/`.
 Two questions, in order:
 
 1. **Where does the memory go?** The logs now answer much of this.
-2. **Which change increased it?** Still open, and needs a memory bisect.
+2. **Which change increased it?** Answered for the CPU/host range the bisect
+   has actually searched — nothing did, per "Status at a glance" above.
+   Still open for the device path that motivated the investigation.
 
 ## Where the failing run dies
 
@@ -296,9 +310,15 @@ reconfigure to match.
   0.21 GB, mesh hash tables are tens of MB, and the parallel-only inventory
   of Neko's setup path totals about 100 MB.
 - **Environment knobs**, from the `fix/mem_regression` experiments:
-  gather-scatter comm backend and strategy, MPI thread level, OpenMP
-  threading. None changed the outcome, which the death site now explains:
-  the failure is in a coefficient allocation, not in communication.
+  gather-scatter comm backend and strategy pinned, then unset (`1ae0c94`,
+  `5f0e2e4`), MPI thread level forced to `single` (`dfb5f25`), OpenMP
+  threading disabled entirely (`1f1e957`). All four still failed. None
+  changed the outcome, which the death site now explains: the failure is in
+  a coefficient allocation, not in communication. **This closes the
+  environment-knob axis.** The current jobscript's contents are the *end
+  state* of this sweep, not configuration drift away from an earlier,
+  working jobscript — worth stating plainly, since the difference between
+  the two jobscripts looks like a lead and is not.
 
 One latent defect found in passing, unrelated to consumption:
 `IO/hdf5/design_hdf5_io.f90:214` and `mma_hdf5_io.f90:281,288,295,302,309,316`
@@ -400,13 +420,29 @@ Two committed scripts, both used and working:
 - **`mem_test/bisect/build_pair.sh <neko-commit> <nekotop-commit> <label>`**
   builds a commit pair in isolated git worktrees under `/tmp/neko-top-bisect`,
   override with `BISECT_WORKDIR`. It leaves the working checkout untouched.
-- **`mem_test/bisect/measure.sh <binary> <case>`** runs one build on one case,
-  single rank, and prints peak resident memory from the kernel via
-  `/usr/bin/time`.
-- **`mem_test/bisect/bisect.case`** is the measured case: `small.case` with a
-  256-element mesh, `end_time` cut to about three steps and
-  `max_iterations` 1, so a run takes seconds. Run from the repository root so
-  the relative mesh path resolves.
+- **`mem_test/bisect/measure.sh <binary> <case> [ranks]`** runs one build on
+  one case (`ranks` defaults to 1; real bisect runs use 2, since at 1 rank
+  there are no halos and gather-scatter growth is invisible), gates on
+  Neko's own `Normal end.` banner plus a zero exit before trusting a peak —
+  a run that dies partway through setup still exits and would otherwise
+  report a low, falsely-reassuring peak — and prints that peak alongside the
+  gather-scatter structural invariants (`Avg. internal:`/`Avg. external:`
+  pairs), so two builds can be shown to have run the same workload rather
+  than assumed to. **`/usr/bin/time` does not exist in this container** (no
+  package provides it, and there is no root to install one), so where it is
+  absent the script falls back to a `getrusage(RUSAGE_CHILDREN)`-based
+  measurement — the same kernel peak-RSS accounting `/usr/bin/time -v`
+  itself reads, verified equivalent here on a controlled allocation test.
+- **`mem_test/bisect/bisect.case`** is the original measured case:
+  `small.case` with a 256-element mesh, `end_time` cut to about three steps
+  and `max_iterations` 1, so a run takes seconds. Run from the repository
+  root so the relative mesh path resolves. **Superseded for the real
+  comparison** by `bisect_4096.case` below: at 256 elements the measurement
+  only resolves regressions above roughly 190 MB/rank, too coarse for what
+  this investigation is looking for.
+- **`mem_test/bisect/bisect_4096.case`** is the same case on a 4,096-element
+  mesh (`mixer_64x8x8.nmsh`, 2,048 elements/rank at 2 ranks) — the case
+  actually used for the anchor result below.
 
 **Both repositories must move together.** Neko-TOP periodically realigns with
 Neko API changes, the "Align with neko PR #NNNN" commits, so an old Neko
@@ -421,10 +457,32 @@ These cost several iterations; `build_pair.sh` encodes all of them.
   `external/hdf5/lib/pkgconfig`, as `scripts/dependencies.sh` does.
 - Neko's own executable fails to link with `undefined reference to
   __cxa_guard_acquire`. The CUDA objects pull in C++ guard symbols and older
-  configurations do not link the C++ runtime. Pass `LIBS=-lstdc++` to `make`.
-  Note the library itself builds fine before this point, so if you only need
-  `libneko.a` you can ignore it.
-- Neko-TOP hits the same thing at its link. Use
+  configurations do not link the C++ runtime. **This bullet previously
+  recommended `make LIBS=-lstdc++`, and that is wrong — corrected in
+  `c3b8194`.** A `VAR=value` on a `make` command line *overrides* the
+  Makefile's own `LIBS` rather than appending to it, so that form silently
+  discards every configure-detected library (json-fortran, hdf5, parmetis,
+  lapack/blas) and the link fails anyway, just with a different,
+  dozens-of-undefined-references error instead of the one it was meant to
+  fix. Pass `LIBS=-lstdc++` as a `./configure` argument instead: autoconf's
+  own library checks prepend onto whatever `LIBS` already holds, so seeding
+  it before configure runs leaves `-lstdc++` at the end of the link line
+  without disturbing anything else. Note the library itself builds fine
+  before this point, so if you only need `libneko.a` you can ignore it.
+- This container also ships a **system HDF5 2.2.0 under `/usr/local` with
+  the same SONAME as the vendored 2.0.0** (`libhdf5.so.320`, incompatible
+  contents), and exports `LD_LIBRARY_PATH=/usr/local/lib:` globally for
+  every process — which outranks a binary's own `DT_RUNPATH` in the
+  loader's search order. That breaks HDF5 resolution two ways: at build
+  time (the final executable's indirect `NEEDED` entries resolve to the
+  wrong copy via the default path) and at run time (a binary that linked
+  correctly still *loads* the wrong one), so a measurement taken without
+  correcting for this is suspect either way. Tracked as backlog **#46**
+  (`$AGENT_WORKSPACE/.claude/plans/known-bugs-backlog.md`); worked around in
+  `build_pair.sh`/`measure.sh` only, by putting the vendored HDF5 directory
+  first in `LD_LIBRARY_PATH` and exporting `HDF5_ROOT` (Neko-TOP's own
+  `find_package(HDF5)` keys off `HDF5_ROOT`, not `HDF5_DIR`) — `c3b8194`.
+- Neko-TOP hits the same `__cxa_guard_acquire` problem at its link. Use
   `-DCMAKE_Fortran_STANDARD_LIBRARIES=-lstdc++`, **not**
   `-DCMAKE_EXE_LINKER_FLAGS`. The latter is placed before the objects, where
   `-lstdc++` does nothing; `STANDARD_LIBRARIES` is appended after them.
@@ -434,7 +492,13 @@ These cost several iterations; `build_pair.sh` encodes all of them.
 - Build in **double precision**. Neko-TOP does not compile in a
   single-precision build, and the cluster is double precision anyway.
 
-### Status: the anchor pair builds, but the case does not run on it
+### Status (historical): the anchor pair builds, but the case does not run on it
+
+**Superseded below — kept as the record of how the block was diagnosed.**
+Everything in this subsection and the next was true when written; the
+schema-drift block it describes was resolved in `0cd5a6d`, and the anchor
+number it was waiting on now exists in "The anchor measurement, and what it
+found", further down.
 
 | Point | Neko | Neko-TOP | Builds | Peak on `bisect.case` |
 | --- | --- | --- | --- | --- |
@@ -449,6 +513,14 @@ where the variable part dominates the fixed overhead. Note the fixed
 overhead is substantial here: on a 256-element case the baseline at
 `neko_init` is already about 356 MB, so only a third of this number moves
 with the mesh.
+
+**Superseded: the noise floor is much better than this on the real
+comparison case.** This 256-element estimate was one percent because the
+fixed per-rank overhead (~356 MB) dominates a mesh this small. On
+`bisect_4096.case` at 2 ranks — the case and rank count actually used for the
+result below — the spread across three runs is about **1.6 MB on a ~1980 MB
+peak, i.e. 0.08%**, over ten times tighter. The "take the median of three
+runs" advice still stands; the one-percent resolution figure above does not.
 
 The anchor pair compiles and links. The measurement is blocked on case-file
 schema drift, which is the classic bisect hazard: the case evolved with the
@@ -479,13 +551,100 @@ Options, cheapest first:
    exist** at the anchor, so it cannot serve as the common case without the
    same treatment.
 
+**Resolved, per option 1 above.** `0cd5a6d` traced the actual failing key to
+`optimization.solver.max_runtime`, not to the objectives block the stack
+trace pointed at (the objectives block was mid-read when the error fired, but
+the incompatible key was elsewhere in the file): the anchor code reads
+`max_runtime` as a real, HEAD reads it as a string, so no single value
+satisfies both. The fix is to drop the key — it plays no part in a memory
+comparison and omitting it is safe at both ends. The same commit retired a
+dead `phi_ref` objective key in favour of the current `target_concentration`,
+dropped an inert `coarse_grid.solver`, and moved `velocity_solver.type` off
+`fused_cg`, which is CUDA/HIP-only and aborts on a CPU build — the bisect
+moved to the CPU backend in the same pass, both because it is what is
+tractable to compare here and because it isolates the question this
+investigation can actually answer (see the scope note below).
+
 ### Once the anchor number exists
 
-If the anchor is materially below 645.7 MB, the regression is real and inside
-the range, and a standard bisect over the pair finds it in about seven or
-eight steps. Each step is one `build_pair.sh` plus one `measure.sh`, a few
-minutes. If the anchor is close to 645.7 MB, the growth is not in this range
-and the search has to widen or move.
+*(Superseded by the result below — kept for the record.)* If the anchor is
+materially below 645.7 MB, the regression is real and inside the range, and
+a standard bisect over the pair finds it in about seven or eight steps. Each
+step is one `build_pair.sh` plus one `measure.sh`, a few minutes. If the
+anchor is close to 645.7 MB, the growth is not in this range and the search
+has to widen or move.
+
+The anchor came in *above* the top-endpoint figure, on the larger
+`bisect_4096.case` rather than this 256-element `bisect.case`, so neither
+branch of this plan applies as written; see below for what that means.
+
+### The anchor measurement, and what it found
+
+Both risks the anchor build carried came to nothing. `gfortran` in this
+container is 15.2.0 (`GNU Fortran (Ubuntu 15.2.0-16ubuntu1) 15.2.0`,
+confirmed in the anchor's own `configure.log`), and it compiled the
+2026-05-26 Neko checkout without complaint. The rewritten
+`bisect_4096.case` parses and runs to completion at both ends of the range
+— the `max_runtime` string-vs-real incompatibility that blocked the
+previous attempt is fixed.
+
+**Result.** `bisect_4096.case` (4,096-element mesh, 2 MPI ranks, 2,048
+elements/rank), CPU backend, double precision, three runs per point, each
+gated on Neko's `Normal end.` banner plus a zero exit (see `measure.sh`'s
+completion-marker comment above for why a bare peak is not trusted on its
+own):
+
+| Point | Neko | Neko-TOP | Date | Runs (MB) | Median |
+| --- | --- | --- | --- | --- | --- |
+| anchor | `f1ca7b11d64` | `99033428` | 2026-05-26 / 05-20 | 2067.5 / 2067.7 / 2067.7 | **2067.7** |
+| top endpoint | `865225094` | `0cd5a6d` | 2026-09-08 | 1979.6 / 1981.2 / 1979.9 | **1979.9** |
+
+The spread within each point (0.2 MB and 1.6 MB) is far below the 87.8 MB gap
+between the medians — roughly 55x the noisier of the two. **The anchor is
+higher.** Per-element host memory cost has *improved* by about 4.2% between
+May and September on this case; it has not regressed.
+
+The comparison is licensed by the gather-scatter structural invariants
+`measure.sh` extracts from the `Avg. internal:`/`Avg. external:` pairs in
+the log, identical character-for-character in all nine positions across all
+six runs:
+
+```
+275456/18432 102144/8192 47552/4608 14336/2048 275456/18432 878592/51200 102144/8192 47552/4608 14336/2048
+```
+
+Both builds constructed the same objects on the same mesh, so the peak
+difference reflects the code, not a changed workload. The anchor emits no
+`[mem]` probe lines, as expected: `memory_probe.f90` does not exist at
+`99033428`.
+
+**What this does, and does not, show.** This falsifies the regression
+hypothesis *for the range and configuration actually measured* — a
+4,096-element mesh at 2 ranks on the CPU backend, in double precision — and
+no further than that:
+
+- **The device path is untested.** The cluster failure this investigation
+  exists to explain is HIP, at 8,192 elements/rank — double the mesh size
+  measured here. Pinned/managed device allocations are not compiled into a
+  CPU build, so a device-side regression would be structurally invisible to
+  this measurement. The CPU-vs-CUDA control that would test for exactly
+  this has **not been run**.
+- **An open contradiction stands, and this result does not resolve it.**
+  The May benchmark job (`sacct` 18855130, 2026-05-26, Neko 1.99.3)
+  completed using **51.25 GiB/rank at 16,384 elements/rank** with
+  `n_memory=250`, while current jobs OOM at **8,192 elements/rank** — half
+  that mesh size. Both jobscripts request identical resources and neither
+  sets `--mem`. Half the elements, the same budget, and a *lower* measured
+  per-element cost cannot all be true simultaneously. Candidates, none yet
+  checked: a configuration difference between the benchmark case and the
+  `mem_test` cases (`n_memory`, active fields, polynomial order); device-side
+  memory growth invisible to this CPU measurement; or the two jobs not
+  actually receiving the same budget, which is where the unexplained
+  `ReqMem` 7864320M vs 43008M gap (the latter is the `64x32x32` failure's own
+  figure, in "Where the failing run dies" above) still sits.
+
+Only once the device path is checked and that contradiction is explained
+does "no regression" extend beyond this one narrow measurement.
 
 ## Reference measurements
 
@@ -509,6 +668,18 @@ still constructs the same objects:
 | `64x32x32` | 1,095,680 | 3,557,376 | 3.25 |
 
 ## Resuming on another machine
+
+**Machine-specific note.** This section, and the "Much of this runs locally"
+paragraph earlier under "Finding the regression", were written on an earlier
+machine: a CUDA device build sharing one GPU, `--enable-real=sp`, `sm_75`.
+Treat every CUDA/`CUDA_DIR`/`sm_75`/single-precision detail below as a
+description of *that* machine, not a requirement of the tooling. **The
+current machine's work — including the bisect anchor and top-endpoint
+measurements in "The anchor measurement, and what it found", above — is CPU
+backend, double precision** (`BISECT_BACKEND=cpu`, `--enable-real=dp`), which
+sidesteps the single-precision build failures logged below entirely; the
+`--enable-real=dp is not optional` warning under "The build environment"
+still applies on any machine, CPU or device.
 
 ### What is NOT in the repository
 
@@ -720,9 +891,47 @@ Newest last. Keep entries to a line or two.
   mixer meshes are `genmeshbox` boxes over [0,4]x[0,1]x[0,1], verified by
   regenerating `16x4x4` and measuring 646.8 MB against the archived mesh's
   642 to 648 MB band.
-- **_next_** — (1) Resolve the anchor case-schema incompatibility and get the
-  anchor number, which decides whether the regression is in the range.
-  (2) Run the ladder on LUMI with the probes for the per-rank component
-  budget. (3) Recover the May benchmark results from LUMI for a historical
-  baseline, since `single_node_capacity.csv` swept to 16,384 elements per
-  rank at `n_memory=100`, double what fails now.
+- **2026-09-15** — Fixed the build blocker that had nothing to do with the
+  case file: `make LIBS=-lstdc++` overrides the Makefile's own `LIBS` instead
+  of appending, silently discarding every configure-detected library.
+  Corrected to pass `LIBS=-lstdc++` as a `./configure` argument (`c3b8194`).
+  Same commit found and worked around a second hazard: this container's
+  system HDF5 2.2.0 under `/usr/local` shares a SONAME with the vendored
+  2.0.0 and is put first on the loader's path by a global
+  `LD_LIBRARY_PATH`, silently substituting itself at build and run time —
+  filed as backlog #46, worked around in the bisect scripts by pinning
+  `LD_LIBRARY_PATH`/`HDF5_ROOT` to the vendored copy.
+- **2026-09-15** — Resolved the case-schema drift that had blocked the anchor
+  since it was written (`0cd5a6d`). The failing key was
+  `optimization.solver.max_runtime` (real at the anchor, string at HEAD),
+  not the objectives block the stack trace pointed at; dropped it, along
+  with a dead `phi_ref` key, an inert `coarse_grid.solver`, and
+  `fused_cg` (CUDA/HIP-only, aborts on CPU). Moved the bisect to the CPU
+  backend and a 4,096-element case (`bisect_4096.case`) in the same pass,
+  since 256 elements was too coarse to resolve the expected signal.
+- **2026-09-15** — **The anchor measurement now exists, and it falsifies the
+  regression hypothesis for the range searched.** `bisect_4096.case`, CPU,
+  double precision, 2 ranks, three runs each: anchor (`f1ca7b11d64`/
+  `99033428`) medians 2067.7 MB; top endpoint (`865225094`/`0cd5a6d`)
+  medians 1979.9 MB — the anchor is 87.8 MB *higher*, about 55x the 1.6 MB
+  run-to-run spread, with identical gather-scatter structural invariants
+  confirming both builds ran the same workload. Per-element host memory
+  cost improved roughly 4.2% between May and September on this case; it did
+  not regress. Both anchor-build risks (gfortran 15.2 compiling four-month-
+  old Neko, the case parsing at all) came to nothing. This is narrow: CPU
+  only, 4,096 elements, and it leaves the May-vs-September capacity
+  contradiction (51.25 GiB/rank at 16,384 elements/rank in May; OOM at
+  8,192 elements/rank now, same requested resources) explicitly open, and
+  the CPU-vs-CUDA control that would test for a device-side regression has
+  not been run. Full detail in "The anchor measurement, and what it found",
+  above.
+- **_next_** — (1) Run the CPU-vs-CUDA control this measurement cannot
+  substitute for: same case, same commit pair, device backend, to check
+  whether the regression is device-side and therefore invisible to the
+  result above. (2) Resolve the May-vs-September capacity contradiction —
+  check `n_memory`/active fields/polynomial order differences between the
+  benchmark case and `mem_test`, and chase the unexplained `ReqMem`
+  7864320M vs 43008M gap. (3) Run the ladder on LUMI with the probes for the
+  per-rank component budget. (4) Recover the May benchmark results from LUMI
+  for a historical baseline, since `single_node_capacity.csv` swept to
+  16,384 elements per rank at `n_memory=100`, double what fails now.
