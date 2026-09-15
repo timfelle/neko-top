@@ -14,6 +14,16 @@
 
 ## Status at a glance
 
+**Bottom line, for a reader arriving cold.** Across the whole host-side range
+now searched — April 2026 to September 2026, including the ALE merge
+specifically alleged to be the cause — **nothing increased per-element
+memory cost; it fell by about 4.8%.** Combined with the `ReqMem` finding
+below, this investigation's conclusion is that **the OOMs are an allocation
+change, not a code change**: the cluster now grants these jobs 5.25 GiB/rank
+against 60 GiB/rank in May, and it is the budget that shrank, not the code's
+need that grew. The one avenue this does not close is the device path — see
+"Not yet done", below, which remains open.
+
 **Established.** The excess consumption is Neko-TOP's, not Neko's: the same
 case passes against pure Neko at every size. The failing runs die building the
 adjoint's Gauss-space coefficients. Memory instrumentation now exists and is
@@ -22,7 +32,9 @@ validated, and gives per-step attribution.
 **Measured.** The Gauss over-integration stack is about a third of loadup on a
 case that has dealiasing switched off, and it is built unconditionally. That
 is real waste, but `git log -S` shows it is longstanding, so it is not the
-regression itself.
+regression itself — and it is worth gating or trimming on its own merits
+regardless of how the regression question resolves; see the Progress log's
+`_next_` entry.
 
 **Answered, for the searched range — and the answer is no.** The bisect
 anchor measurement this investigation was blocked on since it was written now
@@ -34,6 +46,20 @@ precision, three runs each): anchor `f1ca7b11d64`/`99033428` (2026-05-26/
 improved by about 4.2% since May, not regressed, for this case at this size
 on this backend.** Full result and scope: see "The anchor measurement, and
 what it found" under Bisecting, below.
+
+**Also answered: the ALE-specific hypothesis, and it is refuted.** ALE
+(`53b425161`, 2026-04-13, which significantly altered `coef_t`) was proposed
+as the actual cause, on the reasoning that it landed before both points
+above and so would already sit inside both, invisible to that comparison.
+Tested directly at the Neko-TOP alignment barrier on each side of the
+merge: pre-ALE (`e8900582f`/`6b20dfb`) medians **2079.3 MB**, post-ALE
+(`53b425161`/`b334750`) medians **2079.2 MB** — a **0.1 MB** delta against a
+0.2-1.7 MB run-to-run spread here, nothing measurable, and the `mem_test`
+case never configures ALE, so this is a genuine test of unconditional cost.
+Placed with the anchor and top-endpoint numbers, the four-point series
+April-to-September is **monotonically decreasing**, total change **-99.4
+MB, about -4.8%**. Full result: see "The ALE hypothesis, tested and
+refuted" under Bisecting, below.
 
 **Resolved.** The open contradiction this measurement previously could not
 explain — the May benchmark completing at 16,384 elements/rank while current
@@ -54,14 +80,20 @@ changed: see "The `ReqMem` gap, explained" under Bisecting, below.
 **Not yet done, and this is what stops "no regression" from being the final
 word.** No cluster run with the probes, so the per-rank component budget on
 real problem sizes is still missing, and the historical
-`single_node_capacity.csv` baseline has not been recovered. More pointedly: a
-CPU-vs-CUDA control is **running now, and has not yet reported** (checked
-directly: a build/measure orchestrator is live under `/tmp/neko-top-bisect`
-as of 2026-09-15), so a **device-side** regression — invisible to the CPU
-measurement above, since pinned/managed allocations are not compiled into a
-CPU build — remains formally unexcluded, and the cluster failure this
-investigation exists to explain is HIP, at double the element count measured
-here.
+`single_node_capacity.csv` baseline has not been recovered. More pointedly,
+the CPU-vs-CUDA control is **still incomplete**: the CUDA top endpoint has
+reported — **2073.5 MB**, across three completed runs — but all three CUDA
+**anchor** runs failed to complete, so there is no CUDA delta yet. A retry
+at 1 rank is in progress; record it as open. Until it reports, a
+**device-side** regression — invisible to the CPU measurement above, since
+pinned/managed allocations are not compiled into a CPU build — remains
+formally unexcluded, and the cluster failure this investigation exists to
+explain is HIP, at double the element count measured here. Even a clean
+CUDA result would not fully close this question: the prime remaining
+device-side suspect, Neko `10689388af1` "Zero-copy unified memory for
+MI300A" (#2666), is AMD-specific and may not compile into a CUDA build at
+all. This container has no ROCm toolchain, so that path may only be
+testable on LUMI.
 
 ## Context
 
@@ -520,6 +552,27 @@ These cost several iterations; `build_pair.sh` encodes all of them.
   `-DCMAKE_Fortran_STANDARD_LIBRARIES=-lstdc++`, **not**
   `-DCMAKE_EXE_LINKER_FLAGS`. The latter is placed before the objects, where
   `-lstdc++` does nothing; `STANDARD_LIBRARIES` is appended after them.
+- **Any Neko-TOP commit older than 2026-05-20 (before `99033428`) fails to
+  link**, not compile, with undefined `GOMP_parallel`, `omp_get_thread_num`,
+  `GOMP_barrier` — coming out of Neko's own objects, which are compiled with
+  `--enable-openmp`. It is not a `neko.pc` problem: the generated `neko.pc`
+  is byte-identical across April, May and September builds, carrying
+  `-fopenmp` in `Cflags` and no `-lgomp` in `Libs` in every one, and
+  pkg-config `Cflags` only ever reach compilation of Neko-TOP's own sources,
+  never CMake's link step. The actual cause is that Neko-TOP's own
+  `CMakeLists.txt` gained `find_package(OpenMP REQUIRED COMPONENTS Fortran)`
+  and the `OpenMP::OpenMP_Fortran` link somewhere between `6b20dfb`
+  (2026-04-14) and `99033428` (2026-05-20) — visible directly in the
+  generated `build.ninja`: working builds carry `libgomp.so` in
+  `LINK_LIBRARIES`, broken ones carry nothing. Fixed the same way as the
+  `-lstdc++` case immediately above and for the same reason: append
+  `-lgomp` via `CMAKE_Fortran_STANDARD_LIBRARIES` rather than
+  `CMAKE_EXE_LINKER_FLAGS`, so it lands after the objects (`280aaa8`). A
+  pair that already links libgomp simply names it twice, which is harmless.
+  Verified not to disturb the established measurements — see "The ALE
+  hypothesis, tested and refuted", below, for the rebuild-and-compare check.
+  **Any future attempt to build a Neko-TOP commit older than this CMake
+  change will hit this.**
 - The `mem_test` example postdates the older commits, so it is copied into the
   old worktree and registered in `examples/CMakeLists.txt`. That keeps the
   measured case and its user code identical at every point in history.
@@ -796,6 +849,69 @@ disappear, the `ReqMem`-gap explanation is confirmed and this question is
 closed. **This is a cluster action and is explicitly NOT VERIFIED from this
 container** — it needs a real LUMI submission, which has not been done as
 part of this change.
+
+### The ALE hypothesis, tested and refuted
+
+The repository owner proposed a specific reason the anchor result above
+could be searching the wrong range: Neko's ALE work, `53b425161`
+"Feature/ale (#2244)", significantly altered `coef_t` and landed
+**2026-04-13** — before *both* endpoints already measured (`f1ca7b11d64`/
+2026-05-26 and `865225094`/2026-09-08). If ALE were the actual cost, it
+would already sit inside both builds compared above and be invisible to
+that comparison; the anchor result would then have been searching the
+wrong range rather than answering the question.
+
+**Tested directly, and refuted.** Two pairs, one on each side of the merge
+and each pinned at the Neko-TOP alignment barrier nearest it (see "Both
+repositories must move together", above, for what that means), same
+`bisect_4096.case`, 2 ranks, CPU backend, three runs each:
+
+| Point | Neko | Neko-TOP | Runs (MB) | Median |
+| --- | --- | --- | --- | --- |
+| pre-ALE | `e8900582f` | `6b20dfb` | 2080.6 / 2079.3 / 2079.1 | **2079.3** |
+| post-ALE | `53b425161` | `b334750` | 2079.2 / 2079.2 / 2079.2 | **2079.2** |
+
+**Delta across the ALE merge: 0.1 MB**, against a run-to-run spread of
+0.2-1.7 MB here. Nothing measurable. This is a meaningful test rather than
+a vacuous one precisely because **the `mem_test` case does not configure
+ALE at all** — it measures whatever cost the ALE change imposes
+*unconditionally*, on runs that never use it, which is exactly the shape of
+cost this investigation has been looking for throughout. There is none.
+
+Placed alongside the anchor and top-endpoint numbers already established,
+the full series — same case, same rank count, same backend, four points
+spanning April to September — is **monotonically decreasing**:
+
+| Point | Neko | Neko-TOP | Date | Median |
+| --- | --- | --- | --- | --- |
+| pre-ALE | `e8900582f` | `6b20dfb` | 2026-04-13 | 2079.3 MB |
+| post-ALE | `53b425161` | `b334750` | 2026-04-13 | 2079.2 MB |
+| anchor | `f1ca7b11d64` | `99033428` | 2026-05-26 | 2067.7 MB |
+| top endpoint | `865225094` | `0cd5a6d` | 2026-09-08 | 1979.9 MB |
+
+**Total change, April to September: -99.4 MB, about -4.8%.** Gather-scatter
+structural invariants were identical in all nine positions across all
+twelve runs behind these four points, so every build constructed the same
+objects on the same mesh — the comparison is licensed across the whole
+series, not assumed at just the two ends.
+
+**The control held.** The `-lgomp` fix needed to build the two April pairs
+at all (see "Build gotchas", above) could in principle have perturbed the
+already-established May/September numbers, so the top endpoint was rebuilt
+from scratch with the fix in place: 1978.9 / 1979.5 / 1980.1 MB against
+1979.6 / 1981.2 / 1979.9 MB before it — a 0.4 MB shift in the median, well
+inside the run-to-run spread. The old and new top-endpoint numbers are the
+same measurement to within noise. Recording this because it matters: a
+series that changes its own tooling partway through and does not re-verify
+against itself would not be trustworthy, however clean the rest of it looks.
+
+**Scope, stated rather than left implicit.** This closes the ALE-specific
+hypothesis and extends the "nothing increased it" host-side finding back to
+2026-04-13, but it is still the same measurement as the anchor result
+above: one 4,096-element case, 2 ranks, CPU backend, host memory only. It
+says nothing about device-side cost, where the CPU-vs-CUDA control (see
+"Not yet done" under "Status at a glance", above, and the Progress log,
+below) remains the open question.
 
 ## Reference measurements
 
@@ -1127,17 +1243,51 @@ Newest last. Keep entries to a line or two.
   the job's own state. Actionable fix, a cluster action not verifiable here:
   add `#SBATCH --mem=0` to the `mem_test` jobscripts and re-run. Full detail
   in "The `ReqMem` gap, explained" under Bisecting, above.
-- **_next_** — (1) Run the CPU-vs-CUDA control this measurement cannot
-  substitute for: same case, same commit pair, device backend, to check
-  whether the regression is device-side and therefore invisible to the
-  result above. **This is now running** (checked directly: a build/measure
-  orchestrator is live under `/tmp/neko-top-bisect` as of 2026-09-15 — the
-  `top-cuda` endpoint has three completed runs, the `anchor-cuda` pair is
-  still building) but has not reported a result, so the device path remains
-  formally unexcluded. (2) Add `#SBATCH --mem=0` to the `mem_test`
-  jobscripts and re-run on LUMI to confirm the OOMs disappear now that the
-  `ReqMem` gap is understood — a cluster action, not verifiable from this
-  container. (3) Run the ladder on LUMI with the probes for the per-rank
-  component budget. (4) Recover the May benchmark results from LUMI for a
-  historical baseline, since `single_node_capacity.csv` swept to 16,384
-  elements per rank at `n_memory=100`, double what fails now.
+- **2026-09-15** — Fixed a second, pre-May-only build blocker: any
+  Neko-TOP commit older than `99033428` (2026-05-20) fails to *link*, with
+  undefined `GOMP_parallel`/`omp_get_thread_num`/`GOMP_barrier`, because
+  Neko-TOP's own CMake only started linking `OpenMP::OpenMP_Fortran`
+  between `6b20dfb` (04-14) and `99033428` (05-20); not a `neko.pc` issue,
+  confirmed by a byte-identical `neko.pc` across April/May/September builds
+  and by `libgomp.so` being present in working `build.ninja`s and absent
+  from broken ones. Fixed the same way as the earlier `-lstdc++` case:
+  `-lgomp` via `CMAKE_Fortran_STANDARD_LIBRARIES` (`280aaa8`). Verified
+  harmless to the established numbers by rebuilding the top endpoint with
+  it in place: 0.4 MB shift in the median, inside the run-to-run spread —
+  see next entry for the full rebuild-and-compare numbers.
+- **2026-09-15** — **The ALE hypothesis is tested and refuted.** Proposed
+  reasoning: `53b425161` "Feature/ale (#2244)" (2026-04-13) significantly
+  altered `coef_t` and landed before both points already measured, so its
+  cost would sit inside both and be invisible to that comparison. Tested
+  directly: pairs either side of the merge, same case/ranks/backend —
+  pre-ALE (`e8900582f`/`6b20dfb`) medians 2079.3 MB, post-ALE
+  (`53b425161`/`b334750`) medians 2079.2 MB, a 0.1 MB delta against a
+  0.2-1.7 MB spread, and the `mem_test` case never configures ALE, so this
+  is a genuine test of unconditional cost, not a vacuous one. Placed with
+  the anchor and top-endpoint numbers, the four-point series
+  April-to-September is monotonically decreasing, -99.4 MB / -4.8% total.
+  The `-lgomp` fix needed to build the April pairs was checked for its own
+  effect on the established numbers: the top endpoint rebuilt with it
+  measures 1978.9/1979.5/1980.1 MB against 1979.6/1981.2/1979.9 MB before
+  — a 0.4 MB shift in the median, inside the run-to-run spread, so the old
+  and new numbers are comparable. Full detail in "The ALE hypothesis,
+  tested and refuted" under Bisecting, above.
+- **_next_** — (1) The CPU-vs-CUDA control is **still incomplete**: the
+  CUDA top endpoint has reported (2073.5 MB, three completed runs), but all
+  three CUDA anchor runs failed to complete, so there is no CUDA delta yet.
+  A retry at 1 rank is in progress (open). Until it reports, the device
+  path remains formally unexcluded, and even a clean result would not by
+  itself clear Neko `10689388af1` "Zero-copy unified memory for MI300A"
+  (AMD-specific, may not compile into a CUDA build at all — untestable here
+  without a ROCm toolchain, so possibly only testable on LUMI). (2) Add
+  `#SBATCH --mem=0` to the `mem_test` jobscripts and re-run on LUMI to
+  confirm the OOMs disappear now that the `ReqMem` gap is understood — a
+  cluster action, not verifiable from this container. (3) Run the ladder on
+  LUMI with the probes for the per-rank component budget. (4) Recover the
+  May benchmark results from LUMI for a historical baseline, since
+  `single_node_capacity.csv` swept to 16,384 elements per rank at
+  `n_memory=100`, double what fails now. (5) Independently of the
+  regression question, now answered negatively across the whole host-side
+  range searched: the unconditional adjoint Gauss over-integration stack
+  (about a third of loadup on a `dealias: false` case) remains worth gating
+  or trimming on its own merits.
