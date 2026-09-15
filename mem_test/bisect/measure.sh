@@ -142,6 +142,22 @@ BIN=$(readlink -f "$BIN")
 CASE=$(readlink -f "$CASE")
 TOP=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 
+# This container ships a *system* parallel HDF5 at /usr/local (same SONAME as
+# the vendored one build_pair.sh links against, but an incompatible minor
+# version), and sets LD_LIBRARY_PATH=/usr/local/lib: globally for every
+# process -- which outranks a binary's own DT_RUNPATH in the loader's search
+# order. Without overriding it here, $BIN would silently load the wrong HDF5
+# at measurement time regardless of which one it was built against, which
+# would make "HDF5 resolves identically at every commit" depend on the
+# caller's shell state instead of being guaranteed by this script. DEPS_ROOT
+# mirrors build_pair.sh's own variable and layout (a directory holding
+# external/hdf5); defaults to this script's own repo root, matching
+# build_pair.sh's default, but a bisect worktree has no external/ of its own
+# so the real bisect invocation must pass DEPS_ROOT explicitly (same as it
+# already must for build_pair.sh).
+: "${DEPS_ROOT:=$TOP}"
+export LD_LIBRARY_PATH="$DEPS_ROOT/external/hdf5/lib:$DEPS_ROOT/external/json-fortran/lib:${LD_LIBRARY_PATH:-}"
+
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 

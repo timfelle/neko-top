@@ -82,6 +82,41 @@ mkdir -p "$OUT"
 
 export PKG_CONFIG_PATH="$DEPS_ROOT/external/json-fortran/lib/pkgconfig:$DEPS_ROOT/external/hdf5/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
 export HDF5_DIR="$DEPS_ROOT/external/hdf5"
+# CMakeLists.txt's own `find_package(HDF5 COMPONENTS Fortran)` (independent of
+# Neko's pkg-config-based resolution above) keys off HDF5_ROOT, not HDF5_DIR --
+# scripts/dependencies.sh:252-259 documents HDF5_DIR as only "a legacy
+# spelling" it translates from, for exactly this reason. This script bypasses
+# dependencies.sh entirely, so without also setting HDF5_ROOT here, Neko-TOP's
+# CMake HDF5 discovery gets no root hint and falls through to system default
+# paths -- landing on /usr/local's HDF5 even when the Neko side above
+# correctly resolved the vendored one via PKG_CONFIG_PATH.
+export HDF5_ROOT="$DEPS_ROOT/external/hdf5"
+
+# This container now also ships a *system* parallel HDF5 at /usr/local
+# (same SONAME, libhdf5.so.320, but a different, incompatible minor version --
+# it defines three extra low-precision float types the vendored 2.0.0 does
+# not have), and the image sets LD_LIBRARY_PATH=/usr/local/lib: globally for
+# every process, which outranks an ELF's own DT_RUNPATH in the loader's
+# search order. That breaks HDF5 resolution two ways that both have to be
+# fixed the same way, by putting the vendored dir first in LD_LIBRARY_PATH:
+#   - build time: linking the final `neko` executable resolves -lhdf5_fortran
+#     to the vendored .so via -L (correct), but libhdf5_fortran.so's own
+#     indirect NEEDED entries (libhdf5_f90cstub.so.320, libhdf5.so.320) are
+#     resolved via ld's LD_LIBRARY_PATH/default-path fallback, not -L -- with
+#     no LD_LIBRARY_PATH override, that fallback hits /usr/local's 2.2.0
+#     f90cstub, which references symbols the vendored 2.0.0 core libhdf5.so
+#     it gets paired with does not export, and the link fails.
+#   - run time: even an already-linked binary carries the correct RUNPATH,
+#     but the image's global LD_LIBRARY_PATH=/usr/local/lib: silently
+#     overrides it, so every run (not just this build) silently loads the
+#     wrong HDF5 unless this is set.
+# Vendored is deliberately the one made to win here, not system: it is a
+# fixed, version-pinned artifact this bisect already targets via
+# --with-hdf5 below, the shared Neko install and the private Neko this
+# session already built are both linked against it, and it will not move
+# under the bisect if the image gets updated again mid-run -- unlike
+# /usr/local, which is coming from outside the bisect's control.
+export LD_LIBRARY_PATH="$DEPS_ROOT/external/hdf5/lib:$DEPS_ROOT/external/json-fortran/lib:${LD_LIBRARY_PATH:-}"
 
 # Match the working build. Double precision matters: Neko-TOP does not compile
 # in a single-precision build, and the cluster is double precision anyway.
@@ -138,6 +173,7 @@ if [ ! -f Makefile ]; then
         CC=/usr/bin/mpicc MPICC=/usr/bin/mpicc MPICXX=/usr/bin/mpicxx
         FCFLAGS="-g -w -O2" CFLAGS=
         HIPCC= HIP_HIPCC_FLAGS=
+        LIBS=-lstdc++
     )
     if [ "$BISECT_BACKEND" = cuda ]; then
         configure_args+=(
@@ -151,16 +187,25 @@ if [ ! -f Makefile ]; then
 fi
 
 echo "=== neko: make ==="
-# LIBS=-lstdc++ : the CUDA objects pull in C++ guard symbols and older
-# configurations do not link the C++ runtime themselves. Kept for the CPU
-# backend too: it is a harmless extra link flag there, and this is one build
-# recipe for both backends.
-make LIBS="-lstdc++" -j"$(nproc)" >make.log 2>&1 || {
+# LIBS=-lstdc++ is set as a *configure* argument above, not a make-command-line
+# override: autoconf's AC_CHECK_LIB/pkg-config detection (json-fortran, hdf5,
+# parmetis, lapack/blas) all do `LIBS="$NEWLIB $LIBS"`, i.e. prepend onto
+# whatever LIBS already held, so seeding it before configure runs places
+# -lstdc++ at the end of the final link line -- the same position Neko's own
+# CUDA>=13 check puts it at (configure.ac ~line 285) -- without disturbing
+# anything else. `make LIBS=...` on the command line does the opposite: make
+# variable assignments from the command line always win over a Makefile's own
+# `LIBS = ...` line, so it was silently discarding every configure-detected
+# library (json-fortran, hdf5, parmetis, lapack/blas) and leaving only
+# -lstdc++, which fails to link with "undefined reference to
+# __json_file_module_MOD_..." etc. -- caught by actually running this script,
+# not by the dry-runs it shipped with.
+make -j"$(nproc)" >make.log 2>&1 || {
     echo "MAKE FAILED"
     grep -nE "^Error:|^make.*\*\*\*|Fatal Error|\.f90:[0-9]+:[0-9]+:" make.log | tail -15
     exit 1; }
 
-make install LIBS="-lstdc++" >install.log 2>&1 || { echo "INSTALL FAILED"; tail -20 install.log; exit 1; }
+make install >install.log 2>&1 || { echo "INSTALL FAILED"; tail -20 install.log; exit 1; }
 
 # ---------------------------------------------------------------------------- #
 # Neko-TOP
