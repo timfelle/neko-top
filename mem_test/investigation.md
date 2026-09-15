@@ -32,18 +32,36 @@ precision, three runs each): anchor `f1ca7b11d64`/`99033428` (2026-05-26/
 (2026-09-08) medians **1979.9 MB**. The anchor is **87.8 MB higher**, about
 55x the 1.6 MB run-to-run spread. **Per-element host memory cost has
 improved by about 4.2% since May, not regressed, for this case at this size
-on this backend.** Full result, scope and an open contradiction it does not
-resolve: see "The anchor measurement, and what it found" under Bisecting,
-below.
+on this backend.** Full result and scope: see "The anchor measurement, and
+what it found" under Bisecting, below.
+
+**Resolved.** The open contradiction this measurement previously could not
+explain — the May benchmark completing at 16,384 elements/rank while current
+jobs OOM at half that, apparently under the same budget — is closed, and
+without invoking a memory regression. `ReqMem` in `sacct` is a **job total**,
+not a per-node or per-rank figure, which is provable directly from the
+captured logs: the same `43008M` appears as the whole-job `ReqMem` on every
+1-node `mem_test` run and as `688128M` ÷ 16 nodes on the 16-node `full` run.
+Every `mem_test` job actually receives **42 GiB/node, 5.25 GiB/rank**. The May
+job (`sacct` 18855130) received `ReqMem` 7864320M over 16 nodes — **480
+GiB/node, 60 GiB/rank**, 11.4x more per rank — from an `#SBATCH` block
+identical to the one used now, with memory requested explicitly in neither
+case. **The headline finding is no longer "which commit increased memory" but
+"memory did not increase; the allocation shrank."** Full arithmetic, the exact
+log lines, and what this does and does not establish about *why* the default
+changed: see "The `ReqMem` gap, explained" under Bisecting, below.
 
 **Not yet done, and this is what stops "no regression" from being the final
 word.** No cluster run with the probes, so the per-rank component budget on
-real problem sizes is still missing and the historical May-benchmark baseline
-has not been recovered. More pointedly: no CPU-vs-CUDA control has been run,
-so a **device-side** regression — invisible to the CPU measurement above,
-since pinned/managed allocations are not compiled into a CPU build — remains
-entirely unaddressed, and the cluster failure this investigation exists to
-explain is HIP, at double the element count measured here.
+real problem sizes is still missing, and the historical
+`single_node_capacity.csv` baseline has not been recovered. More pointedly: a
+CPU-vs-CUDA control is **running now, and has not yet reported** (checked
+directly: a build/measure orchestrator is live under `/tmp/neko-top-bisect`
+as of 2026-09-15), so a **device-side** regression — invisible to the CPU
+measurement above, since pinned/managed allocations are not compiled into a
+CPU build — remains formally unexcluded, and the cluster failure this
+investigation exists to explain is HIP, at double the element count measured
+here.
 
 ## Context
 
@@ -100,8 +118,18 @@ consistent with the Gauss space carrying far more points per element than
 the GLL space.
 
 Accounting from the same log: `MaxRSS` 5.81 G, `AveRSS` 5.02 G over 8 tasks,
-`ReqMem` 43008M, `State=OUT_OF_MEMORY`. Note the log banner also shows
-`Job Memory:` empty, so no memory is being requested explicitly.
+`ReqMem` 43008M. **Correction:** the job's own `sacct` row reads `FAILED`,
+exit code `1:0` — `22035605,mem_test/64x32x32,FAILED,1:0,1,,43008M,00:00:33`
+— not the Slurm job state `OUT_OF_MEMORY` this line and the reference table
+below previously recorded; only the `.1` step carries `OUT_OF_MEMORY` as its
+own state (`22035605.1,select_gpu,OUT_OF_MEMORY,0:125,...`). The kernel
+`oom_kill` confirming the physical cause is in `error.log`, not `sacct`'s job
+row. See "The `ReqMem` gap, explained" under Bisecting, below, for the full
+picture. Note the log banner also shows `Job Memory:` empty — that is not
+evidence of no memory being granted, only that `SLURM_JOB_MEMORY`
+(`scripts/functions.sh:151`) reflects an explicit `--mem`-family flag, which
+is genuinely absent from the jobscript; `sacct`'s `ReqMem` field shows Slurm
+granted a (default) budget regardless.
 
 ## The Gauss over-integration stack
 
@@ -343,6 +371,12 @@ F2003 interface, but misleading.
    code comment asks, and pass `COEF_OPERATOR` where the full coef is not
    needed.
 7. Confirm against full-size `steady_200` and `unsteady_200`.
+8. **Cluster action, independent of the bisect and not verifiable from this
+   container:** add `#SBATCH --mem=0` (the whole node, explicitly) to
+   `scripts/jobscripts/LUMI-G/mem_test/full.sh` and its siblings
+   (`default.sh`, `small.sh`), and re-run the ladder on LUMI. If the OOMs
+   disappear, the `ReqMem`-gap explanation in "The `ReqMem` gap, explained"
+   is confirmed and that question is closed.
 
 ## Verification
 
@@ -629,22 +663,139 @@ no further than that:
   CPU build, so a device-side regression would be structurally invisible to
   this measurement. The CPU-vs-CUDA control that would test for exactly
   this has **not been run**.
-- **An open contradiction stands, and this result does not resolve it.**
-  The May benchmark job (`sacct` 18855130, 2026-05-26, Neko 1.99.3)
-  completed using **51.25 GiB/rank at 16,384 elements/rank** with
-  `n_memory=250`, while current jobs OOM at **8,192 elements/rank** — half
-  that mesh size. Both jobscripts request identical resources and neither
-  sets `--mem`. Half the elements, the same budget, and a *lower* measured
-  per-element cost cannot all be true simultaneously. Candidates, none yet
-  checked: a configuration difference between the benchmark case and the
-  `mem_test` cases (`n_memory`, active fields, polynomial order); device-side
-  memory growth invisible to this CPU measurement; or the two jobs not
-  actually receiving the same budget, which is where the unexplained
-  `ReqMem` 7864320M vs 43008M gap (the latter is the `64x32x32` failure's own
-  figure, in "Where the failing run dies" above) still sits.
+- **An open contradiction stood here, and is now resolved — see below.**
+  *(Superseded paragraph, kept for the trail.)* The May benchmark job
+  (`sacct` 18855130, 2026-05-26, Neko 1.99.3) completed using **51.25
+  GiB/rank at 16,384 elements/rank** with `n_memory=250`, while current jobs
+  OOM at **8,192 elements/rank** — half that mesh size. Both jobscripts
+  request identical resources and neither sets `--mem`. Half the elements,
+  the same budget, and a *lower* measured per-element cost cannot all be true
+  simultaneously. Candidates, none yet checked: a configuration difference
+  between the benchmark case and the `mem_test` cases (`n_memory`, active
+  fields, polynomial order); device-side memory growth invisible to this CPU
+  measurement; or the two jobs not actually receiving the same budget, which
+  is where the unexplained `ReqMem` 7864320M vs 43008M gap (the latter is the
+  `64x32x32` failure's own figure, in "Where the failing run dies" above)
+  still sits. **The last of those three was it** — "the two jobs not
+  actually receiving the same budget" is exactly what happened, and the
+  51.25 GiB/rank actually used by the May job is unremarkable once its real
+  60 GiB/rank budget is known: it used about 85% of what it had, comfortably
+  under, not against, the limit. See "The `ReqMem` gap, explained", next.
 
-Only once the device path is checked and that contradiction is explained
-does "no regression" extend beyond this one narrow measurement.
+The device path remains the one open question this result does not, and
+cannot, answer — see "Not yet done" under "Status at a glance", above.
+
+### The `ReqMem` gap, explained
+
+**`ReqMem` in `sacct` is a job total, not a per-node or per-rank figure.**
+This is proven directly from the logs already captured in this repository,
+not inferred from the jobscripts:
+
+- `mem_test/fail/full/output.log`, the job-summary row:
+  `22035606,mem_test/full,FAILED,1:0,16,,688128M,00:00:50`. `NNodes` is 16,
+  `ReqMem` is `688128M`. 688128 ÷ 16 = **43008 MiB/node**.
+- `mem_test/fail/64x32x32/output.log`, the job-summary row:
+  `22035605,mem_test/64x32x32,FAILED,1:0,1,,43008M,00:00:33`. `NNodes` is 1,
+  `ReqMem` is `43008M` outright.
+
+The per-node figure is identical in both — 43008 MiB/node — which is what
+establishes that the 16-node job's `ReqMem` is a whole-job total, not a
+per-node one; if it were per-node, the two jobs would show wildly different
+values instead of the same one scaled by node count. The same `43008M` also
+appears, as a further check, on both passing 1-node runs:
+`mem_test/pass/64x16x16/output.log` (`...,43008M,...`) and
+`mem_test/pass/128x16x16/output.log` (`...,43008M,...`).
+
+**So every `mem_test` job receives 42 GiB/node** (43008 MiB = 42 GiB exactly)
+**— 5.25 GiB/rank** at 8 tasks/node (43008 ÷ 8 = 5376 MiB = 5.25 GiB).
+
+The May 2026 benchmark (`sacct` job 18855130, 2026-05-26, referenced earlier
+in this document as completing at 16,384 elements/rank) received `ReqMem`
+7864320M over 16 nodes: 7864320 ÷ 16 = **491520 MiB/node = 480 GiB/node = 60
+GiB/rank**.
+
+**That is 11.4x more memory per rank** (60 ÷ 5.25 ≈ 11.43), **for jobs whose
+`#SBATCH` blocks are identical.** Both the `mem_test/full` jobscript
+(`scripts/jobscripts/LUMI-G/mem_test/full.sh`) and the May benchmark's
+request `--partition=standard-g --nodes=16 --ntasks-per-node=8
+--gpus-per-node=8 --cpus-per-task=6`, and **neither requests memory at all**:
+there is no `--mem`, `--mem-per-cpu`, `--mem-per-gpu` or `--exclusive`
+anywhere under `scripts/` (checked directly: `grep -rn -- '--mem' scripts/`
+and `grep -rln -- '--exclusive' scripts/` both return nothing). The only
+related line is `scripts/functions.sh:151`,
+`printf "Job Memory: %s\n" $SLURM_JOB_MEMORY`, which only *prints*
+`SLURM_JOB_MEMORY` — and it prints empty in the captured logs, confirming no
+explicit request was made, not that none was granted.
+
+The arithmetic pins this to a **per-CPU** default rather than a per-node or
+per-GPU one. Each node requests 8 tasks x 6 cpus-per-task = 48 CPUs:
+
+- now: 43008 MiB ÷ 48 CPUs = **896 MiB/CPU**
+- May: 491520 MiB ÷ 48 CPUs = **10240 MiB/CPU = 10 GiB/CPU**
+
+Both are clean round numbers, which is the signature of a partition or
+account default applied per allocated CPU, not an explicit request computed
+from case parameters. **The default changed between May and September.**
+
+**This is why the fitted memory-per-rank curve was always going to cross the
+new budget.** The two completed ladder points in "Reference measurements"
+below give a rough linear fit: 2.74 G at 2,048 elements/rank and 4.56 G at
+4,096 elements/rank imply roughly 0.9 MiB/element plus roughly 0.9-0.95 GiB
+fixed per-rank overhead, i.e. **roughly 8.2-8.35 GiB/rank at 8,192
+elements/rank**. Against the 5.25 GiB/rank now granted, that cannot fit and
+no code change is required to explain the failure. It is also consistent with
+the two other established results in this document: pure Neko passes every
+size because its smaller footprint does fit ("Status at a glance", and
+commit `f6b947f` in the Progress log), and per-element cost has *fallen* 4.2%
+since May (previous section). All three now agree with a shrunk budget and
+disagree with a growing one.
+
+**The failures are genuine kernel OOM kills**, worth recording precisely
+since the `sacct` job-level `State` does not say so (next section corrects
+the reference table for exactly this reason). From
+`mem_test/fail/full/error.log`:
+
+```
+[2026-09-14T17:14:38.784] error: Detected 1 oom_kill event in StepId=22035606.1. Some of the step tasks have been OOM Killed.
+srun: error: nid005475: tasks 0-2,5,7: Terminated
+srun: Force Terminated StepId=22035606.1
+```
+
+and from `mem_test/fail/64x32x32/error.log`:
+
+```
+[2026-09-14T17:14:22.149] error: Detected 1 oom_kill event in StepId=22035605.1. Some of the step tasks have been OOM Killed.
+srun: error: nid005651: task 3: Out Of Memory
+srun: Terminating StepId=22035605.1
+```
+
+**What is, and is not, established.** The evidence shows the two jobs
+received different per-CPU memory defaults from `#SBATCH` blocks that are
+textually identical. *Why* the default changed cannot be determined from
+this container — the possibilities, none checked against each other:
+
+1. A LUMI site-policy or partition-configuration change to the
+   `standard-g` default between May and September.
+2. The May job having been submitted with additional `sbatch`
+   command-line arguments (e.g. `--mem=0` or similar) not visible in any
+   committed jobscript — command-line flags override a script's own
+   `#SBATCH` lines and would not appear in this repository either way.
+3. Some other account- or reservation-level default specific to that
+   submission.
+
+What **is** certain, and what matters for this investigation, is narrower
+than any of those three: memory was never requested explicitly in either
+case, so whichever default applied, it applied silently, and the fix does
+not depend on knowing which of the three it was.
+
+**The actionable fix.** Add an explicit memory request —
+`#SBATCH --mem=0`, which requests the whole node under Slurm — to
+`scripts/jobscripts/LUMI-G/mem_test/full.sh` and its siblings
+(`default.sh`, `small.sh`), and re-run the ladder on LUMI. If the OOMs
+disappear, the `ReqMem`-gap explanation is confirmed and this question is
+closed. **This is a cluster action and is explicitly NOT VERIFIED from this
+container** — it needs a real LUMI submission, which has not been done as
+part of this change.
 
 ## Reference measurements
 
@@ -656,8 +807,34 @@ appended to each log by `mem_test.sh`. Update as better numbers arrive.
 | `small` | 1 | 8,192 | 4 MiB (invalid) | — | FAILED, time limit | sampling missed it |
 | `64x16x16` | 8 | 2,048 | 2.74 G | 2.66 G | TIMEOUT | into time loop |
 | `128x16x16` | 8 | 4,096 | 4.56 G | 4.36 G | TIMEOUT | into time loop |
-| `64x32x32` | 8 | 8,192 | 5.81 G | 5.02 G | OUT_OF_MEMORY | adjoint Gauss coef |
-| `full` | 128 | 8,192 | 5.42 G | 4.73 G | OOM | setup |
+| `64x32x32` | 8 | 8,192 | 5.81 G | 5.02 G | FAILED, 1:0 (step `.1` OUT_OF_MEMORY) | adjoint Gauss coef |
+| `full` | 128 | 8,192 | 5.42 G | 4.73 G | FAILED, 1:0 (step `.1` CANCELLED, oom_kill) | setup |
+
+**Corrected.** `64x32x32` and `full` were previously recorded here as
+`OUT_OF_MEMORY` and `OOM` respectively. Neither job's own `sacct` row says
+that — both are `FAILED` with exit code `1:0` (Neko's own allocation call
+aborting, hence exit 1), verified directly against the job-summary lines in
+the two logs:
+
+```
+22035605,mem_test/64x32x32,FAILED,1:0,1,,43008M,00:00:33
+22035606,mem_test/full,FAILED,1:0,16,,688128M,00:00:50
+```
+
+The memory kill is real, it just surfaces one level down, as a Slurm *step*
+state rather than the job state: `64x32x32`'s `.1` step is
+`22035605.1,select_gpu,OUT_OF_MEMORY,0:125,...`, a clean single-step OOM;
+`full`'s `.1` step is `22035606.1,select_gpu,CANCELLED,0:15,...`, `error.log`
+showing repeated `oom_kill` events across several nodes before the step is
+force-terminated — a cascade rather than a single clean kill, consistent with
+128 tasks across 16 nodes all hitting the same per-rank ceiling at once. Both
+`error.log`s independently confirm the kernel event
+(`error: Detected 1 oom_kill event in StepId=...`). **Anyone grepping `sacct`
+output for `State=OUT_OF_MEMORY` at the job level will find nothing for
+either row and should not conclude there was no OOM** — check the `.1` step
+row and `error.log`, not the job-summary row. See "The `ReqMem` gap,
+explained" above for why the budget these jobs actually received made this
+inevitable.
 
 Gather-scatter sizes from the logs, useful as a sanity check that a build
 still constructs the same objects:
@@ -925,13 +1102,42 @@ Newest last. Keep entries to a line or two.
   the CPU-vs-CUDA control that would test for a device-side regression has
   not been run. Full detail in "The anchor measurement, and what it found",
   above.
+- **2026-09-15** — **The May-vs-September capacity contradiction is
+  resolved.** `ReqMem` in `sacct` is a job total, not a per-node figure:
+  proven from the logs, where `full`'s `688128M` over 16 nodes and
+  `64x32x32`'s `43008M` over 1 node agree exactly per-node (43008 MiB/node,
+  5.25 GiB/rank at 8 tasks/node). The May job (`sacct` 18855130) received
+  `7864320M` over 16 nodes — 60 GiB/rank, 11.4x more — from an `#SBATCH`
+  block identical to the current one, which requests no memory explicitly in
+  either case (896 MiB/CPU now vs 10240 MiB/CPU in May: both clean numbers,
+  the signature of a changed partition/account default, not a changed
+  request). The previously-recorded "51.25 GiB/rank" May figure was actual
+  usage, not the budget, and sits comfortably under the now-known 60 GiB/rank
+  it actually had. Against 5.25 GiB/rank now, the reference table's own
+  fitted per-rank cost (~8.2-8.35 GiB at 8,192 elements/rank) cannot fit,
+  which needs no code regression to explain. *Why* the default changed
+  (LUMI policy, partition reconfiguration, or an `sbatch` flag on the May
+  submission not visible in any committed jobscript) is not determinable from
+  this container and is recorded as open possibilities, not a conclusion.
+  Also corrected two termination-cause errors this carried: `64x32x32` and
+  `full` are `sacct`-job-level `FAILED` (exit `1:0`), not `OUT_OF_MEMORY`/
+  `OOM` — the kernel OOM is real and confirmed in both `error.log`s, it just
+  surfaces as a step-level state (`.1` step `OUT_OF_MEMORY` for `64x32x32`,
+  `.1` step `CANCELLED` after cascading `oom_kill` events for `full`), not
+  the job's own state. Actionable fix, a cluster action not verifiable here:
+  add `#SBATCH --mem=0` to the `mem_test` jobscripts and re-run. Full detail
+  in "The `ReqMem` gap, explained" under Bisecting, above.
 - **_next_** — (1) Run the CPU-vs-CUDA control this measurement cannot
   substitute for: same case, same commit pair, device backend, to check
   whether the regression is device-side and therefore invisible to the
-  result above. (2) Resolve the May-vs-September capacity contradiction —
-  check `n_memory`/active fields/polynomial order differences between the
-  benchmark case and `mem_test`, and chase the unexplained `ReqMem`
-  7864320M vs 43008M gap. (3) Run the ladder on LUMI with the probes for the
-  per-rank component budget. (4) Recover the May benchmark results from LUMI
-  for a historical baseline, since `single_node_capacity.csv` swept to
-  16,384 elements per rank at `n_memory=100`, double what fails now.
+  result above. **This is now running** (checked directly: a build/measure
+  orchestrator is live under `/tmp/neko-top-bisect` as of 2026-09-15 — the
+  `top-cuda` endpoint has three completed runs, the `anchor-cuda` pair is
+  still building) but has not reported a result, so the device path remains
+  formally unexcluded. (2) Add `#SBATCH --mem=0` to the `mem_test`
+  jobscripts and re-run on LUMI to confirm the OOMs disappear now that the
+  `ReqMem` gap is understood — a cluster action, not verifiable from this
+  container. (3) Run the ladder on LUMI with the probes for the per-rank
+  component budget. (4) Recover the May benchmark results from LUMI for a
+  historical baseline, since `single_node_capacity.csv` swept to 16,384
+  elements per rank at `n_memory=100`, double what fails now.
