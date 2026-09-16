@@ -3,7 +3,7 @@ See full.log for the status output.
 ================================================================================
 SLURM Job: mem_test/full
 ================================================================================
-Job ID: 22095354
+Job ID: 22095752
 Job Node: nid[007054-007069]
 Job Partition: standard-g
 Job Account: project_465002946
@@ -38,8 +38,8 @@ Running example: mem_test/full.
 
 
  -------Job Information--------
- Start time: 14:18 / 2026-09-16
- Running on: 128 MPI ranks
+ Start time: 14:35 / 2026-09-16
+ Running on: 128 MPI ranks, using 6 thrds each
  CPU type  : AMD EPYC 7A53 64-Core Processor
  Bcknd type: Accelerator (HIP)
  Dev. name : AMD Instinct MI250X
@@ -60,19 +60,19 @@ Running example: mem_test/full.
   Reading deformation data
   Mesh read, setting up connectivity
   Done setting up mesh and connectivity
-  Mesh and connectivity setup (excluding read) time (s):  4.348355
+  Mesh and connectivity setup (excluding read) time (s):  4.614306
 
   --------Gather-Scatter--------
   Comm         :         auto
   Avg. internal:       649168
   Avg. external:       586800
   Backend      :          hip
-  MPI          :  1.946E-03 s
-  MPI neigh.   :  1.924E-03 s
-  MPI RMA      :  2.815E-03 s
-  Crystal      :  4.524E-03 s
-  Dev. MPI [01]:  3.386E-04 s
-  Dev. Crystal :  1.037E-03 s
+  MPI          :  1.948E-03 s
+  MPI neigh.   :  1.909E-03 s
+  MPI RMA      :  2.851E-03 s
+  Crystal      :  4.558E-03 s
+  Dev. MPI [10]:  3.490E-04 s
+  Dev. Crystal :  1.079E-03 s
   Tuned comm   :   Device MPI
 
   ---------Coefficients---------
@@ -110,12 +110,12 @@ Running example: mem_test/full.
     Avg. internal:       196320
     Avg. external:       260128
     Backend      :          hip
-    MPI          :  7.817E-04 s
-    MPI neigh.   :  7.791E-04 s
-    MPI RMA      :  1.231E-03 s
-    Crystal      :  2.046E-03 s
-    Dev. MPI [11]:  1.793E-04 s
-    Dev. Crystal :  7.838E-04 s
+    MPI          :  7.967E-04 s
+    MPI neigh.   :  7.887E-04 s
+    MPI RMA      :  1.255E-03 s
+    Crystal      :  2.050E-03 s
+    Dev. MPI [10]:  1.936E-04 s
+    Dev. Crystal :  8.217E-04 s
     Tuned comm   :   Device MPI
 
     --------Gather-Scatter--------
@@ -123,12 +123,12 @@ Running example: mem_test/full.
     Avg. internal:        66472
     Avg. external:       145944
     Backend      :          hip
-    MPI          :  4.432E-04 s
-    MPI neigh.   :  4.435E-04 s
-    MPI RMA      :  7.273E-04 s
-    Crystal      :  1.019E-03 s
-    Dev. MPI [01]:  1.575E-04 s
-    Dev. Crystal :  4.495E-04 s
+    MPI          :  4.696E-04 s
+    MPI neigh.   :  4.627E-04 s
+    MPI RMA      :  7.525E-04 s
+    Crystal      :  1.042E-03 s
+    Dev. MPI [10]:  1.729E-04 s
+    Dev. Crystal :  4.770E-04 s
     Tuned comm   :   Device MPI
 
     --------Gather-Scatter--------
@@ -136,12 +136,12 @@ Running example: mem_test/full.
     Avg. internal:         1008
     Avg. external:        64528
     Backend      :          hip
-    MPI          :  2.392E-04 s
-    MPI neigh.   :  2.398E-04 s
-    MPI RMA      :  4.434E-04 s
-    Crystal      :  4.132E-04 s
-    Dev. MPI [10]:  1.179E-04 s
-    Dev. Crystal :  3.043E-04 s
+    MPI          :  2.519E-04 s
+    MPI neigh.   :  2.558E-04 s
+    MPI RMA      :  4.776E-04 s
+    Crystal      :  4.319E-04 s
+    Dev. MPI [01]:  1.321E-04 s
+    Dev. Crystal :  3.440E-04 s
     Tuned comm   :   Device MPI
 
     -------------PHMG-------------
@@ -209,12 +209,12 @@ Running example: mem_test/full.
  Avg. internal:       649168
  Avg. external:       586800
  Backend      :          hip
- MPI          :  1.943E-03 s
- MPI neigh.   :  1.924E-03 s
- MPI RMA      :  2.822E-03 s
- Crystal      :  4.550E-03 s
- Dev. MPI [01]:  3.397E-04 s
- Dev. Crystal :  1.032E-03 s
+ MPI          :  1.931E-03 s
+ MPI neigh.   :  1.907E-03 s
+ MPI RMA      :  2.919E-03 s
+ Crystal      :  4.535E-03 s
+ Dev. MPI [10]:  3.518E-04 s
+ Dev. Crystal :  1.085E-03 s
  Tuned comm   :   Device MPI
 
  --------Gather-Scatter--------
@@ -222,12 +222,12 @@ Running example: mem_test/full.
  Avg. internal:      2327472
  Avg. external:      1633360
  Backend      :          hip
- MPI          :  6.990E-03 s
- MPI neigh.   :  7.087E-03 s
- MPI RMA      :  9.619E-03 s
- Crystal      :  1.850E-02 s
- Dev. MPI [10]:  1.344E-03 s
- Dev. Crystal :  6.173E-03 s
+ MPI          :  7.006E-03 s
+ MPI neigh.   :  7.144E-03 s
+ MPI RMA      :  9.759E-03 s
+ Crystal      :  1.826E-02 s
+ Dev. MPI [01]:  1.347E-03 s
+ Dev. Crystal :  6.067E-03 s
  Tuned comm   :   Device MPI
 
  ---------Coefficients---------
@@ -263,12 +263,12 @@ Running example: mem_test/full.
   Avg. internal:       196320
   Avg. external:       260128
   Backend      :          hip
-  MPI          :  7.890E-04 s
-  MPI neigh.   :  7.815E-04 s
-  MPI RMA      :  1.226E-03 s
-  Crystal      :  2.047E-03 s
-  Dev. MPI [01]:  1.816E-04 s
-  Dev. Crystal :  7.876E-04 s
+  MPI          :  8.037E-04 s
+  MPI neigh.   :  7.909E-04 s
+  MPI RMA      :  1.250E-03 s
+  Crystal      :  2.051E-03 s
+  Dev. MPI [10]:  1.951E-04 s
+  Dev. Crystal :  8.194E-04 s
   Tuned comm   :   Device MPI
 
   --------Gather-Scatter--------
@@ -276,12 +276,12 @@ Running example: mem_test/full.
   Avg. internal:        66472
   Avg. external:       145944
   Backend      :          hip
-  MPI          :  4.431E-04 s
-  MPI neigh.   :  4.470E-04 s
-  MPI RMA      :  7.135E-04 s
-  Crystal      :  1.025E-03 s
-  Dev. MPI [10]:  1.610E-04 s
-  Dev. Crystal :  4.556E-04 s
+  MPI          :  4.679E-04 s
+  MPI neigh.   :  4.657E-04 s
+  MPI RMA      :  7.586E-04 s
+  Crystal      :  1.056E-03 s
+  Dev. MPI [10]:  1.752E-04 s
+  Dev. Crystal :  4.709E-04 s
   Tuned comm   :   Device MPI
 
   --------Gather-Scatter--------
@@ -289,12 +289,12 @@ Running example: mem_test/full.
   Avg. internal:         1008
   Avg. external:        64528
   Backend      :          hip
-  MPI          :  2.441E-04 s
-  MPI neigh.   :  2.495E-04 s
-  MPI RMA      :  4.526E-04 s
-  Crystal      :  4.236E-04 s
-  Dev. MPI [10]:  1.225E-04 s
-  Dev. Crystal :  3.185E-04 s
+  MPI          :  2.577E-04 s
+  MPI neigh.   :  2.610E-04 s
+  MPI RMA      :  4.871E-04 s
+  Crystal      :  4.298E-04 s
+  Dev. MPI [01]:  1.312E-04 s
+  Dev. Crystal :  3.493E-04 s
   Tuned comm   :   Device MPI
 
   -------------PHMG-------------
@@ -344,17 +344,10 @@ Running example: mem_test/full.
  --Adjoint initial condition---
  Type : uniform
  Value: [0.000000E+00, 0.000000E+00, 0.000000E+00]
-Type : uniform
-Value: 0.000000E+00
-
- -----Adding write output------
- File name        : adjoint.fld
- Write control    : never
- Output precision : single
 ERROR: An error occurred during execution.
 See error.log for details.
 JobID,JobName,State,ExitCode,NNodes,NTasks,ReqMem,Elapsed,MaxRSS,MaxRSSTask,MaxRSSNode,AveRSS,MaxVMSize,TRESUsageInMax
-22095354,mem_test/full,FAILED,1:0,16,,7864320M,00:01:38,,,,,,
-22095354.batch,batch,FAILED,1:0,1,1,,00:01:38,19005440,0,nid007054,19005440,1347682304,cpu=00:00:00,energy=60373,fs/disk=20862791,mem=19005440,pages=0,vmem=1347682304
-22095354.0,select_gpu,COMPLETED,0:0,1,1,,00:00:00,4272128,0,nid007054,4272128,585601024,cpu=00:00:00,energy=53,fs/disk=0,mem=4272128,pages=0,vmem=585601024
-22095354.1,select_gpu,CANCELLED,0:15,16,128,,00:01:32,7720804352,112,nid007068,7538181216,25641091072,cpu=00:01:25,energy=42222,fs/disk=247438964,mem=7720804352,pages=1655,vmem=25641091072
+22095752,mem_test/full,FAILED,1:0,16,,7864320M,00:01:39,,,,,,
+22095752.batch,batch,FAILED,1:0,1,1,,00:01:39,20037632,0,nid007054,20037632,1347686400,cpu=00:00:00,energy=63109,fs/disk=20862407,mem=20037632,pages=0,vmem=1347686400
+22095752.0,select_gpu,COMPLETED,0:0,1,1,,00:00:00,4210688,0,nid007054,4210688,585601024,cpu=00:00:00,energy=0,fs/disk=0,mem=4210688,pages=0,vmem=585601024
+22095752.1,select_gpu,CANCELLED,0:15,16,128,,00:01:36,7706652672,70,nid007062,7512276640,26559500288,cpu=00:06:30,energy=46009,fs/disk=247417827,mem=7706652672,pages=1666,vmem=26559500288
