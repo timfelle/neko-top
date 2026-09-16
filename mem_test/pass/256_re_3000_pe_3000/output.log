@@ -1,0 +1,46 @@
+Executing Neko.
+See 256_re_3000_pe_3000.log for the status output.
+================================================================================
+SLURM Job: static_mixer/petsc_phmg/256_re_3000_pe_3000
+================================================================================
+Job ID: 19003601
+Job Node: nid[007190-007191,007274-007275,007307-007308,007428-007429,007431-007432,007465-007466,007531-007532,007587-007588]
+Job Partition: standard-g
+Job Account: project_465002946
+Job Time: 
+Job Memory: 
+Job CPUs: 56(x16)
+Job GPUs: 0,1,2,3,4,5,6,7
+Job QOS: normal
+Job Reservation: 
+Job Work Directory: /pfs/lustrep2/scratch/project_465002485/tim/logs/static_mixer/petsc_phmg/256_re_3000_pe_3000
+Job Output Directory: /pfs/lustrep2/scratch/project_465002485/tim/logs/static_mixer/petsc_phmg/256_re_3000_pe_3000
+Job Output File: static_mixer/petsc_phmg/256_re_3000_pe_3000
+Job Error File: static_mixer/petsc_phmg/256_re_3000_pe_3000
+================================================================================
+Finding Neko executable.
+================================================================================
+Using user provided Neko executable.
+================================================================================
+Running example: static_mixer/petsc_phmg/256_re_3000_pe_3000.
+================================================================================
+
+MPICH Slingshot Network Summary: 24 network timeouts
+
+
+Example concluded.
+Execution time: 15:27:24
+================================================================================
+Cleaning up the results.
+================================================================================
+Files will be moved to results folder: 
+	/pfs/lustrep4/users/olsentim/Projects/neko-top/results/static_mixer/petsc_phmg/256_re_3000_pe_3000
+
+Archiving nek5000 files.
+
+Clean-up concluded.
+================================================================================
+JobID,JobName,State,ExitCode,NNodes,NTasks,ReqMem,Elapsed,MaxRSS,MaxRSSTask,MaxRSSNode,AveRSS,MaxVMSize,TRESUsageInMax
+19003601,static_mixer/petsc_phmg/256_re_3000_pe_3000,COMPLETED,0:0,16,,7864320M,18:27:39,,,,,,
+19003601.batch,batch,COMPLETED,0:0,1,1,,18:27:39,18960384,0,nid007190,18960384,1308172288,cpu=04:52:00,energy=78682435,fs/disk=7599019015641,mem=18960384,pages=9,vmem=1308172288
+19003601.0,select_gpu,COMPLETED,0:0,16,128,,15:27:22,10986164224,76,nid007432,9000641760,27794493440,cpu=16:48:59,energy=73103728,fs/disk=20294697331,mem=10986164224,pages=4164,vmem=27794493440

@@ -1,0 +1,43 @@
+Executing Neko.
+See 256_re_1500_pe_1500.log for the status output.
+================================================================================
+SLURM Job: static_mixer/petsc_phmg/256_re_1500_pe_1500
+================================================================================
+Job ID: 19003599
+Job Node: nid[006562-006563,006566-006567,006604-006605,006746-006747,006858-006859,006862-006863,006911-006912,007086-007087]
+Job Partition: standard-g
+Job Account: project_465002946
+Job Time: 
+Job Memory: 
+Job CPUs: 56(x16)
+Job GPUs: 0,1,2,3,4,5,6,7
+Job QOS: normal
+Job Reservation: 
+Job Work Directory: /pfs/lustrep2/scratch/project_465002485/tim/logs/static_mixer/petsc_phmg/256_re_1500_pe_1500
+Job Output Directory: /pfs/lustrep2/scratch/project_465002485/tim/logs/static_mixer/petsc_phmg/256_re_1500_pe_1500
+Job Output File: static_mixer/petsc_phmg/256_re_1500_pe_1500
+Job Error File: static_mixer/petsc_phmg/256_re_1500_pe_1500
+================================================================================
+Finding Neko executable.
+================================================================================
+Using user provided Neko executable.
+================================================================================
+Running example: static_mixer/petsc_phmg/256_re_1500_pe_1500.
+================================================================================
+
+Example concluded.
+Execution time: 13:23:14
+================================================================================
+Cleaning up the results.
+================================================================================
+Files will be moved to results folder: 
+	/pfs/lustrep4/users/olsentim/Projects/neko-top/results/static_mixer/petsc_phmg/256_re_1500_pe_1500
+
+Archiving nek5000 files.
+
+Clean-up concluded.
+================================================================================
+JobID,JobName,State,ExitCode,NNodes,NTasks,ReqMem,Elapsed,MaxRSS,MaxRSSTask,MaxRSSNode,AveRSS,MaxVMSize,TRESUsageInMax
+19003599,static_mixer/petsc_phmg/256_re_1500_pe_1500,COMPLETED,0:0,16,,7864320M,16:23:57,,,,,,
+19003599.batch,batch,COMPLETED,0:0,1,1,,16:23:57,18997248,0,nid006562,18997248,1308225536,cpu=04:49:46,energy=65724752,fs/disk=7594442081941,mem=18997248,pages=9,vmem=1308225536
+19003599.0,select_gpu,COMPLETED,0:0,16,128,,13:23:13,11529052160,4,nid006562,9053020928,28399976448,cpu=14:30:10,energy=61499373,fs/disk=20294700433,mem=11529052160,pages=3881,vmem=28399976448

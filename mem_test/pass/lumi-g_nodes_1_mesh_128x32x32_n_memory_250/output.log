@@ -1,0 +1,48 @@
+Executing Neko.
+See lumi-g_nodes_1_mesh_128x32x32_n_memory_250.log for the status output.
+================================================================================
+SLURM Job: benchmark/GNU_O3/lumi-g_nodes_1_mesh_128x32x32_n_memory_250
+================================================================================
+Job ID: 18728316
+Job Node: nid005798
+Job Partition: standard-g
+Job Account: project_465002946
+Job Time: 
+Job Memory: 
+Job CPUs: 56
+Job GPUs: 0,1,2,3,4,5,6,7
+Job QOS: normal
+Job Reservation: 
+Job Work Directory: /pfs/lustrep2/scratch/project_465002485/tim/logs/benchmark/GNU_O3/lumi-g_nodes_1_mesh_128x32x32_n_memory_250
+Job Output Directory: /pfs/lustrep2/scratch/project_465002485/tim/logs/benchmark/GNU_O3/lumi-g_nodes_1_mesh_128x32x32_n_memory_250
+Job Output File: benchmark/GNU_O3/lumi-g_nodes_1_mesh_128x32x32_n_memory_250
+Job Error File: benchmark/GNU_O3/lumi-g_nodes_1_mesh_128x32x32_n_memory_250
+================================================================================
+Finding Neko executable.
+================================================================================
+Using user provided Neko executable.
+================================================================================
+Running example: benchmark/GNU_O3/lumi-g_nodes_1_mesh_128x32x32_n_memory_250.
+================================================================================
+ Starting iteration            1
+
+Example concluded.
+Execution time: 00:24:51
+================================================================================
+Cleaning up the results.
+================================================================================
+Files will be moved to results folder: 
+	/pfs/lustrep4/users/olsentim/Projects/neko-top/results/benchmark/GNU_O3/lumi-g_nodes_1_mesh_128x32x32_n_memory_250
+
+Archiving nek5000 files.
+	- sensitivity0.nek5000
+	- forward_fields0.nek5000
+	- adjoint_fields0.nek5000
+	- design0.nek5000
+
+Clean-up concluded.
+================================================================================
+JobID,JobName,State,ExitCode,NNodes,NTasks,ReqMem,Elapsed,MaxRSS,MaxRSSTask,MaxRSSNode,AveRSS,MaxVMSize,TRESUsageInMax
+18728316,benchmark/GNU_O3/lumi-g_nodes_1_mesh_128x32x32_n_memory_250,COMPLETED,0:0,1,,491520M,00:25:08,,,,,,
+18728316.batch,batch,COMPLETED,0:0,1,1,,00:25:08,19996672,0,nid005798,19996672,285634560,cpu=00:00:06,energy=2952148,fs/disk=3081977634,mem=19996672,pages=8,vmem=285634560
+18728316.0,select_gpu,COMPLETED,0:0,1,8,,00:24:51,52753555456,3,nid005798,52719921664,87631622144,cpu=01:40:48,energy=2942480,fs/disk=5992405722,mem=52753555456,pages=1494,vmem=87631622144

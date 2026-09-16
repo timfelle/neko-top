@@ -1,0 +1,55 @@
+Executing Neko.
+See tgv_2M.log for the status output.
+================================================================================
+SLURM Job: tgv_2M
+================================================================================
+Job ID: 17584722
+Job Node: nid[005567-005569,007672-007686,007732-007745]
+Job Partition: standard-g
+Job Account: project_465002485
+Job Time: 
+Job Memory: 
+Job CPUs: 56(x32)
+Job GPUs: 0,1,2,3,4,5,6,7
+Job QOS: normal
+Job Reservation: 
+Job Work Directory: /pfs/lustrep2/scratch/project_465002485/tim/logs/neko/tgv_2M
+Job Output Directory: /pfs/lustrep2/scratch/project_465002485/tim/logs/neko/tgv_2M
+Job Output File: tgv_2M
+Job Error File: tgv_2M
+================================================================================
+Finding Neko executable.
+================================================================================
+Building user Neko based on the following files
+	- tgv.f90
+
+N E K O build tool, Version 1.99.3
+(build: 2026-04-17 on x86_64-pc-linux-gnu using cray)
+Building user NEKO ...
+Detected the module named 'user' in tgv.f90
+No custom modules detected.
+No custom modules register types.
+tgv.f90:
+usr_driver.f90:
+/opt/cray/pe/cce/20.0.0/cce/x86_64/bin/../../../binutils/x86_64/x86_64-pc-linux-gnu/bin/ld: warning: size of symbol `$data_init$comm_' changed from 4 in /tmp/pe_4103/tgv_1.o to 8 in /pfs/lustrep4/users/olsentim/Projects/neko-top/external/neko/lib/libneko.a(comm.o)
+ Done!
+================================================================================
+Running example: tgv_2M.
+================================================================================
+
+Example concluded.
+Execution time: 00:02:07
+================================================================================
+Cleaning up the results.
+================================================================================
+Files will be moved to results folder: 
+	/pfs/lustrep4/users/olsentim/Projects/neko-top/results/neko/tgv_2M
+
+Archiving nek5000 files.
+
+Clean-up concluded.
+================================================================================
+JobID,JobName,State,ExitCode,NNodes,NTasks,ReqMem,Elapsed,MaxRSS,MaxRSSTask,MaxRSSNode,AveRSS,MaxVMSize,TRESUsageInMax
+17584722,tgv_2M,COMPLETED,0:0,32,,15728640M,00:08:59,,,,,,
+17584722.batch,batch,COMPLETED,0:0,1,1,,00:08:59,17915904,0,nid005567,17915904,1308217344,cpu=00:09:50,energy=270782,fs/disk=262125008373,mem=17915904,pages=10,vmem=1308217344
+17584722.0,select_gpu,COMPLETED,0:0,32,256,,00:02:08,13356236800,243,nid007744,11373985280,27031273472,cpu=00:02:04,energy=81177,fs/disk=82869408,mem=13356236800,pages=1656,vmem=27031273472

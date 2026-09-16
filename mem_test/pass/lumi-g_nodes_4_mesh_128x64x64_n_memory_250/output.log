@@ -1,0 +1,80 @@
+Executing Neko.
+See lumi-g_nodes_4_mesh_128x64x64_n_memory_250.log for the status output.
+================================================================================
+SLURM Job: benchmark/LimitRAMCheckpoints/lumi-g_nodes_4_mesh_128x64x64_n_memory_250
+================================================================================
+Job ID: 18508792
+Job Node: nid[005286,007300-007302]
+Job Partition: standard-g
+Job Account: project_465002485
+Job Time: 
+Job Memory: 
+Job CPUs: 56(x4)
+Job GPUs: 0,1,2,3,4,5,6,7
+Job QOS: normal
+Job Reservation: 
+Job Work Directory: /pfs/lustrep2/scratch/project_465002485/tim/logs/benchmark/LimitRAMCheckpoints/lumi-g_nodes_4_mesh_128x64x64_n_memory_250
+Job Output Directory: /pfs/lustrep2/scratch/project_465002485/tim/logs/benchmark/LimitRAMCheckpoints/lumi-g_nodes_4_mesh_128x64x64_n_memory_250
+Job Output File: benchmark/LimitRAMCheckpoints/lumi-g_nodes_4_mesh_128x64x64_n_memory_250
+Job Error File: benchmark/LimitRAMCheckpoints/lumi-g_nodes_4_mesh_128x64x64_n_memory_250
+================================================================================
+Finding Neko executable.
+================================================================================
+Using user provided Neko executable.
+================================================================================
+Running example: benchmark/LimitRAMCheckpoints/lumi-g_nodes_4_mesh_128x64x64_n_memory_250.
+================================================================================
+ Starting iteration  1
+[CRAYBLAS_WARNING] Application linked against multiple cray-libsci libraries
+[CRAYBLAS_WARNING] Application linked against multiple cray-libsci libraries
+[CRAYBLAS_WARNING] Application linked against multiple cray-libsci libraries
+[CRAYBLAS_WARNING] Application linked against multiple cray-libsci libraries
+[CRAYBLAS_WARNING] Application linked against multiple cray-libsci libraries
+[CRAYBLAS_WARNING] Application linked against multiple cray-libsci libraries
+[CRAYBLAS_WARNING] Application linked against multiple cray-libsci libraries
+[CRAYBLAS_WARNING] Application linked against multiple cray-libsci libraries
+[CRAYBLAS_WARNING] Application linked against multiple cray-libsci libraries
+[CRAYBLAS_WARNING] Application linked against multiple cray-libsci libraries
+[CRAYBLAS_WARNING] Application linked against multiple cray-libsci libraries
+[CRAYBLAS_WARNING] Application linked against multiple cray-libsci libraries
+[CRAYBLAS_WARNING] Application linked against multiple cray-libsci libraries
+[CRAYBLAS_WARNING] Application linked against multiple cray-libsci libraries
+[CRAYBLAS_WARNING] Application linked against multiple cray-libsci libraries
+[CRAYBLAS_WARNING] Application linked against multiple cray-libsci libraries
+[CRAYBLAS_WARNING] Application linked against multiple cray-libsci libraries
+[CRAYBLAS_WARNING] Application linked against multiple cray-libsci libraries
+[CRAYBLAS_WARNING] Application linked against multiple cray-libsci libraries
+[CRAYBLAS_WARNING] Application linked against multiple cray-libsci libraries
+[CRAYBLAS_WARNING] Application linked against multiple cray-libsci libraries
+[CRAYBLAS_WARNING] Application linked against multiple cray-libsci libraries
+[CRAYBLAS_WARNING] Application linked against multiple cray-libsci libraries
+[CRAYBLAS_WARNING] Application linked against multiple cray-libsci libraries
+[CRAYBLAS_WARNING] Application linked against multiple cray-libsci libraries
+[CRAYBLAS_WARNING] Application linked against multiple cray-libsci libraries
+[CRAYBLAS_WARNING] Application linked against multiple cray-libsci libraries
+[CRAYBLAS_WARNING] Application linked against multiple cray-libsci libraries
+[CRAYBLAS_WARNING] Application linked against multiple cray-libsci libraries
+[CRAYBLAS_WARNING] Application linked against multiple cray-libsci libraries
+[CRAYBLAS_WARNING] Application linked against multiple cray-libsci libraries
+[CRAYBLAS_WARNING] Application linked against multiple cray-libsci libraries
+
+Example concluded.
+Execution time: 00:39:17
+================================================================================
+Cleaning up the results.
+================================================================================
+Files will be moved to results folder: 
+	/pfs/lustrep4/users/olsentim/Projects/neko-top/results/benchmark/LimitRAMCheckpoints/lumi-g_nodes_4_mesh_128x64x64_n_memory_250
+
+Archiving nek5000 files.
+	- sensitivity0.nek5000
+	- forward_fields0.nek5000
+	- adjoint_fields0.nek5000
+	- design0.nek5000
+
+Clean-up concluded.
+================================================================================
+JobID,JobName,State,ExitCode,NNodes,NTasks,ReqMem,Elapsed,MaxRSS,MaxRSSTask,MaxRSSNode,AveRSS,MaxVMSize,TRESUsageInMax
+18508792,benchmark/LimitRAMCheckpoints/lumi-g_nodes_4_mesh_128x64x64_n_memory_250,COMPLETED,0:0,4,,1966080M,00:40:12,,,,,,
+18508792.batch,batch,COMPLETED,0:0,1,1,,00:40:12,18968576,0,nid005286,18968576,490258432,cpu=00:01:02,energy=4082843,fs/disk=28288784282,mem=18968576,pages=11,vmem=490258432
+18508792.0,select_gpu,COMPLETED,0:0,4,32,,00:39:17,56888156160,8,nid007300,56840839808,87881039872,cpu=04:04:22,energy=4065016,fs/disk=11925641827,mem=56888156160,pages=3093,vmem=87881039872
