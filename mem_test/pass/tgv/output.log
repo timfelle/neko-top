@@ -1,0 +1,64 @@
+Executing Neko.
+See tgv.log for the status output.
+================================================================================
+SLURM Job: tgv
+================================================================================
+Job ID: 18779887
+Job Node: nid005044
+Job Partition: small-g
+Job Account: project_465002946
+Job Time: 
+Job Memory: 
+Job CPUs: 6
+Job GPUs: 4
+Job QOS: normal
+Job Reservation: 
+Job Work Directory: /pfs/lustrep2/scratch/project_465002485/tim/logs/neko/tgv
+Job Output Directory: /pfs/lustrep2/scratch/project_465002485/tim/logs/neko/tgv
+Job Output File: tgv
+Job Error File: tgv
+================================================================================
+Finding Neko executable.
+================================================================================
+Building user Neko based on the following files
+	- tgv.f90
+
+N E K O build tool, Version 1.99.3
+(build: 2026-05-22 on x86_64-pc-linux-gnu using cray)
+Building user NEKO ...
+Detected the module named 'user' in tgv.f90
+No custom modules detected.
+No custom modules register types.
+tgv.f90:
+usr_driver.f90:
+/opt/cray/pe/cce/20.0.0/cce/x86_64/bin/../../../binutils/x86_64/x86_64-pc-linux-gnu/bin/ld: warning: size of symbol `$data_init$comm_' changed from 4 in /tmp/pe_66270/tgv_1.o to 8 in /pfs/lustrep4/users/olsentim/Projects/neko-top/external/neko/lib/libneko.a(comm.o)
+ Done!
+================================================================================
+Running example: tgv.
+================================================================================
+POST: t:   0.000000000E+00 Ekin:   0.125000000E+00 enst:   0.375000000E+00
+POST: t:   0.500000000E+00 Ekin:   0.123954660E+00 enst:   0.381616554E+00
+POST: t:   0.100000000E+01 Ekin:   0.122861991E+00 enst:   0.408750208E+00
+POST: t:   0.150000000E+01 Ekin:   0.121661665E+00 enst:   0.459840660E+00
+POST: t:   0.200000000E+01 Ekin:   0.120281121E+00 enst:   0.539153362E+00
+POST: t:   0.250000000E+01 Ekin:   0.118637903E+00 enst:   0.648994693E+00
+POST: t:   0.300000000E+01 Ekin:   0.116648407E+00 enst:   0.787875604E+00
+
+Example concluded.
+Execution time: 00:00:12
+================================================================================
+Cleaning up the results.
+================================================================================
+Files will be moved to results folder: 
+	/pfs/lustrep4/users/olsentim/Projects/neko-top/results/neko/tgv
+
+Archiving nek5000 files.
+	- bdry0.nek5000
+	- field0.nek5000
+
+Clean-up concluded.
+================================================================================
+JobID,JobName,State,ExitCode,NNodes,NTasks,ReqMem,Elapsed,MaxRSS,MaxRSSTask,MaxRSSNode,AveRSS,MaxVMSize,TRESUsageInMax
+18779887,tgv,COMPLETED,0:0,1,,65536M,00:00:41,,,,,,
+18779887.batch,batch,COMPLETED,0:0,1,1,,00:00:41,21057536,0,nid005044,21057536,285638656,cpu=00:00:00,energy=59440,fs/disk=368672867,mem=21057536,pages=0,vmem=285638656
+18779887.0,neko,COMPLETED,0:0,1,1,,00:00:12,4206592,0,nid005044,4206592,179064832,cpu=00:00:00,energy=16663,fs/disk=0,mem=4206592,pages=0,vmem=179064832

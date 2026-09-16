@@ -1,0 +1,64 @@
+Executing Neko.
+See lumi-g_nodes_2_mesh_128x32x32_n_memory_500.log for the status output.
+================================================================================
+SLURM Job: benchmark/LimitRAMCheckpoints/lumi-g_nodes_2_mesh_128x32x32_n_memory_500
+================================================================================
+Job ID: 18508790
+Job Node: nid[005558,006741]
+Job Partition: standard-g
+Job Account: project_465002485
+Job Time: 
+Job Memory: 
+Job CPUs: 56(x2)
+Job GPUs: 0,1,2,3,4,5,6,7
+Job QOS: normal
+Job Reservation: 
+Job Work Directory: /pfs/lustrep2/scratch/project_465002485/tim/logs/benchmark/LimitRAMCheckpoints/lumi-g_nodes_2_mesh_128x32x32_n_memory_500
+Job Output Directory: /pfs/lustrep2/scratch/project_465002485/tim/logs/benchmark/LimitRAMCheckpoints/lumi-g_nodes_2_mesh_128x32x32_n_memory_500
+Job Output File: benchmark/LimitRAMCheckpoints/lumi-g_nodes_2_mesh_128x32x32_n_memory_500
+Job Error File: benchmark/LimitRAMCheckpoints/lumi-g_nodes_2_mesh_128x32x32_n_memory_500
+================================================================================
+Finding Neko executable.
+================================================================================
+Using user provided Neko executable.
+================================================================================
+Running example: benchmark/LimitRAMCheckpoints/lumi-g_nodes_2_mesh_128x32x32_n_memory_500.
+================================================================================
+ Starting iteration  1
+[CRAYBLAS_WARNING] Application linked against multiple cray-libsci libraries
+[CRAYBLAS_WARNING] Application linked against multiple cray-libsci libraries
+[CRAYBLAS_WARNING] Application linked against multiple cray-libsci libraries
+[CRAYBLAS_WARNING] Application linked against multiple cray-libsci libraries
+[CRAYBLAS_WARNING] Application linked against multiple cray-libsci libraries
+[CRAYBLAS_WARNING] Application linked against multiple cray-libsci libraries
+[CRAYBLAS_WARNING] Application linked against multiple cray-libsci libraries
+[CRAYBLAS_WARNING] Application linked against multiple cray-libsci libraries
+[CRAYBLAS_WARNING] Application linked against multiple cray-libsci libraries
+[CRAYBLAS_WARNING] Application linked against multiple cray-libsci libraries
+[CRAYBLAS_WARNING] Application linked against multiple cray-libsci libraries
+[CRAYBLAS_WARNING] Application linked against multiple cray-libsci libraries
+[CRAYBLAS_WARNING] Application linked against multiple cray-libsci libraries
+[CRAYBLAS_WARNING] Application linked against multiple cray-libsci libraries
+[CRAYBLAS_WARNING] Application linked against multiple cray-libsci libraries
+[CRAYBLAS_WARNING] Application linked against multiple cray-libsci libraries
+
+Example concluded.
+Execution time: 00:16:29
+================================================================================
+Cleaning up the results.
+================================================================================
+Files will be moved to results folder: 
+	/pfs/lustrep4/users/olsentim/Projects/neko-top/results/benchmark/LimitRAMCheckpoints/lumi-g_nodes_2_mesh_128x32x32_n_memory_500
+
+Archiving nek5000 files.
+	- sensitivity0.nek5000
+	- forward_fields0.nek5000
+	- adjoint_fields0.nek5000
+	- design0.nek5000
+
+Clean-up concluded.
+================================================================================
+JobID,JobName,State,ExitCode,NNodes,NTasks,ReqMem,Elapsed,MaxRSS,MaxRSSTask,MaxRSSNode,AveRSS,MaxVMSize,TRESUsageInMax
+18508790,benchmark/LimitRAMCheckpoints/lumi-g_nodes_2_mesh_128x32x32_n_memory_500,COMPLETED,0:0,2,,983040M,00:16:47,,,,,,
+18508790.batch,batch,COMPLETED,0:0,1,1,,00:16:47,18972672,0,nid005558,18972672,353939456,cpu=00:00:00,energy=1476283,fs/disk=13584762,mem=18972672,pages=8,vmem=353939456
+18508790.0,select_gpu,COMPLETED,0:0,2,16,,00:16:30,46955675648,0,nid005558,46680355584,66393591808,cpu=01:42:38,energy=1526741,fs/disk=1794285006,mem=46955675648,pages=1723,vmem=66393591808

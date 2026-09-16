@@ -1,0 +1,43 @@
+Executing Neko.
+See 128_re_1000_pe_1000.log for the status output.
+================================================================================
+SLURM Job: static_mixer/petsc/128_re_1000_pe_1000
+================================================================================
+Job ID: 19003584
+Job Node: nid[006303-006304]
+Job Partition: standard-g
+Job Account: project_465002946
+Job Time: 
+Job Memory: 
+Job CPUs: 56(x2)
+Job GPUs: 0,1,2,3,4,5,6,7
+Job QOS: normal
+Job Reservation: 
+Job Work Directory: /pfs/lustrep2/scratch/project_465002485/tim/logs/static_mixer/petsc/128_re_1000_pe_1000
+Job Output Directory: /pfs/lustrep2/scratch/project_465002485/tim/logs/static_mixer/petsc/128_re_1000_pe_1000
+Job Output File: static_mixer/petsc/128_re_1000_pe_1000
+Job Error File: static_mixer/petsc/128_re_1000_pe_1000
+================================================================================
+Finding Neko executable.
+================================================================================
+Using user provided Neko executable.
+================================================================================
+Running example: static_mixer/petsc/128_re_1000_pe_1000.
+================================================================================
+
+Example concluded.
+Execution time: 11:10:38
+================================================================================
+Cleaning up the results.
+================================================================================
+Files will be moved to results folder: 
+	/pfs/lustrep4/users/olsentim/Projects/neko-top/results/static_mixer/petsc/128_re_1000_pe_1000
+
+Archiving nek5000 files.
+
+Clean-up concluded.
+================================================================================
+JobID,JobName,State,ExitCode,NNodes,NTasks,ReqMem,Elapsed,MaxRSS,MaxRSSTask,MaxRSSNode,AveRSS,MaxVMSize,TRESUsageInMax
+19003584,static_mixer/petsc/128_re_1000_pe_1000,COMPLETED,0:0,2,,983040M,11:34:39,,,,,,
+19003584.batch,batch,COMPLETED,0:0,1,1,,11:34:39,18956288,0,nid006303,18956288,353886208,cpu=00:37:11,energy=54864512,fs/disk=946026527871,mem=18956288,pages=8,vmem=353886208
+19003584.0,select_gpu,COMPLETED,0:0,2,16,,11:10:38,12420489216,8,nid006304,12356547840,29913784320,cpu=12:08:53,energy=54639105,fs/disk=2548570391,mem=12420489216,pages=3614,vmem=29913784320

@@ -1,0 +1,72 @@
+Executing Neko.
+See unsteady_200_short_small.log for the status output.
+================================================================================
+SLURM Job: unsteady_mixer/unsteady_200_short_small
+================================================================================
+Job ID: 19835128
+Job Node: nid005772
+Job Partition: standard-g
+Job Account: project_465002946
+Job Time: 
+Job Memory: 
+Job CPUs: 56
+Job GPUs: 0,1,2,3,4,5,6,7
+Job QOS: normal
+Job Reservation: 
+Job Work Directory: /pfs/lustrep3/scratch/project_465002946/Mixer/logs/unsteady_mixer/unsteady_200_short_small
+Job Output Directory: /pfs/lustrep3/scratch/project_465002946/Mixer/logs/unsteady_mixer/unsteady_200_short_small
+Job Output File: unsteady_mixer/unsteady_200_short_small
+Job Error File: unsteady_mixer/unsteady_200_short_small
+================================================================================
+Running user provided preparation script.
+================================================================================
+================================================================================
+Finding Neko executable.
+================================================================================
+Using user provided Neko executable.
+================================================================================
+Running example: unsteady_mixer/unsteady_200_short_small.
+================================================================================
+ Starting iteration  1
+ Starting iteration  2
+ Starting iteration  3
+ Starting iteration  4
+ Starting iteration  5
+ Starting iteration  6
+ Starting iteration  7
+ Starting iteration  8
+ Starting iteration  9
+ Starting iteration  10
+ Starting iteration  11
+ Starting iteration  12
+ Starting iteration  13
+ Starting iteration  14
+ Starting iteration  15
+ Starting iteration  16
+ Starting iteration  17
+ Starting iteration  18
+ Starting iteration  19
+ Starting iteration  20
+ Starting iteration  21
+ Starting iteration  22
+ Starting iteration  23
+ Starting iteration  24
+ Starting iteration  25
+
+Example concluded.
+Execution time: 10:12:05
+================================================================================
+Cleaning up the results.
+================================================================================
+Files will be moved to results folder: 
+	/pfs/lustrep4/users/olsentim/Projects/neko-top/results/unsteady_mixer/unsteady_200_short_small
+
+Archiving nek5000 files.
+
+Clean-up concluded.
+================================================================================
+JobID,JobName,State,ExitCode,NNodes,NTasks,ReqMem,Elapsed,MaxRSS,MaxRSSTask,MaxRSSNode,AveRSS,MaxVMSize,TRESUsageInMax
+19835128,unsteady_mixer/unsteady_200_short_small,COMPLETED,0:0,1,,491520M,10:12:52,,,,,,
+19835128.batch,batch,COMPLETED,0:0,1,1,,10:12:52,20008960,0,nid005772,20008960,285782016,cpu=00:00:29,energy=49859646,fs/disk=12810511718,mem=20008960,pages=4,vmem=285782016
+19835128.0,select_gpu,COMPLETED,0:0,1,1,,00:00:00,4866048,0,nid005772,4866048,179736576,cpu=00:00:00,energy=0,fs/disk=0,mem=4866048,pages=0,vmem=179736576
+19835128.1,select_gpu,COMPLETED,0:0,1,8,,10:12:05,9167450112,0,nid005772,9132921344,54383198208,cpu=2-14:16:29,energy=49835411,fs/disk=100137880874,mem=9167450112,pages=4257,vmem=54383198208

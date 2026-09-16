@@ -1,0 +1,49 @@
+Executing Neko.
+See cylinder.log for the status output.
+================================================================================
+SLURM Job: cylinder
+================================================================================
+Job ID: 16125524
+Job Node: nid001043
+Job Partition: standard
+Job Account: project_465002485
+Job Time: 
+Job Memory: 
+Job CPUs: 128
+Job GPUs: 
+Job QOS: normal
+Job Reservation: 
+Job Work Directory: /pfs/lustrep4/users/olsentim/Projects/neko-top/logs/neko/cylinder
+Job Output Directory: /pfs/lustrep4/users/olsentim/Projects/neko-top/logs/neko/cylinder
+Job Output File: cylinder
+Job Error File: cylinder
+================================================================================
+Finding Neko executable.
+================================================================================
+Using default Neko executable.
+================================================================================
+Running example: cylinder.
+================================================================================
+
+Example concluded.
+Execution time: 00:01:40
+================================================================================
+Cleaning up the results.
+================================================================================
+Files will be moved to results folder: 
+	/pfs/lustrep4/users/olsentim/Projects/neko-top/results/neko/cylinder
+
+Archiving nek5000 files.
+	- bdry0.nek5000
+	- field0.nek5000
+	- fluid_stats00.nek5000
+
+Archiving chkp files.
+skipping non-regular file "cylinder.nmsh"
+skipping non-regular file "data"
+Clean-up concluded.
+================================================================================
+JobID,JobName,State,ExitCode,NNodes,NTasks,ReqMem,Elapsed,MaxRSS,MaxRSSTask,MaxRSSNode,AveRSS,MaxVMSize,TRESUsageInMax
+16125524,cylinder,COMPLETED,0:0,1,,229376M,00:01:49,,,,,,
+16125524.batch,batch,COMPLETED,0:0,1,1,,00:01:49,18882560,0,nid001043,18882560,285626368,cpu=00:00:00,energy=64685,fs/disk=10025994,mem=18882560,pages=8,vmem=285626368
+16125524.0,neko,COMPLETED,0:0,1,128,,00:01:40,96854016,0,nid001043,58949280,2491834368,cpu=00:01:25,energy=62126,fs/disk=575182,mem=96854016,pages=197,vmem=2491834368

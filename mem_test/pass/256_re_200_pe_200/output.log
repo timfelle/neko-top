@@ -1,0 +1,43 @@
+Executing Neko.
+See 256_re_200_pe_200.log for the status output.
+================================================================================
+SLURM Job: static_mixer/petsc_phmg/256_re_200_pe_200
+================================================================================
+Job ID: 19040989
+Job Node: nid[006019-006034]
+Job Partition: standard-g
+Job Account: project_465002946
+Job Time: 
+Job Memory: 
+Job CPUs: 56(x16)
+Job GPUs: 0,1,2,3,4,5,6,7
+Job QOS: normal
+Job Reservation: 
+Job Work Directory: /pfs/lustrep2/scratch/project_465002485/tim/logs/static_mixer/petsc_phmg/256_re_200_pe_200
+Job Output Directory: /pfs/lustrep2/scratch/project_465002485/tim/logs/static_mixer/petsc_phmg/256_re_200_pe_200
+Job Output File: static_mixer/petsc_phmg/256_re_200_pe_200
+Job Error File: static_mixer/petsc_phmg/256_re_200_pe_200
+================================================================================
+Finding Neko executable.
+================================================================================
+Using user provided Neko executable.
+================================================================================
+Running example: static_mixer/petsc_phmg/256_re_200_pe_200.
+================================================================================
+
+Example concluded.
+Execution time: 21:08:46
+================================================================================
+Cleaning up the results.
+================================================================================
+Files will be moved to results folder: 
+	/pfs/lustrep4/users/olsentim/Projects/neko-top/results/static_mixer/petsc_phmg/256_re_200_pe_200
+
+Archiving nek5000 files.
+
+Clean-up concluded.
+================================================================================
+JobID,JobName,State,ExitCode,NNodes,NTasks,ReqMem,Elapsed,MaxRSS,MaxRSSTask,MaxRSSNode,AveRSS,MaxVMSize,TRESUsageInMax
+19040989,static_mixer/petsc_phmg/256_re_200_pe_200,COMPLETED,0:0,16,,7864320M,1-00:05:15,,,,,,
+19040989.batch,batch,COMPLETED,0:0,1,1,,1-00:05:15,17907712,0,nid006019,17907712,1308192768,cpu=04:48:26,energy=118712142,fs/disk=7596241523494,mem=17907712,pages=8,vmem=1308192768
+19040989.0,select_gpu,COMPLETED,0:0,16,128,,21:08:46,13146255360,42,nid006024,11190922592,62513217536,cpu=23:31:44,energy=112432672,fs/disk=20303212540,mem=13146255360,pages=6128,vmem=62513217536

@@ -1,0 +1,49 @@
+Executing Neko.
+See steady_mixer.log for the status output.
+================================================================================
+SLURM Job: test_mixer
+================================================================================
+Job ID: 17546051
+Job Node: nid005179
+Job Partition: standard-g
+Job Account: project_465002485
+Job Time: 
+Job Memory: 
+Job CPUs: 56
+Job GPUs: 0,1,2,3,4,5,6,7
+Job QOS: normal
+Job Reservation: 
+Job Work Directory: /pfs/lustrep2/scratch/project_465002485/tim/logs/neko/test_mixer
+Job Output Directory: /pfs/lustrep2/scratch/project_465002485/tim/logs/neko/test_mixer
+Job Output File: test_mixer
+Job Error File: test_mixer
+================================================================================
+Running user provided preparation script.
+================================================================================
+Generating mesh with dimensions: 64 32 32
+Mesh file 'box.nmsh' already exists. Skipping mesh generation.
+================================================================================
+Finding Neko executable.
+================================================================================
+Using default Neko executable.
+================================================================================
+Running example: test_mixer.
+================================================================================
+
+Example concluded.
+Execution time: 00:02:55
+================================================================================
+Cleaning up the results.
+================================================================================
+Files will be moved to results folder: 
+	/pfs/lustrep4/users/olsentim/Projects/neko-top/results/neko/test_mixer
+
+Archiving nek5000 files.
+
+Clean-up concluded.
+================================================================================
+JobID,JobName,State,ExitCode,NNodes,NTasks,ReqMem,Elapsed,MaxRSS,MaxRSSTask,MaxRSSNode,AveRSS,MaxVMSize,TRESUsageInMax
+17546051,test_mixer,COMPLETED,0:0,1,,491520M,00:04:38,,,,,,
+17546051.batch,batch,COMPLETED,0:0,1,1,,00:04:38,18964480,0,nid005179,18964480,285646848,cpu=00:02:24,energy=184711,fs/disk=65017934799,mem=18964480,pages=4,vmem=285646848
+17546051.0,select_gpu,COMPLETED,0:0,1,1,,00:00:00,4861952,0,nid005179,4861952,179728384,cpu=00:00:00,energy=0,fs/disk=0,mem=4861952,pages=0,vmem=179728384
+17546051.1,select_gpu,COMPLETED,0:0,1,8,,00:02:54,5876600832,0,nid005179,5854806528,15731494912,cpu=00:02:39,energy=128890,fs/disk=51114430,mem=5876600832,pages=980,vmem=15731494912

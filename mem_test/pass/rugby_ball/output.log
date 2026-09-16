@@ -1,0 +1,58 @@
+Executing Neko.
+See rugby_ball.log for the status output.
+================================================================================
+SLURM Job: rugby_ball
+================================================================================
+Job ID: 21820764
+Job Node: nid005087
+Job Partition: small-g
+Job Account: project_465002946
+Job Time: 
+Job Memory: 
+Job CPUs: 6
+Job GPUs: 4
+Job QOS: normal
+Job Reservation: 
+Job Work Directory: /pfs/lustrep4/users/olsentim/Projects/neko-top/logs/rugby_ball
+Job Output Directory: /pfs/lustrep4/users/olsentim/Projects/neko-top/logs/rugby_ball
+Job Output File: rugby_ball
+Job Error File: rugby_ball
+================================================================================
+Running user provided preparation script.
+================================================================================
+Generating mesh with dimensions: 20 20 1
+================================================================================
+Finding Neko executable.
+================================================================================
+Using user provided Neko executable.
+================================================================================
+Running example: rugby_ball.
+================================================================================
+ Starting iteration  1
+ Starting iteration  2
+ Starting iteration  3
+ Starting iteration  4
+ Starting iteration  5
+
+Example concluded.
+Execution time: 00:01:36
+================================================================================
+Cleaning up the results.
+================================================================================
+Files will be moved to results folder: 
+	/pfs/lustrep4/users/olsentim/Projects/neko-top/results/rugby_ball
+
+Archiving nek5000 files.
+	- bdry0.nek5000
+	- design0.nek5000
+	- boundary_adjoint0.nek5000
+	- sensitivity0.nek5000
+	- adjoint_fields0.nek5000
+	- forward_fields0.nek5000
+
+Clean-up concluded.
+================================================================================
+JobID,JobName,State,ExitCode,NNodes,NTasks,ReqMem,Elapsed,MaxRSS,MaxRSSTask,MaxRSSNode,AveRSS,MaxVMSize,TRESUsageInMax
+21820764,rugby_ball,COMPLETED,0:0,1,,65536M,00:01:45,,,,,,
+21820764.batch,batch,COMPLETED,0:0,1,1,,00:01:45,19025920,0,nid005087,19025920,509890560,cpu=00:00:00,energy=165053,fs/disk=16611433,mem=19025920,pages=0,vmem=509890560
+21820764.0,neko,COMPLETED,0:0,1,1,,00:01:35,3500539904,0,nid005087,3500539904,14427549696,cpu=00:09:21,energy=150438,fs/disk=8257077,mem=3500539904,pages=3843,vmem=14427549696

@@ -1,0 +1,56 @@
+Executing Neko.
+See unsteady_rugby_ball.log for the status output.
+================================================================================
+SLURM Job: unsteady_rugby_ball
+================================================================================
+Job ID: 16887016
+Job Node: nid005206
+Job Partition: standard-g
+Job Account: project_465002485
+Job Time: 
+Job Memory: 
+Job CPUs: 56
+Job GPUs: 0,1,2,3,4,5,6,7
+Job QOS: normal
+Job Reservation: 
+Job Work Directory: /pfs/lustrep4/users/olsentim/Projects/neko-top/logs/unsteady_rugby_ball
+Job Output Directory: /pfs/lustrep4/users/olsentim/Projects/neko-top/logs/unsteady_rugby_ball
+Job Output File: unsteady_rugby_ball
+Job Error File: unsteady_rugby_ball
+================================================================================
+Running user provided preparation script.
+================================================================================
+Mesh file 'box.nmsh' already exists. Skipping mesh generation.
+If you want to regenerate the mesh, please remove 'box.nmsh' and run again.
+================================================================================
+Finding Neko executable.
+================================================================================
+Using user provided Neko executable.
+================================================================================
+Running example: unsteady_rugby_ball.
+================================================================================
+ Restarted simulation from checkpoint.
+     Checkpoint file: "./checkpoints/optimizer_rt_checkpoint.h5"
+     Iteration      :  19
+
+Example concluded.
+Execution time: 00:01:33
+================================================================================
+Cleaning up the results.
+================================================================================
+Files will be moved to results folder: 
+	/pfs/lustrep4/users/olsentim/Projects/neko-top/results/unsteady_rugby_ball
+
+Archiving nek5000 files.
+	- design0.nek5000
+	- sensitivity0.nek5000
+	- adjoint_fields0.nek5000
+	- forward_fields0.nek5000
+
+Clean-up concluded.
+================================================================================
+JobID,JobName,State,ExitCode,NNodes,NTasks,ReqMem,Elapsed,MaxRSS,MaxRSSTask,MaxRSSNode,AveRSS,MaxVMSize,TRESUsageInMax
+16887016,unsteady_rugby_ball,COMPLETED,0:0,1,,491520M,00:01:48,,,,,,
+16887016.batch,batch,COMPLETED,0:0,1,1,,00:01:48,20013056,0,nid005206,20013056,285749248,cpu=00:00:00,energy=98166,fs/disk=13530194,mem=20013056,pages=0,vmem=285749248
+16887016.0,select_gpu,COMPLETED,0:0,1,1,,00:00:00,4861952,0,nid005206,4861952,179736576,cpu=00:00:00,energy=0,fs/disk=0,mem=4861952,pages=0,vmem=179736576
+16887016.1,select_gpu,COMPLETED,0:0,1,8,,00:01:33,1191370752,0,nid005206,1188897280,8075988992,cpu=00:02:05,energy=90680,fs/disk=40911296,mem=1191370752,pages=1591,vmem=8075988992
