@@ -14,6 +14,53 @@
 
 ## Status at a glance
 
+> **This investigation is OPEN.** It closes on one criterion: a full-scale
+> `steady_200`/`unsteady_200` (or the `mem_test` `full` case) documented
+> completing on LUMI, with its `sacct` row (`ReqMem`, `MaxRSS`, `State`) and
+> per-rank peak recorded in this document beside the May benchmark's own
+> figures. That has not happened yet. See "The investigation's closing
+> criterion", immediately below, before reading anything else here as a
+> settled conclusion.
+
+**Bottom line, for a reader arriving cold.** What is established by
+measurement, across the whole host-side range now searched — April 2026 to
+September 2026, including the ALE merge specifically alleged to be the
+cause: **nothing increased per-element memory cost; it fell by about
+4.8%**, across a four-point series (pre-ALE, post-ALE, the May anchor, the
+September top endpoint) that is monotonically decreasing throughout. The
+CPU-vs-CUDA device control agrees: both backends show the same endpoint
+lower than the anchor, by a similar margin (CPU **-87.8 MB**, CUDA
+**-59.3 MB**). Separately, `sacct` shows the cluster now grants these jobs
+**5.25 GiB/rank** against **60 GiB/rank** in May — an 11.4x drop, from
+`#SBATCH` blocks that are textually identical between the two jobs.
+
+Put together, these measurements support a **leading hypothesis**, not yet a
+demonstrated fact: that **the OOMs are an allocation change, not a code
+change** — that it is the granted budget that shrank, not the code's memory
+need that grew. That inference is strong: every measurement taken so far is
+consistent with it and none contradicts it. But it is not confirmed, because
+**nothing in this investigation has yet shown a full-scale LUMI run actually
+succeeding since the failures began.** Until that is observed and recorded,
+treat "allocation change, not code change" as the working explanation under
+test, not as this investigation's conclusion. See "The investigation's
+closing criterion", directly below, and "Exhausted, for everything this
+container can test", further down, for what has and has not actually been
+established.
+
+**The investigation's closing criterion, stated explicitly.** This document
+closes only when — and not before — a full-scale run (`steady_200`,
+`unsteady_200`, or the `mem_test` `full` case) is documented completing on
+LUMI, with its `sacct` row (`ReqMem`, `MaxRSS`, `State`) and its per-rank
+peak recorded in this document alongside the May benchmark's own figures, so
+the two can be compared directly. The captured logs under `mem_test/pass/`
+and `mem_test/fail/` are the established place to add that evidence — the
+same pattern already used for every other run recorded here. Nothing below
+substitutes for this, however consistent the local measurements are with the
+hypothesis: **if the confirmation run still fails, that refutes the leading
+hypothesis above and reopens the search for a code-side cause** — see "The
+actionable fix" under "The `ReqMem` gap, explained", below, which is the
+immediate next action.
+
 **Established.** The excess consumption is Neko-TOP's, not Neko's: the same
 case passes against pure Neko at every size. The failing runs die building the
 adjoint's Gauss-space coefficients. Memory instrumentation now exists and is
@@ -22,16 +69,92 @@ validated, and gives per-step attribution.
 **Measured.** The Gauss over-integration stack is about a third of loadup on a
 case that has dealiasing switched off, and it is built unconditionally. That
 is real waste, but `git log -S` shows it is longstanding, so it is not the
-regression itself.
+regression itself — and it is worth gating or trimming on its own merits
+regardless of how the regression question resolves; see the Progress log's
+`_next_` entry.
 
-**Open.** Which change increased consumption. Bisect tooling is written and the
-known-good anchor pair builds, but the anchor measurement is blocked on
-case-file schema drift. Resolving that is the next step and it decides
-everything else.
+**Answered, for the searched range — and the answer is no.** The bisect
+anchor measurement this investigation was blocked on since it was written now
+exists. On `bisect_4096.case` (4,096 elements, 2 ranks, CPU backend, double
+precision, three runs each): anchor `f1ca7b11d64`/`99033428` (2026-05-26/
+05-20) medians **2067.7 MB**; top endpoint `865225094`/`0cd5a6d`
+(2026-09-08) medians **1979.9 MB**. The anchor is **87.8 MB higher**, about
+55x the 1.6 MB run-to-run spread. **Per-element host memory cost has
+improved by about 4.2% since May, not regressed, for this case at this size
+on this backend.** Full result and scope: see "The anchor measurement, and
+what it found" under Bisecting, below.
 
-**Not yet done.** No cluster run with the probes. The per-rank component budget
-on real problem sizes is still missing, and the historical baseline from the
-May benchmarks has not been recovered.
+**Also answered: the ALE-specific hypothesis, and it is refuted.** ALE
+(`53b425161`, 2026-04-13, which significantly altered `coef_t`) was proposed
+as the actual cause, on the reasoning that it landed before both points
+above and so would already sit inside both, invisible to that comparison.
+Tested directly at the Neko-TOP alignment barrier on each side of the
+merge: pre-ALE (`e8900582f`/`6b20dfb`) medians **2079.3 MB**, post-ALE
+(`53b425161`/`b334750`) medians **2079.2 MB** — a **0.1 MB** delta against a
+0.2-1.7 MB run-to-run spread here, nothing measurable, and the `mem_test`
+case never configures ALE, so this is a genuine test of unconditional cost.
+Placed with the anchor and top-endpoint numbers, the four-point series
+April-to-September is **monotonically decreasing**, total change **-99.4
+MB, about -4.8%**. Full result: see "The ALE hypothesis, tested and
+refuted" under Bisecting, below.
+
+**Resolved.** The open contradiction this measurement previously could not
+explain — the May benchmark completing at 16,384 elements/rank while current
+jobs OOM at half that, apparently under the same budget — is closed, and
+without invoking a memory regression. `ReqMem` in `sacct` is a **job total**,
+not a per-node or per-rank figure, which is provable directly from the
+captured logs: the same `43008M` appears as the whole-job `ReqMem` on every
+1-node `mem_test` run and as `688128M` ÷ 16 nodes on the 16-node `full` run.
+Every `mem_test` job actually receives **42 GiB/node, 5.25 GiB/rank**. The May
+job (`sacct` 18855130) received `ReqMem` 7864320M over 16 nodes — **480
+GiB/node, 60 GiB/rank**, 11.4x more per rank — from an `#SBATCH` block
+identical to the one used now, with memory requested explicitly in neither
+case. **The headline finding is no longer "which commit increased memory" but
+"memory did not increase; the allocation shrank."** Full arithmetic, the exact
+log lines, and what this does and does not establish about *why* the default
+changed: see "The `ReqMem` gap, explained" under Bisecting, below.
+
+**Exhausted, for everything this container can test — not the same as this
+investigation being closed.** The CPU-vs-CUDA device control is now complete
+too, and agrees with the CPU result: CUDA anchor (2 ranks) medians
+**2132.8 MB**, CUDA top endpoint medians **2073.5 MB**, a delta of
+**-59.3 MB**, against the CPU delta of **-87.8 MB** — both negative and of
+similar order, so CUDA shows no growth that the CPU measurement was hiding.
+Device-side memory growth is ruled out for the shared and CUDA-specific code
+paths measured here; the anchor runs that previously failed to complete turned
+out to be a mixed-cubin build defect, not a memory finding — see "The
+CPU-vs-CUDA control, completed" under Bisecting, below, for the full result
+and the fix. That exhausts every avenue this container can actually test — it
+shows the leading hypothesis is contradicted by nothing reachable here, which
+is not the same as it being confirmed. Confirmation needs the cluster run in
+"The investigation's closing criterion", above. What is left is narrower than
+before, and is genuinely out of reach here:
+
+- The **HIP-specific path** — principally Neko `10689388af1` "Zero-copy
+  unified memory for MI300A" (#2666) — is confirmed unreachable in any CUDA
+  build by source inspection: the new files are `.hip`, the relevant
+  `Makefile.am` hunks sit inside `if ENABLE_HIP`, and the `device.F90` changes
+  are inside `#ifdef HAVE_HIP` with nothing in the corresponding `#elif
+  HAVE_CUDA` branch. This container has no ROCm toolchain. Testable only on
+  the production cluster.
+
+- The **`--mem=0` confirmation run** on LUMI — the one action that actually
+  closes this investigation, not merely this container's part of it. It
+  tests the leading hypothesis directly: that the OOMs follow from a budget
+  reduction of 60 to 5.25 GiB/rank, not a code change. A pass confirms it; a
+  failure refutes it and reopens the search. See "The actionable fix" under
+  "The `ReqMem` gap, explained", above, and "The investigation's closing
+  criterion" under "Status at a glance", above.
+
+- A **cluster run with the probes**, for the per-rank component budget at real
+  problem sizes, and recovery of the historical `single_node_capacity.csv`
+  baseline — both still outstanding and independent of the regression
+  question.
+
+- The **Gauss over-integration stack**, worth trimming on its own merits
+  regardless of the regression verdict — about a third of loadup on a case
+  with dealiasing disabled, at precisely the allocation where the failing runs
+  die. See "Measured", above.
 
 ## Context
 
@@ -45,7 +168,9 @@ output under `mem_test/pass/` and `mem_test/fail/`.
 Two questions, in order:
 
 1. **Where does the memory go?** The logs now answer much of this.
-2. **Which change increased it?** Still open, and needs a memory bisect.
+2. **Which change increased it?** Answered for the CPU/host range the bisect
+   has actually searched — nothing did, per "Status at a glance" above.
+   Still open for the device path that motivated the investigation.
 
 ## Where the failing run dies
 
@@ -86,8 +211,18 @@ consistent with the Gauss space carrying far more points per element than
 the GLL space.
 
 Accounting from the same log: `MaxRSS` 5.81 G, `AveRSS` 5.02 G over 8 tasks,
-`ReqMem` 43008M, `State=OUT_OF_MEMORY`. Note the log banner also shows
-`Job Memory:` empty, so no memory is being requested explicitly.
+`ReqMem` 43008M. **Correction:** the job's own `sacct` row reads `FAILED`,
+exit code `1:0` — `22035605,mem_test/64x32x32,FAILED,1:0,1,,43008M,00:00:33`
+— not the Slurm job state `OUT_OF_MEMORY` this line and the reference table
+below previously recorded; only the `.1` step carries `OUT_OF_MEMORY` as its
+own state (`22035605.1,select_gpu,OUT_OF_MEMORY,0:125,...`). The kernel
+`oom_kill` confirming the physical cause is in `error.log`, not `sacct`'s job
+row. See "The `ReqMem` gap, explained" under Bisecting, below, for the full
+picture. Note the log banner also shows `Job Memory:` empty — that is not
+evidence of no memory being granted, only that `SLURM_JOB_MEMORY`
+(`scripts/functions.sh:151`) reflects an explicit `--mem`-family flag, which
+is genuinely absent from the jobscript; `sacct`'s `ReqMem` field shows Slurm
+granted a (default) budget regardless.
 
 ## The Gauss over-integration stack
 
@@ -296,9 +431,15 @@ reconfigure to match.
   0.21 GB, mesh hash tables are tens of MB, and the parallel-only inventory
   of Neko's setup path totals about 100 MB.
 - **Environment knobs**, from the `fix/mem_regression` experiments:
-  gather-scatter comm backend and strategy, MPI thread level, OpenMP
-  threading. None changed the outcome, which the death site now explains:
-  the failure is in a coefficient allocation, not in communication.
+  gather-scatter comm backend and strategy pinned, then unset (`1ae0c94`,
+  `5f0e2e4`), MPI thread level forced to `single` (`dfb5f25`), OpenMP
+  threading disabled entirely (`1f1e957`). All four still failed. None
+  changed the outcome, which the death site now explains: the failure is in
+  a coefficient allocation, not in communication. **This closes the
+  environment-knob axis.** The current jobscript's contents are the *end
+  state* of this sweep, not configuration drift away from an earlier,
+  working jobscript — worth stating plainly, since the difference between
+  the two jobscripts looks like a lead and is not.
 
 One latent defect found in passing, unrelated to consumption:
 `IO/hdf5/design_hdf5_io.f90:214` and `mma_hdf5_io.f90:281,288,295,302,309,316`
@@ -323,6 +464,16 @@ F2003 interface, but misleading.
    code comment asks, and pass `COEF_OPERATOR` where the full coef is not
    needed.
 7. Confirm against full-size `steady_200` and `unsteady_200`.
+8. **Cluster action, independent of the bisect and not verifiable from this
+   container — and the action that actually closes this investigation:** add
+   `#SBATCH --mem=0` (the whole node, explicitly) to
+   `scripts/jobscripts/LUMI-G/mem_test/full.sh` and its siblings
+   (`default.sh`, `small.sh`), and re-run the ladder on LUMI. Record the
+   outcome either way: if the OOMs disappear, the `ReqMem`-gap explanation in
+   "The `ReqMem` gap, explained" is confirmed; if they do not, that refutes
+   the leading hypothesis and reopens the search for a code-side cause. See
+   "The investigation's closing criterion" under "Status at a glance" for
+   exactly what recording the outcome requires.
 
 ## Verification
 
@@ -400,13 +551,29 @@ Two committed scripts, both used and working:
 - **`mem_test/bisect/build_pair.sh <neko-commit> <nekotop-commit> <label>`**
   builds a commit pair in isolated git worktrees under `/tmp/neko-top-bisect`,
   override with `BISECT_WORKDIR`. It leaves the working checkout untouched.
-- **`mem_test/bisect/measure.sh <binary> <case>`** runs one build on one case,
-  single rank, and prints peak resident memory from the kernel via
-  `/usr/bin/time`.
-- **`mem_test/bisect/bisect.case`** is the measured case: `small.case` with a
-  256-element mesh, `end_time` cut to about three steps and
-  `max_iterations` 1, so a run takes seconds. Run from the repository root so
-  the relative mesh path resolves.
+- **`mem_test/bisect/measure.sh <binary> <case> [ranks]`** runs one build on
+  one case (`ranks` defaults to 1; real bisect runs use 2, since at 1 rank
+  there are no halos and gather-scatter growth is invisible), gates on
+  Neko's own `Normal end.` banner plus a zero exit before trusting a peak —
+  a run that dies partway through setup still exits and would otherwise
+  report a low, falsely-reassuring peak — and prints that peak alongside the
+  gather-scatter structural invariants (`Avg. internal:`/`Avg. external:`
+  pairs), so two builds can be shown to have run the same workload rather
+  than assumed to. **`/usr/bin/time` does not exist in this container** (no
+  package provides it, and there is no root to install one), so where it is
+  absent the script falls back to a `getrusage(RUSAGE_CHILDREN)`-based
+  measurement — the same kernel peak-RSS accounting `/usr/bin/time -v`
+  itself reads, verified equivalent here on a controlled allocation test.
+- **`mem_test/bisect/bisect.case`** is the original measured case:
+  `small.case` with a 256-element mesh, `end_time` cut to about three steps
+  and `max_iterations` 1, so a run takes seconds. Run from the repository
+  root so the relative mesh path resolves. **Superseded for the real
+  comparison** by `bisect_4096.case` below: at 256 elements the measurement
+  only resolves regressions above roughly 190 MB/rank, too coarse for what
+  this investigation is looking for.
+- **`mem_test/bisect/bisect_4096.case`** is the same case on a 4,096-element
+  mesh (`mixer_64x8x8.nmsh`, 2,048 elements/rank at 2 ranks) — the case
+  actually used for the anchor result below.
 
 **Both repositories must move together.** Neko-TOP periodically realigns with
 Neko API changes, the "Align with neko PR #NNNN" commits, so an old Neko
@@ -419,22 +586,97 @@ These cost several iterations; `build_pair.sh` encodes all of them.
 - The vendored dependencies are not on the default pkg-config path. Export
   `PKG_CONFIG_PATH` for `external/json-fortran/lib/pkgconfig` and
   `external/hdf5/lib/pkgconfig`, as `scripts/dependencies.sh` does.
+- Rebuilding without `FORCE_PKGCONF_PYPI=1` set in the environment fails
+  silently, not loudly. This container's PyPI `pkgconf` shim returns an empty
+  `Cflags` for json-fortran, so `configure` cheerfully reports `checking for
+  json-fortran... yes` while the `FCFLAGS` it generates carry no `-I`, and
+  the build only dies much later, in `common/json_utils.f90`, with `Cannot
+  open module file 'json_module.mod'` — a confusing site to land on given
+  `configure` said everything was fine. Set `FORCE_PKGCONF_PYPI=1` before
+  configuring.
 - Neko's own executable fails to link with `undefined reference to
   __cxa_guard_acquire`. The CUDA objects pull in C++ guard symbols and older
-  configurations do not link the C++ runtime. Pass `LIBS=-lstdc++` to `make`.
-  Note the library itself builds fine before this point, so if you only need
-  `libneko.a` you can ignore it.
-- Neko-TOP hits the same thing at its link. Use
+  configurations do not link the C++ runtime. **This bullet previously
+  recommended `make LIBS=-lstdc++`, and that is wrong — corrected in
+  `c3b8194`.** A `VAR=value` on a `make` command line *overrides* the
+  Makefile's own `LIBS` rather than appending to it, so that form silently
+  discards every configure-detected library (json-fortran, hdf5, parmetis,
+  lapack/blas) and the link fails anyway, just with a different,
+  dozens-of-undefined-references error instead of the one it was meant to
+  fix. Pass `LIBS=-lstdc++` as a `./configure` argument instead: autoconf's
+  own library checks prepend onto whatever `LIBS` already holds, so seeding
+  it before configure runs leaves `-lstdc++` at the end of the link line
+  without disturbing anything else. Note the library itself builds fine
+  before this point, so if you only need `libneko.a` you can ignore it.
+- This container also ships a **system HDF5 2.2.0 under `/usr/local` with
+  the same SONAME as the vendored 2.0.0** (`libhdf5.so.320`, incompatible
+  contents), and exports `LD_LIBRARY_PATH=/usr/local/lib:` globally for
+  every process — which outranks a binary's own `DT_RUNPATH` in the
+  loader's search order. That breaks HDF5 resolution two ways: at build
+  time (the final executable's indirect `NEEDED` entries resolve to the
+  wrong copy via the default path) and at run time (a binary that linked
+  correctly still *loads* the wrong one), so a measurement taken without
+  correcting for this is suspect either way. Tracked as backlog **#46**
+  (`$AGENT_WORKSPACE/.claude/plans/known-bugs-backlog.md`); worked around in
+  `build_pair.sh`/`measure.sh` only, by putting the vendored HDF5 directory
+  first in `LD_LIBRARY_PATH` and exporting `HDF5_ROOT` (Neko-TOP's own
+  `find_package(HDF5)` keys off `HDF5_ROOT`, not `HDF5_DIR`) — `c3b8194`.
+- Neko-TOP hits the same `__cxa_guard_acquire` problem at its link. Use
   `-DCMAKE_Fortran_STANDARD_LIBRARIES=-lstdc++`, **not**
   `-DCMAKE_EXE_LINKER_FLAGS`. The latter is placed before the objects, where
   `-lstdc++` does nothing; `STANDARD_LIBRARIES` is appended after them.
+- **Any Neko-TOP commit older than 2026-05-20 (before `99033428`) fails to
+  link**, not compile, with undefined `GOMP_parallel`, `omp_get_thread_num`,
+  `GOMP_barrier` — coming out of Neko's own objects, which are compiled with
+  `--enable-openmp`. It is not a `neko.pc` problem: the generated `neko.pc`
+  is byte-identical across April, May and September builds, carrying
+  `-fopenmp` in `Cflags` and no `-lgomp` in `Libs` in every one, and
+  pkg-config `Cflags` only ever reach compilation of Neko-TOP's own sources,
+  never CMake's link step. The actual cause is that Neko-TOP's own
+  `CMakeLists.txt` gained `find_package(OpenMP REQUIRED COMPONENTS Fortran)`
+  and the `OpenMP::OpenMP_Fortran` link somewhere between `6b20dfb`
+  (2026-04-14) and `99033428` (2026-05-20) — visible directly in the
+  generated `build.ninja`: working builds carry `libgomp.so` in
+  `LINK_LIBRARIES`, broken ones carry nothing. Fixed the same way as the
+  `-lstdc++` case immediately above and for the same reason: append
+  `-lgomp` via `CMAKE_Fortran_STANDARD_LIBRARIES` rather than
+  `CMAKE_EXE_LINKER_FLAGS`, so it lands after the objects (`280aaa8`). A
+  pair that already links libgomp simply names it twice, which is harmless.
+  Verified not to disturb the established measurements — see "The ALE
+  hypothesis, tested and refuted", below, for the rebuild-and-compare check.
+  **Any future attempt to build a Neko-TOP commit older than this CMake
+  change will hit this.**
+- **A CUDA build of any Neko-TOP commit before `99033428` (2026-05-20) links
+  and loads, then dies at the first Neko-TOP kernel launch** with `the
+  provided PTX was compiled with an unsupported toolchain` (seen at
+  `math_ext.cu:66`). Same class of bug as the `-lgomp` case immediately
+  above, and for the same reason: `sources/CMakeLists.txt` only gained
+  `if(DEFINED ENV{CUDA_ARCH}) set(CMAKE_CUDA_ARCHITECTURES ...)` after that
+  commit, so older checkouts build their own five CUDA translation units
+  (`RAMP_mapping.cu`, `SIMP_mapping.cu`, `heaviside_mapping.cu`, `mma.cu`,
+  `math_ext.cu`) for CMake/CUDA-13's default architecture while Neko's own
+  device code still gets the right one from Neko's `configure` — a mixed
+  binary, 57 `sm_86` plus 5 `sm_75` cubins on this machine, that the driver
+  cannot JIT. Fixed by passing `-DCMAKE_CUDA_ARCHITECTURES=<arch>` on the
+  `cmake` command line, which takes precedence at every commit (`873852c`).
+  Verified at the binary level, not by the build succeeding: `cuobjdump
+  --list-elf` before/after, 57 `sm_86`/5 `sm_75` to 62 `sm_86`/0 `sm_75`.
+  **Any future attempt to build a pre-`99033428` Neko-TOP commit for CUDA
+  will hit this.** This unblocked the CPU-vs-CUDA control; see "The
+  CPU-vs-CUDA control, completed", below, for the result.
 - The `mem_test` example postdates the older commits, so it is copied into the
   old worktree and registered in `examples/CMakeLists.txt`. That keeps the
   measured case and its user code identical at every point in history.
 - Build in **double precision**. Neko-TOP does not compile in a
   single-precision build, and the cluster is double precision anyway.
 
-### Status: the anchor pair builds, but the case does not run on it
+### Status (historical): the anchor pair builds, but the case does not run on it
+
+**Superseded below — kept as the record of how the block was diagnosed.**
+Everything in this subsection and the next was true when written; the
+schema-drift block it describes was resolved in `0cd5a6d`, and the anchor
+number it was waiting on now exists in "The anchor measurement, and what it
+found", further down.
 
 | Point | Neko | Neko-TOP | Builds | Peak on `bisect.case` |
 | --- | --- | --- | --- | --- |
@@ -449,6 +691,14 @@ where the variable part dominates the fixed overhead. Note the fixed
 overhead is substantial here: on a 256-element case the baseline at
 `neko_init` is already about 356 MB, so only a third of this number moves
 with the mesh.
+
+**Superseded: the noise floor is much better than this on the real
+comparison case.** This 256-element estimate was one percent because the
+fixed per-rank overhead (~356 MB) dominates a mesh this small. On
+`bisect_4096.case` at 2 ranks — the case and rank count actually used for the
+result below — the spread across three runs is about **1.6 MB on a ~1980 MB
+peak, i.e. 0.08%**, over ten times tighter. The "take the median of three
+runs" advice still stands; the one-percent resolution figure above does not.
 
 The anchor pair compiles and links. The measurement is blocked on case-file
 schema drift, which is the classic bisect hazard: the case evolved with the
@@ -479,13 +729,343 @@ Options, cheapest first:
    exist** at the anchor, so it cannot serve as the common case without the
    same treatment.
 
+**Resolved, per option 1 above.** `0cd5a6d` traced the actual failing key to
+`optimization.solver.max_runtime`, not to the objectives block the stack
+trace pointed at (the objectives block was mid-read when the error fired, but
+the incompatible key was elsewhere in the file): the anchor code reads
+`max_runtime` as a real, HEAD reads it as a string, so no single value
+satisfies both. The fix is to drop the key — it plays no part in a memory
+comparison and omitting it is safe at both ends. The same commit retired a
+dead `phi_ref` objective key in favour of the current `target_concentration`,
+dropped an inert `coarse_grid.solver`, and moved `velocity_solver.type` off
+`fused_cg`, which is CUDA/HIP-only and aborts on a CPU build — the bisect
+moved to the CPU backend in the same pass, both because it is what is
+tractable to compare here and because it isolates the question this
+investigation can actually answer (see the scope note below).
+
 ### Once the anchor number exists
 
-If the anchor is materially below 645.7 MB, the regression is real and inside
-the range, and a standard bisect over the pair finds it in about seven or
-eight steps. Each step is one `build_pair.sh` plus one `measure.sh`, a few
-minutes. If the anchor is close to 645.7 MB, the growth is not in this range
-and the search has to widen or move.
+*(Superseded by the result below — kept for the record.)* If the anchor is
+materially below 645.7 MB, the regression is real and inside the range, and
+a standard bisect over the pair finds it in about seven or eight steps. Each
+step is one `build_pair.sh` plus one `measure.sh`, a few minutes. If the
+anchor is close to 645.7 MB, the growth is not in this range and the search
+has to widen or move.
+
+The anchor came in *above* the top-endpoint figure, on the larger
+`bisect_4096.case` rather than this 256-element `bisect.case`, so neither
+branch of this plan applies as written; see below for what that means.
+
+### The anchor measurement, and what it found
+
+Both risks the anchor build carried came to nothing. `gfortran` in this
+container is 15.2.0 (`GNU Fortran (Ubuntu 15.2.0-16ubuntu1) 15.2.0`,
+confirmed in the anchor's own `configure.log`), and it compiled the
+2026-05-26 Neko checkout without complaint. The rewritten
+`bisect_4096.case` parses and runs to completion at both ends of the range
+— the `max_runtime` string-vs-real incompatibility that blocked the
+previous attempt is fixed.
+
+**Result.** `bisect_4096.case` (4,096-element mesh, 2 MPI ranks, 2,048
+elements/rank), CPU backend, double precision, three runs per point, each
+gated on Neko's `Normal end.` banner plus a zero exit (see `measure.sh`'s
+completion-marker comment above for why a bare peak is not trusted on its
+own):
+
+| Point | Neko | Neko-TOP | Date | Runs (MB) | Median |
+| --- | --- | --- | --- | --- | --- |
+| anchor | `f1ca7b11d64` | `99033428` | 2026-05-26 / 05-20 | 2067.5 / 2067.7 / 2067.7 | **2067.7** |
+| top endpoint | `865225094` | `0cd5a6d` | 2026-09-08 | 1979.6 / 1981.2 / 1979.9 | **1979.9** |
+
+The spread within each point (0.2 MB and 1.6 MB) is far below the 87.8 MB gap
+between the medians — roughly 55x the noisier of the two. **The anchor is
+higher.** Per-element host memory cost has *improved* by about 4.2% between
+May and September on this case; it has not regressed.
+
+The comparison is licensed by the gather-scatter structural invariants
+`measure.sh` extracts from the `Avg. internal:`/`Avg. external:` pairs in
+the log, identical character-for-character in all nine positions across all
+six runs:
+
+```
+275456/18432 102144/8192 47552/4608 14336/2048 275456/18432 878592/51200 102144/8192 47552/4608 14336/2048
+```
+
+Both builds constructed the same objects on the same mesh, so the peak
+difference reflects the code, not a changed workload. The anchor emits no
+`[mem]` probe lines, as expected: `memory_probe.f90` does not exist at
+`99033428`.
+
+**What this does, and does not, show.** This falsifies the regression
+hypothesis *for the range and configuration actually measured* — a
+4,096-element mesh at 2 ranks on the CPU backend, in double precision — and
+no further than that:
+
+- **The device path is untested.** The cluster failure this investigation
+  exists to explain is HIP, at 8,192 elements/rank — double the mesh size
+  measured here. Pinned/managed device allocations are not compiled into a
+  CPU build, so a device-side regression would be structurally invisible to
+  this measurement. The CPU-vs-CUDA control that would test for exactly
+  this has **not been run**. **Superseded: it has been run since, and
+  agrees** — see "The CPU-vs-CUDA control, completed", below. The
+  AMD-specific HIP path itself remains untested regardless.
+- **An open contradiction stood here, and is now resolved — see below.**
+  *(Superseded paragraph, kept for the trail.)* The May benchmark job
+  (`sacct` 18855130, 2026-05-26, Neko 1.99.3) completed using **51.25
+  GiB/rank at 16,384 elements/rank** with `n_memory=250`, while current jobs
+  OOM at **8,192 elements/rank** — half that mesh size. Both jobscripts
+  request identical resources and neither sets `--mem`. Half the elements,
+  the same budget, and a *lower* measured per-element cost cannot all be true
+  simultaneously. Candidates, none yet checked: a configuration difference
+  between the benchmark case and the `mem_test` cases (`n_memory`, active
+  fields, polynomial order); device-side memory growth invisible to this CPU
+  measurement; or the two jobs not actually receiving the same budget, which
+  is where the unexplained `ReqMem` 7864320M vs 43008M gap (the latter is the
+  `64x32x32` failure's own figure, in "Where the failing run dies" above)
+  still sits. **The last of those three was it** — "the two jobs not
+  actually receiving the same budget" is exactly what happened, and the
+  51.25 GiB/rank actually used by the May job is unremarkable once its real
+  60 GiB/rank budget is known: it used about 85% of what it had, comfortably
+  under, not against, the limit. See "The `ReqMem` gap, explained", next.
+
+**Superseded.** The device path was the one open question this specific
+(CPU-only) result could not answer on its own. It has since been answered for
+CUDA — see "The CPU-vs-CUDA control, completed", below — leaving only the
+HIP-specific path open (and the cluster confirmation the investigation
+itself still needs); see "Exhausted, for everything this container can
+test" under "Status at a glance", above.
+
+### The `ReqMem` gap, explained
+
+**`ReqMem` in `sacct` is a job total, not a per-node or per-rank figure.**
+This is proven directly from the logs already captured in this repository,
+not inferred from the jobscripts:
+
+- `mem_test/fail/full/output.log`, the job-summary row:
+  `22035606,mem_test/full,FAILED,1:0,16,,688128M,00:00:50`. `NNodes` is 16,
+  `ReqMem` is `688128M`. 688128 ÷ 16 = **43008 MiB/node**.
+- `mem_test/fail/64x32x32/output.log`, the job-summary row:
+  `22035605,mem_test/64x32x32,FAILED,1:0,1,,43008M,00:00:33`. `NNodes` is 1,
+  `ReqMem` is `43008M` outright.
+
+The per-node figure is identical in both — 43008 MiB/node — which is what
+establishes that the 16-node job's `ReqMem` is a whole-job total, not a
+per-node one; if it were per-node, the two jobs would show wildly different
+values instead of the same one scaled by node count. The same `43008M` also
+appears, as a further check, on both passing 1-node runs:
+`mem_test/pass/64x16x16/output.log` (`...,43008M,...`) and
+`mem_test/pass/128x16x16/output.log` (`...,43008M,...`).
+
+**So every `mem_test` job receives 42 GiB/node** (43008 MiB = 42 GiB exactly)
+**— 5.25 GiB/rank** at 8 tasks/node (43008 ÷ 8 = 5376 MiB = 5.25 GiB).
+
+The May 2026 benchmark (`sacct` job 18855130, 2026-05-26, referenced earlier
+in this document as completing at 16,384 elements/rank) received `ReqMem`
+7864320M over 16 nodes: 7864320 ÷ 16 = **491520 MiB/node = 480 GiB/node = 60
+GiB/rank**.
+
+**That is 11.4x more memory per rank** (60 ÷ 5.25 ≈ 11.43), **for jobs whose
+`#SBATCH` blocks are identical.** Both the `mem_test/full` jobscript
+(`scripts/jobscripts/LUMI-G/mem_test/full.sh`) and the May benchmark's
+request `--partition=standard-g --nodes=16 --ntasks-per-node=8
+--gpus-per-node=8 --cpus-per-task=6`, and **neither requests memory at all**:
+there is no `--mem`, `--mem-per-cpu`, `--mem-per-gpu` or `--exclusive`
+anywhere under `scripts/` (checked directly: `grep -rn -- '--mem' scripts/`
+and `grep -rln -- '--exclusive' scripts/` both return nothing). The only
+related line is `scripts/functions.sh:151`,
+`printf "Job Memory: %s\n" $SLURM_JOB_MEMORY`, which only *prints*
+`SLURM_JOB_MEMORY` — and it prints empty in the captured logs, confirming no
+explicit request was made, not that none was granted.
+
+The arithmetic pins this to a **per-CPU** default rather than a per-node or
+per-GPU one. Each node requests 8 tasks x 6 cpus-per-task = 48 CPUs:
+
+- now: 43008 MiB ÷ 48 CPUs = **896 MiB/CPU**
+- May: 491520 MiB ÷ 48 CPUs = **10240 MiB/CPU = 10 GiB/CPU**
+
+Both are clean round numbers, which is the signature of a partition or
+account default applied per allocated CPU, not an explicit request computed
+from case parameters. **The default changed between May and September.**
+
+**This is why the fitted memory-per-rank curve was always going to cross the
+new budget.** The two completed ladder points in "Reference measurements"
+below give a rough linear fit: 2.74 G at 2,048 elements/rank and 4.56 G at
+4,096 elements/rank imply roughly 0.9 MiB/element plus roughly 0.9-0.95 GiB
+fixed per-rank overhead, i.e. **roughly 8.2-8.35 GiB/rank at 8,192
+elements/rank**. Against the 5.25 GiB/rank now granted, that cannot fit and
+no code change is required to explain the failure. It is also consistent with
+the two other established results in this document: pure Neko passes every
+size because its smaller footprint does fit ("Status at a glance", and
+commit `f6b947f` in the Progress log), and per-element cost has *fallen* 4.2%
+since May (previous section). All three now agree with a shrunk budget and
+disagree with a growing one.
+
+**The failures are genuine kernel OOM kills**, worth recording precisely
+since the `sacct` job-level `State` does not say so (next section corrects
+the reference table for exactly this reason). From
+`mem_test/fail/full/error.log`:
+
+```
+[2026-09-14T17:14:38.784] error: Detected 1 oom_kill event in StepId=22035606.1. Some of the step tasks have been OOM Killed.
+srun: error: nid005475: tasks 0-2,5,7: Terminated
+srun: Force Terminated StepId=22035606.1
+```
+
+and from `mem_test/fail/64x32x32/error.log`:
+
+```
+[2026-09-14T17:14:22.149] error: Detected 1 oom_kill event in StepId=22035605.1. Some of the step tasks have been OOM Killed.
+srun: error: nid005651: task 3: Out Of Memory
+srun: Terminating StepId=22035605.1
+```
+
+**What is, and is not, established.** The evidence shows the two jobs
+received different per-CPU memory defaults from `#SBATCH` blocks that are
+textually identical. *Why* the default changed cannot be determined from
+this container — the possibilities, none checked against each other:
+
+1. A LUMI site-policy or partition-configuration change to the
+   `standard-g` default between May and September.
+2. The May job having been submitted with additional `sbatch`
+   command-line arguments (e.g. `--mem=0` or similar) not visible in any
+   committed jobscript — command-line flags override a script's own
+   `#SBATCH` lines and would not appear in this repository either way.
+3. Some other account- or reservation-level default specific to that
+   submission.
+
+What **is** certain, and what matters for this investigation, is narrower
+than any of those three: memory was never requested explicitly in either
+case, so whichever default applied, it applied silently, and the fix does
+not depend on knowing which of the three it was.
+
+**The actionable fix, and the investigation's immediate next action.** Add an
+explicit memory request — `#SBATCH --mem=0`, which requests the whole node
+under Slurm — to `scripts/jobscripts/LUMI-G/mem_test/full.sh` and its
+siblings (`default.sh`, `small.sh`), re-run the ladder on LUMI, and record
+the outcome here either way. If the OOMs disappear, the `ReqMem`-gap
+explanation is confirmed for this question — though closing *this
+investigation* additionally needs the full-scale `steady_200`/`unsteady_200`
+confirmation described in "The investigation's closing criterion" under
+"Status at a glance", above. **If the OOMs do not disappear, that is a
+result, not a disappointment: it refutes the leading hypothesis this
+document currently favours and reopens the search for a code-side cause.**
+Say so plainly if it happens, rather than treating a still-failing run as an
+inconclusive retry. **This is a cluster action and is explicitly NOT VERIFIED
+from this container** — it needs a real LUMI submission, which has not been
+done as part of this change.
+
+### The ALE hypothesis, tested and refuted
+
+The repository owner proposed a specific reason the anchor result above
+could be searching the wrong range: Neko's ALE work, `53b425161`
+"Feature/ale (#2244)", significantly altered `coef_t` and landed
+**2026-04-13** — before *both* endpoints already measured (`f1ca7b11d64`/
+2026-05-26 and `865225094`/2026-09-08). If ALE were the actual cost, it
+would already sit inside both builds compared above and be invisible to
+that comparison; the anchor result would then have been searching the
+wrong range rather than answering the question.
+
+**Tested directly, and refuted.** Two pairs, one on each side of the merge
+and each pinned at the Neko-TOP alignment barrier nearest it (see "Both
+repositories must move together", above, for what that means), same
+`bisect_4096.case`, 2 ranks, CPU backend, three runs each:
+
+| Point | Neko | Neko-TOP | Runs (MB) | Median |
+| --- | --- | --- | --- | --- |
+| pre-ALE | `e8900582f` | `6b20dfb` | 2080.6 / 2079.3 / 2079.1 | **2079.3** |
+| post-ALE | `53b425161` | `b334750` | 2079.2 / 2079.2 / 2079.2 | **2079.2** |
+
+**Delta across the ALE merge: 0.1 MB**, against a run-to-run spread of
+0.2-1.7 MB here. Nothing measurable. This is a meaningful test rather than
+a vacuous one precisely because **the `mem_test` case does not configure
+ALE at all** — it measures whatever cost the ALE change imposes
+*unconditionally*, on runs that never use it, which is exactly the shape of
+cost this investigation has been looking for throughout. There is none.
+
+Placed alongside the anchor and top-endpoint numbers already established,
+the full series — same case, same rank count, same backend, four points
+spanning April to September — is **monotonically decreasing**:
+
+| Point | Neko | Neko-TOP | Date | Median |
+| --- | --- | --- | --- | --- |
+| pre-ALE | `e8900582f` | `6b20dfb` | 2026-04-13 | 2079.3 MB |
+| post-ALE | `53b425161` | `b334750` | 2026-04-13 | 2079.2 MB |
+| anchor | `f1ca7b11d64` | `99033428` | 2026-05-26 | 2067.7 MB |
+| top endpoint | `865225094` | `0cd5a6d` | 2026-09-08 | 1979.9 MB |
+
+**Total change, April to September: -99.4 MB, about -4.8%.** Gather-scatter
+structural invariants were identical in all nine positions across all
+twelve runs behind these four points, so every build constructed the same
+objects on the same mesh — the comparison is licensed across the whole
+series, not assumed at just the two ends.
+
+**The control held.** The `-lgomp` fix needed to build the two April pairs
+at all (see "Build gotchas", above) could in principle have perturbed the
+already-established May/September numbers, so the top endpoint was rebuilt
+from scratch with the fix in place: 1978.9 / 1979.5 / 1980.1 MB against
+1979.6 / 1981.2 / 1979.9 MB before it — a 0.4 MB shift in the median, well
+inside the run-to-run spread. The old and new top-endpoint numbers are the
+same measurement to within noise. Recording this because it matters: a
+series that changes its own tooling partway through and does not re-verify
+against itself would not be trustworthy, however clean the rest of it looks.
+
+**Scope, stated rather than left implicit.** This closes the ALE-specific
+hypothesis and extends the "nothing increased it" host-side finding back to
+2026-04-13, but it is still the same measurement as the anchor result
+above: one 4,096-element case, 2 ranks, CPU backend, host memory only. It
+says nothing on its own about device-side cost — that is answered
+separately, and CUDA agrees; see "The CPU-vs-CUDA control, completed",
+below, and "Exhausted, for everything this container can test" under
+"Status at a glance", above, for what remains open (the HIP-specific path,
+and the cluster confirmation this investigation still needs before it can
+close).
+
+### The CPU-vs-CUDA control, completed
+
+The CPU-only bisect above cannot see a device-side memory regression: pinned
+or managed device allocations only exist in a device build. This control
+repeats the same anchor/top-endpoint comparison — same commit pairs
+(`f1ca7b11d64`/`99033428` and `865225094`/`0cd5a6d`), same
+`bisect_4096.case`, 2 ranks — built for CUDA instead of CPU, to test for
+exactly that.
+
+The CUDA anchor build initially failed all three runs, and a 1-rank retry
+failed identically, which ruled out two hypotheses directly: not VRAM (it
+returned to its pre-run baseline on the crash, rather than climbing towards a
+limit) and not rank contention (a single rank failed the same way as two).
+The actual cause was an architecture mismatch in the embedded cubins — full
+detail, including the fix and its binary-level verification, is under "Build
+gotchas", above (`873852c`).
+
+With that fixed, the anchor completes at every rank count tried. Three runs
+each, gated on the same completion marker as the CPU runs:
+
+| Backend, ranks | Anchor | Top endpoint | Delta (top - anchor) |
+| --- | --- | --- | --- |
+| CPU, 2 | 2067.7 MB | 1979.9 MB | -87.8 MB |
+| CUDA, 2 | 2132.8 MB | 2073.5 MB | -59.3 MB |
+
+CUDA anchor: 2132.3 / 2132.8 / 2134.2 MB (median 2132.8). CUDA top endpoint:
+2070.3 / 2073.5 / 2074.6 MB (median 2073.5) — measured earlier than the
+anchor and reused unchanged here, since nothing about that build changed.
+Gather-scatter structural invariants are identical between the two CUDA
+endpoints, and match the CPU value character-for-character, so all four
+builds (two backends times two endpoints) constructed the same objects on the
+same mesh.
+
+**The control held.** Both deltas are negative and of similar order — CPU
+-87.8 MB, CUDA -59.3 MB — so CUDA does not show the top endpoint higher where
+CPU showed it lower. Device-side memory growth is ruled out for the shared
+and CUDA-specific code paths this configuration exercises. This corroborates
+the CPU bisect result rather than merely failing to challenge it: two
+independent backends, on the same commits and the same case, agree on the
+direction and rough size of the change.
+
+This is still the same case and rank count as the rest of the bisect, now on
+CUDA rather than CPU. The AMD-specific HIP path — principally Neko
+`10689388af1` "Zero-copy unified memory for MI300A" — is untouched by this
+result; see "Exhausted, for everything this container can test" under
+"Status at a glance", above.
 
 ## Reference measurements
 
@@ -497,8 +1077,34 @@ appended to each log by `mem_test.sh`. Update as better numbers arrive.
 | `small` | 1 | 8,192 | 4 MiB (invalid) | — | FAILED, time limit | sampling missed it |
 | `64x16x16` | 8 | 2,048 | 2.74 G | 2.66 G | TIMEOUT | into time loop |
 | `128x16x16` | 8 | 4,096 | 4.56 G | 4.36 G | TIMEOUT | into time loop |
-| `64x32x32` | 8 | 8,192 | 5.81 G | 5.02 G | OUT_OF_MEMORY | adjoint Gauss coef |
-| `full` | 128 | 8,192 | 5.42 G | 4.73 G | OOM | setup |
+| `64x32x32` | 8 | 8,192 | 5.81 G | 5.02 G | FAILED, 1:0 (step `.1` OUT_OF_MEMORY) | adjoint Gauss coef |
+| `full` | 128 | 8,192 | 5.42 G | 4.73 G | FAILED, 1:0 (step `.1` CANCELLED, oom_kill) | setup |
+
+**Corrected.** `64x32x32` and `full` were previously recorded here as
+`OUT_OF_MEMORY` and `OOM` respectively. Neither job's own `sacct` row says
+that — both are `FAILED` with exit code `1:0` (Neko's own allocation call
+aborting, hence exit 1), verified directly against the job-summary lines in
+the two logs:
+
+```
+22035605,mem_test/64x32x32,FAILED,1:0,1,,43008M,00:00:33
+22035606,mem_test/full,FAILED,1:0,16,,688128M,00:00:50
+```
+
+The memory kill is real, it just surfaces one level down, as a Slurm *step*
+state rather than the job state: `64x32x32`'s `.1` step is
+`22035605.1,select_gpu,OUT_OF_MEMORY,0:125,...`, a clean single-step OOM;
+`full`'s `.1` step is `22035606.1,select_gpu,CANCELLED,0:15,...`, `error.log`
+showing repeated `oom_kill` events across several nodes before the step is
+force-terminated — a cascade rather than a single clean kill, consistent with
+128 tasks across 16 nodes all hitting the same per-rank ceiling at once. Both
+`error.log`s independently confirm the kernel event
+(`error: Detected 1 oom_kill event in StepId=...`). **Anyone grepping `sacct`
+output for `State=OUT_OF_MEMORY` at the job level will find nothing for
+either row and should not conclude there was no OOM** — check the `.1` step
+row and `error.log`, not the job-summary row. See "The `ReqMem` gap,
+explained" above for why the budget these jobs actually received made this
+inevitable.
 
 Gather-scatter sizes from the logs, useful as a sanity check that a build
 still constructs the same objects:
@@ -509,6 +1115,18 @@ still constructs the same objects:
 | `64x32x32` | 1,095,680 | 3,557,376 | 3.25 |
 
 ## Resuming on another machine
+
+**Machine-specific note.** This section, and the "Much of this runs locally"
+paragraph earlier under "Finding the regression", were written on an earlier
+machine: a CUDA device build sharing one GPU, `--enable-real=sp`, `sm_75`.
+Treat every CUDA/`CUDA_DIR`/`sm_75`/single-precision detail below as a
+description of *that* machine, not a requirement of the tooling. **The
+current machine's work — including the bisect anchor and top-endpoint
+measurements in "The anchor measurement, and what it found", above — is CPU
+backend, double precision** (`BISECT_BACKEND=cpu`, `--enable-real=dp`), which
+sidesteps the single-precision build failures logged below entirely; the
+`--enable-real=dp is not optional` warning under "The build environment"
+still applies on any machine, CPU or device.
 
 ### What is NOT in the repository
 
@@ -720,9 +1338,163 @@ Newest last. Keep entries to a line or two.
   mixer meshes are `genmeshbox` boxes over [0,4]x[0,1]x[0,1], verified by
   regenerating `16x4x4` and measuring 646.8 MB against the archived mesh's
   642 to 648 MB band.
-- **_next_** — (1) Resolve the anchor case-schema incompatibility and get the
-  anchor number, which decides whether the regression is in the range.
-  (2) Run the ladder on LUMI with the probes for the per-rank component
-  budget. (3) Recover the May benchmark results from LUMI for a historical
-  baseline, since `single_node_capacity.csv` swept to 16,384 elements per
-  rank at `n_memory=100`, double what fails now.
+- **2026-09-15** — Fixed the build blocker that had nothing to do with the
+  case file: `make LIBS=-lstdc++` overrides the Makefile's own `LIBS` instead
+  of appending, silently discarding every configure-detected library.
+  Corrected to pass `LIBS=-lstdc++` as a `./configure` argument (`c3b8194`).
+  Same commit found and worked around a second hazard: this container's
+  system HDF5 2.2.0 under `/usr/local` shares a SONAME with the vendored
+  2.0.0 and is put first on the loader's path by a global
+  `LD_LIBRARY_PATH`, silently substituting itself at build and run time —
+  filed as backlog #46, worked around in the bisect scripts by pinning
+  `LD_LIBRARY_PATH`/`HDF5_ROOT` to the vendored copy.
+- **2026-09-15** — Resolved the case-schema drift that had blocked the anchor
+  since it was written (`0cd5a6d`). The failing key was
+  `optimization.solver.max_runtime` (real at the anchor, string at HEAD),
+  not the objectives block the stack trace pointed at; dropped it, along
+  with a dead `phi_ref` key, an inert `coarse_grid.solver`, and
+  `fused_cg` (CUDA/HIP-only, aborts on CPU). Moved the bisect to the CPU
+  backend and a 4,096-element case (`bisect_4096.case`) in the same pass,
+  since 256 elements was too coarse to resolve the expected signal.
+- **2026-09-15** — **The anchor measurement now exists, and it falsifies the
+  regression hypothesis for the range searched.** `bisect_4096.case`, CPU,
+  double precision, 2 ranks, three runs each: anchor (`f1ca7b11d64`/
+  `99033428`) medians 2067.7 MB; top endpoint (`865225094`/`0cd5a6d`)
+  medians 1979.9 MB — the anchor is 87.8 MB *higher*, about 55x the 1.6 MB
+  run-to-run spread, with identical gather-scatter structural invariants
+  confirming both builds ran the same workload. Per-element host memory
+  cost improved roughly 4.2% between May and September on this case; it did
+  not regress. Both anchor-build risks (gfortran 15.2 compiling four-month-
+  old Neko, the case parsing at all) came to nothing. This is narrow: CPU
+  only, 4,096 elements, and it leaves the May-vs-September capacity
+  contradiction (51.25 GiB/rank at 16,384 elements/rank in May; OOM at
+  8,192 elements/rank now, same requested resources) explicitly open, and
+  the CPU-vs-CUDA control that would test for a device-side regression has
+  not been run. Full detail in "The anchor measurement, and what it found",
+  above.
+- **2026-09-15** — **The May-vs-September capacity contradiction is
+  resolved.** `ReqMem` in `sacct` is a job total, not a per-node figure:
+  proven from the logs, where `full`'s `688128M` over 16 nodes and
+  `64x32x32`'s `43008M` over 1 node agree exactly per-node (43008 MiB/node,
+  5.25 GiB/rank at 8 tasks/node). The May job (`sacct` 18855130) received
+  `7864320M` over 16 nodes — 60 GiB/rank, 11.4x more — from an `#SBATCH`
+  block identical to the current one, which requests no memory explicitly in
+  either case (896 MiB/CPU now vs 10240 MiB/CPU in May: both clean numbers,
+  the signature of a changed partition/account default, not a changed
+  request). The previously-recorded "51.25 GiB/rank" May figure was actual
+  usage, not the budget, and sits comfortably under the now-known 60 GiB/rank
+  it actually had. Against 5.25 GiB/rank now, the reference table's own
+  fitted per-rank cost (~8.2-8.35 GiB at 8,192 elements/rank) cannot fit,
+  which needs no code regression to explain. *Why* the default changed
+  (LUMI policy, partition reconfiguration, or an `sbatch` flag on the May
+  submission not visible in any committed jobscript) is not determinable from
+  this container and is recorded as open possibilities, not a conclusion.
+  Also corrected two termination-cause errors this carried: `64x32x32` and
+  `full` are `sacct`-job-level `FAILED` (exit `1:0`), not `OUT_OF_MEMORY`/
+  `OOM` — the kernel OOM is real and confirmed in both `error.log`s, it just
+  surfaces as a step-level state (`.1` step `OUT_OF_MEMORY` for `64x32x32`,
+  `.1` step `CANCELLED` after cascading `oom_kill` events for `full`), not
+  the job's own state. Actionable fix, a cluster action not verifiable here:
+  add `#SBATCH --mem=0` to the `mem_test` jobscripts and re-run. Full detail
+  in "The `ReqMem` gap, explained" under Bisecting, above.
+- **2026-09-15** — Fixed a second, pre-May-only build blocker: any
+  Neko-TOP commit older than `99033428` (2026-05-20) fails to *link*, with
+  undefined `GOMP_parallel`/`omp_get_thread_num`/`GOMP_barrier`, because
+  Neko-TOP's own CMake only started linking `OpenMP::OpenMP_Fortran`
+  between `6b20dfb` (04-14) and `99033428` (05-20); not a `neko.pc` issue,
+  confirmed by a byte-identical `neko.pc` across April/May/September builds
+  and by `libgomp.so` being present in working `build.ninja`s and absent
+  from broken ones. Fixed the same way as the earlier `-lstdc++` case:
+  `-lgomp` via `CMAKE_Fortran_STANDARD_LIBRARIES` (`280aaa8`). Verified
+  harmless to the established numbers by rebuilding the top endpoint with
+  it in place: 0.4 MB shift in the median, inside the run-to-run spread —
+  see next entry for the full rebuild-and-compare numbers.
+- **2026-09-15** — **The ALE hypothesis is tested and refuted.** Proposed
+  reasoning: `53b425161` "Feature/ale (#2244)" (2026-04-13) significantly
+  altered `coef_t` and landed before both points already measured, so its
+  cost would sit inside both and be invisible to that comparison. Tested
+  directly: pairs either side of the merge, same case/ranks/backend —
+  pre-ALE (`e8900582f`/`6b20dfb`) medians 2079.3 MB, post-ALE
+  (`53b425161`/`b334750`) medians 2079.2 MB, a 0.1 MB delta against a
+  0.2-1.7 MB spread, and the `mem_test` case never configures ALE, so this
+  is a genuine test of unconditional cost, not a vacuous one. Placed with
+  the anchor and top-endpoint numbers, the four-point series
+  April-to-September is monotonically decreasing, -99.4 MB / -4.8% total.
+  The `-lgomp` fix needed to build the April pairs was checked for its own
+  effect on the established numbers: the top endpoint rebuilt with it
+  measures 1978.9/1979.5/1980.1 MB against 1979.6/1981.2/1979.9 MB before
+  — a 0.4 MB shift in the median, inside the run-to-run spread, so the old
+  and new numbers are comparable. Full detail in "The ALE hypothesis,
+  tested and refuted" under Bisecting, above.
+- **2026-09-15** — Hit and documented a silent build-configuration trap:
+  without `FORCE_PKGCONF_PYPI=1` set, this container's PyPI `pkgconf` shim
+  returns an empty `Cflags` for json-fortran, so `configure` reports "yes"
+  while the generated `FCFLAGS` carry no `-I`, and the build only fails much
+  later in `common/json_utils.f90` with `Cannot open module file
+  'json_module.mod'`. Documented alongside the existing pkg-config material
+  under Build gotchas.
+- **2026-09-15** — Diagnosed and fixed why the CUDA anchor build could not
+  run: not VRAM and not rank contention (both tested and refuted — VRAM
+  returned to baseline on the crash, and a 1-rank retry failed identically),
+  but a mixed-architecture binary. Neko-TOP's own five CUDA translation units
+  built for CMake/CUDA-13's default architecture rather than the host GPU on
+  any Neko-TOP commit before `99033428` (2026-05-20), while Neko's own device
+  code got the right one from Neko's `configure` — 57 `sm_86` cubins plus 5
+  `sm_75` on this machine, which the driver cannot JIT, failing at the first
+  Neko-TOP kernel launch (`math_ext.cu:66`). Fixed by passing
+  `-DCMAKE_CUDA_ARCHITECTURES` on the `cmake` command line (`873852c`),
+  verified at the binary level with `cuobjdump --list-elf`: 57/5 before, 62/0
+  after. Same class of bug as the `-lgomp` fix (`280aaa8`). Full detail under
+  "Build gotchas", above.
+- **2026-09-15** — **The CPU-vs-CUDA control is complete, and agrees with the
+  CPU result.** CUDA anchor (2 ranks) medians 2132.8 MB
+  (2132.3/2132.8/2134.2), CUDA top endpoint medians 2073.5 MB
+  (2070.3/2073.5/2074.6, measured earlier and reused unchanged) — a delta of
+  -59.3 MB, against -87.8 MB on CPU. Both negative and of similar order: CUDA
+  shows no growth the CPU measurement was hiding. Gather-scatter structural
+  invariants identical between the two CUDA endpoints and matching the CPU
+  value. Device-side memory growth is ruled out for the shared and
+  CUDA-specific code paths measured; this corroborates the CPU bisect result
+  rather than merely failing to challenge it. Full detail in "The CPU-vs-CUDA
+  control, completed", above. This exhausts every avenue this container can
+  test — it does not close the investigation, which still needs a documented
+  full-scale LUMI success; see "Status at a glance", above, for what remains
+  (the HIP-specific path, plus the cluster actions already queued, foremost
+  the `--mem=0` confirmation run).
+- **2026-09-16** — Corrected this document's own status framing; no
+  measurement changed. The bottom line and the section formerly headed
+  "Closed, for everything this container can test" (now "Exhausted, for
+  everything this container can test") stated the allocation-change
+  explanation as this investigation's settled conclusion. It is a leading
+  hypothesis with strong local supporting evidence, not a demonstrated fact:
+  no full-scale LUMI run has yet been observed succeeding since the failures
+  began. Added an explicit closing criterion — the investigation closes only
+  when a full-scale run is documented completing on LUMI, its `sacct` row
+  and per-rank peak recorded here beside the May benchmark's own figures, in
+  the already-established `mem_test/pass/`/`mem_test/fail/` logs — and made
+  explicit throughout that a still-failing confirmation run would refute the
+  hypothesis and reopen the search, not merely disappoint. Reordered
+  `_next_`, below, so the LUMI confirmation run is item one.
+- **_next_** — **(1) The investigation's closing action: add
+  `#SBATCH --mem=0` to the `mem_test` jobscripts (`full.sh` and its
+  siblings), re-run the full-scale ladder on LUMI, and record the outcome in
+  this document — the `sacct` row (`ReqMem`, `MaxRSS`, `State`) and per-rank
+  peak, set beside the May benchmark's own figures, in
+  "The investigation's closing criterion" under "Status at a glance".
+  Completing this is the only thing that closes the investigation; if the
+  OOMs persist, that refutes the allocation-change hypothesis and reopens the
+  search for a code-side cause, which is itself a result worth recording in
+  full, not a null outcome.** (2) The HIP-specific path — principally Neko
+  `10689388af1` "Zero-copy unified memory for MI300A" — is confirmed
+  unreachable in any CUDA build by source inspection (new files are `.hip`,
+  the `Makefile.am` hunks sit inside `if ENABLE_HIP`, `device.F90` changes are
+  inside `#ifdef HAVE_HIP` with nothing in the `#elif HAVE_CUDA` branch), and
+  this container has no ROCm toolchain, so it is testable only on the
+  production cluster. (3) Run the ladder on LUMI with the probes for the
+  per-rank component budget. (4) Recover the May benchmark results from LUMI
+  for a historical baseline, since `single_node_capacity.csv` swept to
+  16,384 elements per rank at `n_memory=100`, double what fails now.
+  (5) Independently of the regression question, now answered negatively
+  across the whole host-side and CUDA range searched: the unconditional
+  adjoint Gauss over-integration stack (about a third of loadup on a
+  `dealias: false` case) remains worth gating or trimming on its own merits.
