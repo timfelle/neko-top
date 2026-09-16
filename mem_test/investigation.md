@@ -21,8 +21,9 @@ memory cost; it fell by about 4.8%.** Combined with the `ReqMem` finding
 below, this investigation's conclusion is that **the OOMs are an allocation
 change, not a code change**: the cluster now grants these jobs 5.25 GiB/rank
 against 60 GiB/rank in May, and it is the budget that shrank, not the code's
-need that grew. The one avenue this does not close is the device path — see
-"Not yet done", below, which remains open.
+need that grew. The CPU-vs-CUDA device control has since completed too, and
+agrees — see "Closed, for everything this container can test", below, which
+also states precisely what remains open.
 
 **Established.** The excess consumption is Neko-TOP's, not Neko's: the same
 case passes against pure Neko at every size. The failing runs die building the
@@ -77,23 +78,41 @@ case. **The headline finding is no longer "which commit increased memory" but
 log lines, and what this does and does not establish about *why* the default
 changed: see "The `ReqMem` gap, explained" under Bisecting, below.
 
-**Not yet done, and this is what stops "no regression" from being the final
-word.** No cluster run with the probes, so the per-rank component budget on
-real problem sizes is still missing, and the historical
-`single_node_capacity.csv` baseline has not been recovered. More pointedly,
-the CPU-vs-CUDA control is **still incomplete**: the CUDA top endpoint has
-reported — **2073.5 MB**, across three completed runs — but all three CUDA
-**anchor** runs failed to complete, so there is no CUDA delta yet. A retry
-at 1 rank is in progress; record it as open. Until it reports, a
-**device-side** regression — invisible to the CPU measurement above, since
-pinned/managed allocations are not compiled into a CPU build — remains
-formally unexcluded, and the cluster failure this investigation exists to
-explain is HIP, at double the element count measured here. Even a clean
-CUDA result would not fully close this question: the prime remaining
-device-side suspect, Neko `10689388af1` "Zero-copy unified memory for
-MI300A" (#2666), is AMD-specific and may not compile into a CUDA build at
-all. This container has no ROCm toolchain, so that path may only be
-testable on LUMI.
+**Closed, for everything this container can test.** The CPU-vs-CUDA device
+control is now complete too, and agrees with the CPU result: CUDA anchor (2
+ranks) medians **2132.8 MB**, CUDA top endpoint medians **2073.5 MB**, a delta
+of **-59.3 MB**, against the CPU delta of **-87.8 MB** — both negative and of
+similar order, so CUDA shows no growth that the CPU measurement was hiding.
+Device-side memory growth is ruled out for the shared and CUDA-specific code
+paths measured here; the anchor runs that previously failed to complete turned
+out to be a mixed-cubin build defect, not a memory finding — see "The
+CPU-vs-CUDA control, completed" under Bisecting, below, for the full result
+and the fix. That closes every avenue this container can actually test. What
+is left is narrower than before, and is genuinely out of reach here:
+
+- The **HIP-specific path** — principally Neko `10689388af1` "Zero-copy
+  unified memory for MI300A" (#2666) — is confirmed unreachable in any CUDA
+  build by source inspection: the new files are `.hip`, the relevant
+  `Makefile.am` hunks sit inside `if ENABLE_HIP`, and the `device.F90` changes
+  are inside `#ifdef HAVE_HIP` with nothing in the corresponding `#elif
+  HAVE_CUDA` branch. This container has no ROCm toolchain. Testable only on
+  the production cluster.
+
+- The **`--mem=0` confirmation run** on LUMI, which would verify the
+  investigation's actual conclusion — that the OOMs follow from a budget
+  reduction of 60 to 5.25 GiB/rank, not a code change — rather than test
+  another code path. See "The actionable fix" under "The `ReqMem` gap,
+  explained", above.
+
+- A **cluster run with the probes**, for the per-rank component budget at real
+  problem sizes, and recovery of the historical `single_node_capacity.csv`
+  baseline — both still outstanding and independent of the regression
+  question.
+
+- The **Gauss over-integration stack**, worth trimming on its own merits
+  regardless of the regression verdict — about a third of loadup on a case
+  with dealiasing disabled, at precisely the allocation where the failing runs
+  die. See "Measured", above.
 
 ## Context
 
@@ -521,6 +540,14 @@ These cost several iterations; `build_pair.sh` encodes all of them.
 - The vendored dependencies are not on the default pkg-config path. Export
   `PKG_CONFIG_PATH` for `external/json-fortran/lib/pkgconfig` and
   `external/hdf5/lib/pkgconfig`, as `scripts/dependencies.sh` does.
+- Rebuilding without `FORCE_PKGCONF_PYPI=1` set in the environment fails
+  silently, not loudly. This container's PyPI `pkgconf` shim returns an empty
+  `Cflags` for json-fortran, so `configure` cheerfully reports `checking for
+  json-fortran... yes` while the `FCFLAGS` it generates carry no `-I`, and
+  the build only dies much later, in `common/json_utils.f90`, with `Cannot
+  open module file 'json_module.mod'` — a confusing site to land on given
+  `configure` said everything was fine. Set `FORCE_PKGCONF_PYPI=1` before
+  configuring.
 - Neko's own executable fails to link with `undefined reference to
   __cxa_guard_acquire`. The CUDA objects pull in C++ guard symbols and older
   configurations do not link the C++ runtime. **This bullet previously
@@ -573,6 +600,24 @@ These cost several iterations; `build_pair.sh` encodes all of them.
   hypothesis, tested and refuted", below, for the rebuild-and-compare check.
   **Any future attempt to build a Neko-TOP commit older than this CMake
   change will hit this.**
+- **A CUDA build of any Neko-TOP commit before `99033428` (2026-05-20) links
+  and loads, then dies at the first Neko-TOP kernel launch** with `the
+  provided PTX was compiled with an unsupported toolchain` (seen at
+  `math_ext.cu:66`). Same class of bug as the `-lgomp` case immediately
+  above, and for the same reason: `sources/CMakeLists.txt` only gained
+  `if(DEFINED ENV{CUDA_ARCH}) set(CMAKE_CUDA_ARCHITECTURES ...)` after that
+  commit, so older checkouts build their own five CUDA translation units
+  (`RAMP_mapping.cu`, `SIMP_mapping.cu`, `heaviside_mapping.cu`, `mma.cu`,
+  `math_ext.cu`) for CMake/CUDA-13's default architecture while Neko's own
+  device code still gets the right one from Neko's `configure` — a mixed
+  binary, 57 `sm_86` plus 5 `sm_75` cubins on this machine, that the driver
+  cannot JIT. Fixed by passing `-DCMAKE_CUDA_ARCHITECTURES=<arch>` on the
+  `cmake` command line, which takes precedence at every commit (`873852c`).
+  Verified at the binary level, not by the build succeeding: `cuobjdump
+  --list-elf` before/after, 57 `sm_86`/5 `sm_75` to 62 `sm_86`/0 `sm_75`.
+  **Any future attempt to build a pre-`99033428` Neko-TOP commit for CUDA
+  will hit this.** This unblocked the CPU-vs-CUDA control; see "The
+  CPU-vs-CUDA control, completed", below, for the result.
 - The `mem_test` example postdates the older commits, so it is copied into the
   old worktree and registered in `examples/CMakeLists.txt`. That keeps the
   measured case and its user code identical at every point in history.
@@ -715,7 +760,9 @@ no further than that:
   measured here. Pinned/managed device allocations are not compiled into a
   CPU build, so a device-side regression would be structurally invisible to
   this measurement. The CPU-vs-CUDA control that would test for exactly
-  this has **not been run**.
+  this has **not been run**. **Superseded: it has been run since, and
+  agrees** — see "The CPU-vs-CUDA control, completed", below. The
+  AMD-specific HIP path itself remains untested regardless.
 - **An open contradiction stood here, and is now resolved — see below.**
   *(Superseded paragraph, kept for the trail.)* The May benchmark job
   (`sacct` 18855130, 2026-05-26, Neko 1.99.3) completed using **51.25
@@ -735,8 +782,11 @@ no further than that:
   60 GiB/rank budget is known: it used about 85% of what it had, comfortably
   under, not against, the limit. See "The `ReqMem` gap, explained", next.
 
-The device path remains the one open question this result does not, and
-cannot, answer — see "Not yet done" under "Status at a glance", above.
+**Superseded.** The device path was the one open question this specific
+(CPU-only) result could not answer on its own. It has since been answered for
+CUDA — see "The CPU-vs-CUDA control, completed", below — leaving only the
+HIP-specific path open; see "Closed, for everything this container can
+test" under "Status at a glance", above.
 
 ### The `ReqMem` gap, explained
 
@@ -909,9 +959,57 @@ against itself would not be trustworthy, however clean the rest of it looks.
 hypothesis and extends the "nothing increased it" host-side finding back to
 2026-04-13, but it is still the same measurement as the anchor result
 above: one 4,096-element case, 2 ranks, CPU backend, host memory only. It
-says nothing about device-side cost, where the CPU-vs-CUDA control (see
-"Not yet done" under "Status at a glance", above, and the Progress log,
-below) remains the open question.
+says nothing on its own about device-side cost — that is answered
+separately, and CUDA agrees; see "The CPU-vs-CUDA control, completed",
+below, and "Closed, for everything this container can test" under "Status
+at a glance", above, for what remains open (the HIP-specific path).
+
+### The CPU-vs-CUDA control, completed
+
+The CPU-only bisect above cannot see a device-side memory regression: pinned
+or managed device allocations only exist in a device build. This control
+repeats the same anchor/top-endpoint comparison — same commit pairs
+(`f1ca7b11d64`/`99033428` and `865225094`/`0cd5a6d`), same
+`bisect_4096.case`, 2 ranks — built for CUDA instead of CPU, to test for
+exactly that.
+
+The CUDA anchor build initially failed all three runs, and a 1-rank retry
+failed identically, which ruled out two hypotheses directly: not VRAM (it
+returned to its pre-run baseline on the crash, rather than climbing towards a
+limit) and not rank contention (a single rank failed the same way as two).
+The actual cause was an architecture mismatch in the embedded cubins — full
+detail, including the fix and its binary-level verification, is under "Build
+gotchas", above (`873852c`).
+
+With that fixed, the anchor completes at every rank count tried. Three runs
+each, gated on the same completion marker as the CPU runs:
+
+| Backend, ranks | Anchor | Top endpoint | Delta (top - anchor) |
+| --- | --- | --- | --- |
+| CPU, 2 | 2067.7 MB | 1979.9 MB | -87.8 MB |
+| CUDA, 2 | 2132.8 MB | 2073.5 MB | -59.3 MB |
+
+CUDA anchor: 2132.3 / 2132.8 / 2134.2 MB (median 2132.8). CUDA top endpoint:
+2070.3 / 2073.5 / 2074.6 MB (median 2073.5) — measured earlier than the
+anchor and reused unchanged here, since nothing about that build changed.
+Gather-scatter structural invariants are identical between the two CUDA
+endpoints, and match the CPU value character-for-character, so all four
+builds (two backends times two endpoints) constructed the same objects on the
+same mesh.
+
+**The control held.** Both deltas are negative and of similar order — CPU
+-87.8 MB, CUDA -59.3 MB — so CUDA does not show the top endpoint higher where
+CPU showed it lower. Device-side memory growth is ruled out for the shared
+and CUDA-specific code paths this configuration exercises. This corroborates
+the CPU bisect result rather than merely failing to challenge it: two
+independent backends, on the same commits and the same case, agree on the
+direction and rough size of the change.
+
+This is still the same case and rank count as the rest of the bisect, now on
+CUDA rather than CPU. The AMD-specific HIP path — principally Neko
+`10689388af1` "Zero-copy unified memory for MI300A" — is untouched by this
+result; see "Closed, for everything this container can test" under "Status at
+a glance", above.
 
 ## Reference measurements
 
@@ -1272,22 +1370,53 @@ Newest last. Keep entries to a line or two.
   — a 0.4 MB shift in the median, inside the run-to-run spread, so the old
   and new numbers are comparable. Full detail in "The ALE hypothesis,
   tested and refuted" under Bisecting, above.
-- **_next_** — (1) The CPU-vs-CUDA control is **still incomplete**: the
-  CUDA top endpoint has reported (2073.5 MB, three completed runs), but all
-  three CUDA anchor runs failed to complete, so there is no CUDA delta yet.
-  A retry at 1 rank is in progress (open). Until it reports, the device
-  path remains formally unexcluded, and even a clean result would not by
-  itself clear Neko `10689388af1` "Zero-copy unified memory for MI300A"
-  (AMD-specific, may not compile into a CUDA build at all — untestable here
-  without a ROCm toolchain, so possibly only testable on LUMI). (2) Add
-  `#SBATCH --mem=0` to the `mem_test` jobscripts and re-run on LUMI to
-  confirm the OOMs disappear now that the `ReqMem` gap is understood — a
+- **2026-09-15** — Hit and documented a silent build-configuration trap:
+  without `FORCE_PKGCONF_PYPI=1` set, this container's PyPI `pkgconf` shim
+  returns an empty `Cflags` for json-fortran, so `configure` reports "yes"
+  while the generated `FCFLAGS` carry no `-I`, and the build only fails much
+  later in `common/json_utils.f90` with `Cannot open module file
+  'json_module.mod'`. Documented alongside the existing pkg-config material
+  under Build gotchas.
+- **2026-09-15** — Diagnosed and fixed why the CUDA anchor build could not
+  run: not VRAM and not rank contention (both tested and refuted — VRAM
+  returned to baseline on the crash, and a 1-rank retry failed identically),
+  but a mixed-architecture binary. Neko-TOP's own five CUDA translation units
+  built for CMake/CUDA-13's default architecture rather than the host GPU on
+  any Neko-TOP commit before `99033428` (2026-05-20), while Neko's own device
+  code got the right one from Neko's `configure` — 57 `sm_86` cubins plus 5
+  `sm_75` on this machine, which the driver cannot JIT, failing at the first
+  Neko-TOP kernel launch (`math_ext.cu:66`). Fixed by passing
+  `-DCMAKE_CUDA_ARCHITECTURES` on the `cmake` command line (`873852c`),
+  verified at the binary level with `cuobjdump --list-elf`: 57/5 before, 62/0
+  after. Same class of bug as the `-lgomp` fix (`280aaa8`). Full detail under
+  "Build gotchas", above.
+- **2026-09-15** — **The CPU-vs-CUDA control is complete, and agrees with the
+  CPU result.** CUDA anchor (2 ranks) medians 2132.8 MB
+  (2132.3/2132.8/2134.2), CUDA top endpoint medians 2073.5 MB
+  (2070.3/2073.5/2074.6, measured earlier and reused unchanged) — a delta of
+  -59.3 MB, against -87.8 MB on CPU. Both negative and of similar order: CUDA
+  shows no growth the CPU measurement was hiding. Gather-scatter structural
+  invariants identical between the two CUDA endpoints and matching the CPU
+  value. Device-side memory growth is ruled out for the shared and
+  CUDA-specific code paths measured; this corroborates the CPU bisect result
+  rather than merely failing to challenge it. Full detail in "The CPU-vs-CUDA
+  control, completed", above. This closes every avenue this container can
+  test; see "Status at a glance", above, for what remains (the HIP-specific
+  path, plus the cluster actions already queued).
+- **_next_** — (1) The HIP-specific path — principally Neko `10689388af1`
+  "Zero-copy unified memory for MI300A" — is confirmed unreachable in any
+  CUDA build by source inspection (new files are `.hip`, the `Makefile.am`
+  hunks sit inside `if ENABLE_HIP`, `device.F90` changes are inside `#ifdef
+  HAVE_HIP` with nothing in the `#elif HAVE_CUDA` branch), and this container
+  has no ROCm toolchain, so it is testable only on the production cluster.
+  (2) Add `#SBATCH --mem=0` to the `mem_test` jobscripts and re-run on LUMI
+  to confirm the OOMs disappear now that the `ReqMem` gap is understood — a
   cluster action, not verifiable from this container. (3) Run the ladder on
-  LUMI with the probes for the per-rank component budget. (4) Recover the
-  May benchmark results from LUMI for a historical baseline, since
+  LUMI with the probes for the per-rank component budget. (4) Recover the May
+  benchmark results from LUMI for a historical baseline, since
   `single_node_capacity.csv` swept to 16,384 elements per rank at
-  `n_memory=100`, double what fails now. (5) Independently of the
-  regression question, now answered negatively across the whole host-side
-  range searched: the unconditional adjoint Gauss over-integration stack
-  (about a third of loadup on a `dealias: false` case) remains worth gating
-  or trimming on its own merits.
+  `n_memory=100`, double what fails now. (5) Independently of the regression
+  question, now answered negatively across the whole host-side and CUDA range
+  searched: the unconditional adjoint Gauss over-integration stack (about a
+  third of loadup on a `dealias: false` case) remains worth gating or
+  trimming on its own merits.
