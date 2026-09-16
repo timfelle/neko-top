@@ -60,17 +60,8 @@ fi
 # Select which GPU to map to which core
 source functions.sh
 
-export OMP_NUM_THREADS=1
+export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
 export MPICH_GPU_SUPPORT_ENABLED=1
-# export NEKO_GS_STRTGY=3
-# export NEKO_GS_COMM=MPI
-export NEKO_MPI_THREAD_LEVEL=single
-
-# Stop after setup so every case reports a loadup peak measured at the same
-# point. Without this the passing cases run on into the time loop and their
-# peaks include solver working memory, which makes them incomparable with
-# the cases that die during setup. Comment out for a full run.
-export NEKOTOP_SETUP_ONLY=1
 
 run $example
 

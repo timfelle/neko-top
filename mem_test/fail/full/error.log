@@ -1,40 +1,34 @@
-Memory access fault by GPU node-9 (Agent handle: 0x2977650) on address 0x153866307000. Reason: Unknown.
-Memory access fault by GPU node-9 (Agent handle: 0x2977650) on address 0x14c822f50000. Reason: Unknown.
-Memory access fault by GPU node-6 (Agent handle: 0x2977650) on address 0x1526a9f24000. Reason: Unknown.
-Memory access fault by GPU node-9 (Agent handle: 0x2977650) on address 0x15409e772000. Reason: Unknown.
-Failed to allocate file: Bad file descriptor
-Failed to allocate file: Bad file descriptor
+Memory access fault by GPU node-9 (Agent handle: 0x2963540) on address 0x14b995524000. Reason: Unknown.
 Failed to allocate file: Bad file descriptor
 GPU core dump failed
-GPU core dump failed
+Memory access fault by GPU node-7 (Agent handle: 0x2963540) on address 0x1511a74ae000. Reason: Unknown.
+Memory access fault by GPU node-9 (Agent handle: 0x2963540) on address 0x1539e66fa000. Reason: Unknown.
+Failed to allocate file: Bad file descriptor
 GPU core dump failed
 Failed to allocate file: Bad file descriptor
 GPU core dump failed
-Memory access fault by GPU node-7 (Agent handle: 0x2977650) on address 0x14fbc7700000. Reason: Unknown.
+Memory access fault by GPU node-6 (Agent handle: 0x2963630) on address 0x146652000000. Reason: Unknown.
+srun: error: nid007062: tasks 67,69: Aborted
+srun: Terminating StepId=22095752.1
 Failed to allocate file: Bad file descriptor
 GPU core dump failed
-Memory access fault by GPU node-9 (Agent handle: 0x2977650) on address 0x14c61f537000. Reason: Unknown.
-srun: error: nid007056: task 21: Aborted
-srun: Terminating StepId=22095354.1
-srun: error: nid007067: task 106: Aborted
-[2026-09-16T14:19:15.967] error: *** STEP 22095354.1 ON nid007054 CANCELLED AT 2026-09-16T14:19:15 DUE TO TASK FAILURE ***
-srun: error: nid007068: task 117: Aborted
-srun: error: nid007058: task 35: Aborted
-srun: error: nid007065: tasks 88-95: Terminated
-srun: error: nid007054: tasks 0-7: Terminated
+srun: error: nid007054: task 2: Aborted
+[2026-09-16T14:36:18.534] error: *** STEP 22095752.1 ON nid007054 CANCELLED AT 2026-09-16T14:36:18 DUE TO TASK FAILURE ***
+srun: error: nid007062: tasks 64-66,68,70-71: Terminated
+srun: error: nid007054: tasks 0-1,3-7: Terminated
+srun: error: nid007058: tasks 32-39: Terminated
 srun: error: nid007063: tasks 72-79: Terminated
-srun: error: nid007062: tasks 64-71: Terminated
+srun: error: nid007067: tasks 104-108,110-111: Terminated
+srun: error: nid007065: tasks 88-95: Terminated
+srun: error: nid007056: tasks 16-23: Terminated
 srun: error: nid007064: tasks 80-87: Terminated
 srun: error: nid007061: tasks 56-63: Terminated
-srun: error: nid007056: tasks 16-20,22-23: Terminated
-srun: error: nid007060: tasks 48-55: Terminated
-srun: error: nid007068: tasks 112-116,118-119: Terminated
-srun: error: nid007058: tasks 32-34,36,38-39: Terminated
 srun: error: nid007066: tasks 96-103: Terminated
 srun: error: nid007059: tasks 40-47: Terminated
-srun: error: nid007055: tasks 8-15: Terminated
-srun: error: nid007057: tasks 24-31: Terminated
-srun: error: nid007067: tasks 104-105,107-111: Terminated
+srun: error: nid007068: tasks 112-119: Terminated
 srun: error: nid007069: tasks 120-127: Terminated
-srun: error: nid007058: task 37: Killed
-srun: Force Terminated StepId=22095354.1
+srun: error: nid007055: tasks 8-15: Terminated
+srun: error: nid007060: tasks 48-55: Terminated
+srun: error: nid007057: tasks 24-31: Terminated
+srun: error: nid007067: task 109: Aborted (core dumped)
+srun: Force Terminated StepId=22095752.1
