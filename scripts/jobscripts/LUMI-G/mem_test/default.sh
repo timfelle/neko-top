@@ -21,6 +21,7 @@
 #SBATCH --ntasks-per-node=8
 #SBATCH --gpus-per-node=8
 #SBATCH --cpus-per-task=6
+#SBATCH --mem=0
 
 # Time specifications (dd-hh:mm:ss)
 #SBATCH --time 00-00:10:00

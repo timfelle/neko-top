@@ -20,6 +20,7 @@
 #SBATCH --ntasks=1
 #SBATCH --gpus-per-task=1
 #SBATCH --cpus-per-task=6
+#SBATCH --mem=64G
 
 # Time specifications (dd-hh:mm:ss)
 #SBATCH --time 00-00:10:00
