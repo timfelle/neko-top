@@ -3,14 +3,14 @@ See small.log for the status output.
 ================================================================================
 SLURM Job: mem_test/small
 ================================================================================
-Job ID: 22035607
-Job Node: nid005028
+Job ID: 22095355
+Job Node: nid007899
 Job Partition: small-g
 Job Account: project_465002946
 Job Time: 
 Job Memory: 
 Job CPUs: 6
-Job GPUs: 5
+Job GPUs: 0
 Job QOS: normal
 Job Reservation: 
 Job Work Directory: /pfs/lustrep2/scratch/project_465002485/tim/logs/mem_test/small
@@ -38,7 +38,7 @@ Running example: mem_test/small.
 
 
  -------Job Information--------
- Start time: 23:16 / 2026-09-14
+ Start time: 14:18 / 2026-09-16
  Running on: 1 MPI rank
  CPU type  : AMD EPYC 7A53 64-Core Processor
  Bcknd type: Accelerator (HIP)
@@ -60,7 +60,7 @@ Running example: mem_test/small.
   Reading deformation data
   Mesh read, setting up connectivity
   Done setting up mesh and connectivity
-  Mesh and connectivity setup (excluding read) time (s):  0.172008
+  Mesh and connectivity setup (excluding read) time (s):  0.174647
 
   --------Gather-Scatter--------
   Comm         :          MPI
@@ -301,17 +301,17 @@ Type : uniform
 Value: 0.000000E+00
 
  ---Autotune Ax helm (lx: 6)---
- 1D    ch=1024:    143.20 us/call
- 1D    ch=512 :    129.85 us/call
- 1D    ch=256 :    133.08 us/call
- 1D    ch=128 :    136.10 us/call
- KSTEP eb=1   :    144.36 us/call
- KSTEP eb=7   :   1184.87 us/call
- KSTEP eb=14  :   1088.71 us/call
- MFMA  1wf 1 e:    190.24 us/call
- MFMA  2wf 1 e:    154.60 us/call
- MFMA  4wf 1 e:    145.93 us/call
- MFMA  8wf 2 e:    146.78 us/call
+ 1D    ch=1024:    147.32 us/call
+ 1D    ch=512 :    131.38 us/call
+ 1D    ch=256 :    135.54 us/call
+ 1D    ch=128 :    139.19 us/call
+ KSTEP eb=1   :    149.31 us/call
+ KSTEP eb=7   :   1058.92 us/call
+ KSTEP eb=14  :   1004.45 us/call
+ MFMA  1wf 1 e:    189.18 us/call
+ MFMA  2wf 1 e:    155.31 us/call
+ MFMA  4wf 1 e:    147.16 us/call
+ MFMA  8wf 2 e:    146.10 us/call
  Chose        : 1 (1D, 512 chunk)
 Filter
 Iterations:   Start residual:     Final residual:
@@ -365,118 +365,118 @@ Value: 0.000000E+00
    ------------Fluid-------------
 
     ----Autotune conv1 (lx: 6)----
-    1D    ch=1024:    193.95 us/call
-    1D    ch=512 :    196.17 us/call
-    1D    ch=256 :    202.57 us/call
-    1D    ch=128 :    208.22 us/call
-    KSTEP eb=1   :    238.15 us/call
-    KSTEP eb=7   :    264.93 us/call
-    KSTEP eb=14  :    272.74 us/call
-    MFMA  1wf 1 e:    266.50 us/call
-    MFMA  2wf 1 e:    237.88 us/call
-    MFMA  4wf 1 e:    212.98 us/call
-    MFMA  8wf 2 e:    207.75 us/call
+    1D    ch=1024:    193.43 us/call
+    1D    ch=512 :    193.77 us/call
+    1D    ch=256 :    200.66 us/call
+    1D    ch=128 :    206.22 us/call
+    KSTEP eb=1   :    234.78 us/call
+    KSTEP eb=7   :    261.08 us/call
+    KSTEP eb=14  :    268.51 us/call
+    MFMA  1wf 1 e:    264.79 us/call
+    MFMA  2wf 1 e:    235.89 us/call
+    MFMA  4wf 1 e:    211.83 us/call
+    MFMA  8wf 2 e:    206.53 us/call
     Chose        : 1 (1D, 1024 chunk)
 
     ---Autotune dudxyz (lx: 6)----
-    1D    ch=1024:     95.47 us/call
-    1D    ch=512 :     84.15 us/call
-    1D    ch=256 :     84.35 us/call
-    1D    ch=128 :     88.39 us/call
-    KSTEP eb=1   :     91.61 us/call
-    KSTEP eb=7   :     94.86 us/call
-    KSTEP eb=14  :    100.61 us/call
-    MFMA  1wf 1 e:    138.49 us/call
-    MFMA  2wf 1 e:    113.49 us/call
-    MFMA  4wf 1 e:     92.58 us/call
-    MFMA  8wf 2 e:     93.33 us/call
-    Chose        : 1 (1D, 512 chunk)
+    1D    ch=1024:     95.23 us/call
+    1D    ch=512 :     84.68 us/call
+    1D    ch=256 :     84.56 us/call
+    1D    ch=128 :     88.36 us/call
+    KSTEP eb=1   :     91.72 us/call
+    KSTEP eb=7   :     94.44 us/call
+    KSTEP eb=14  :     99.68 us/call
+    MFMA  1wf 1 e:    138.01 us/call
+    MFMA  2wf 1 e:    114.20 us/call
+    MFMA  4wf 1 e:     93.13 us/call
+    MFMA  8wf 2 e:     94.91 us/call
+    Chose        : 1 (1D, 256 chunk)
 
     ----Autotune cdtp (lx: 6)-----
-    1D    ch=1024:     93.95 us/call
-    1D    ch=512 :     72.28 us/call
-    1D    ch=256 :     68.52 us/call
-    1D    ch=128 :     71.46 us/call
-    KSTEP eb=1   :     80.27 us/call
-    KSTEP eb=7   :     74.58 us/call
-    KSTEP eb=14  :     81.73 us/call
-    MFMA  1wf 1 e:    104.07 us/call
-    MFMA  2wf 1 e:     83.94 us/call
-    MFMA  4wf 1 e:     71.25 us/call
-    MFMA  8wf 2 e:     72.85 us/call
+    1D    ch=1024:     92.84 us/call
+    1D    ch=512 :     72.04 us/call
+    1D    ch=256 :     69.06 us/call
+    1D    ch=128 :     72.47 us/call
+    KSTEP eb=1   :     79.67 us/call
+    KSTEP eb=7   :     75.81 us/call
+    KSTEP eb=14  :     80.57 us/call
+    MFMA  1wf 1 e:    102.74 us/call
+    MFMA  2wf 1 e:     83.35 us/call
+    MFMA  4wf 1 e:     71.92 us/call
+    MFMA  8wf 2 e:     73.58 us/call
     Chose        : 1 (1D, 256 chunk)
 
     ---Autotune Ax helm (lx: 4)---
-    1D    ch=1024:     91.41 us/call
-    1D    ch=512 :     58.18 us/call
-    1D    ch=256 :     37.68 us/call
-    1D    ch=128 :     35.55 us/call
-    KSTEP eb=1   :     63.17 us/call
-    KSTEP eb=16  :     96.72 us/call
-    KSTEP eb=32  :    104.90 us/call
-    MFMA  1wf 1 e:     36.08 us/call
-    MFMA  2wf 2 e:     35.51 us/call
-    MFMA  4wf 4 e:     36.39 us/call
-    MFMA  8wf 8 e:     37.74 us/call
+    1D    ch=1024:     90.39 us/call
+    1D    ch=512 :     57.41 us/call
+    1D    ch=256 :     38.01 us/call
+    1D    ch=128 :     35.98 us/call
+    KSTEP eb=1   :     59.27 us/call
+    KSTEP eb=16  :     91.30 us/call
+    KSTEP eb=32  :     97.72 us/call
+    MFMA  1wf 1 e:     36.49 us/call
+    MFMA  2wf 2 e:     35.72 us/call
+    MFMA  4wf 4 e:     36.35 us/call
+    MFMA  8wf 8 e:     38.38 us/call
     Chose        : 3 (MFMA, 2 wf, 2 elem/block)
 
     ---Autotune Ax helm (lx: 3)---
-    1D    ch=1024:     87.79 us/call
-    1D    ch=512 :     51.72 us/call
-    1D    ch=256 :     31.80 us/call
-    1D    ch=128 :     26.55 us/call
-    KSTEP eb=1   :     32.50 us/call
-    KSTEP eb=28  :     21.22 us/call
-    KSTEP eb=56  :     21.95 us/call
+    1D    ch=1024:     86.62 us/call
+    1D    ch=512 :     51.41 us/call
+    1D    ch=256 :     31.58 us/call
+    1D    ch=128 :     26.39 us/call
+    KSTEP eb=1   :     32.28 us/call
+    KSTEP eb=28  :     21.04 us/call
+    KSTEP eb=56  :     21.83 us/call
     Chose        : 2 (KSTEP, 28 elem/block)
 
     ---Autotune Ax helm (lx: 2)---
-    1D    ch=1024:     60.77 us/call
-    1D    ch=512 :     33.21 us/call
-    1D    ch=256 :     19.57 us/call
-    1D    ch=128 :     15.20 us/call
-    KSTEP eb=1   :     18.53 us/call
-    KSTEP eb=64  :      4.65 us/call
-    KSTEP eb=128 :      4.79 us/call
+    1D    ch=1024:     60.70 us/call
+    1D    ch=512 :     33.27 us/call
+    1D    ch=256 :     19.60 us/call
+    1D    ch=128 :     15.17 us/call
+    KSTEP eb=1   :     18.44 us/call
+    KSTEP eb=64  :      4.75 us/call
+    KSTEP eb=128 :      4.87 us/call
     Chose        : 2 (KSTEP, 64 elem/block)
    -- AMG level 0 -- Chebyshev approx. max eig       1.114
    -- AMG level 1 -- Chebyshev approx. max eig       0.147
    -- AMG level 2 -- Chebyshev approx. max eig       1.169
 
     --Autotune Ax vector (lx: 6)--
-    eb=1         :    547.81 us/call
-    eb=7         :   2259.29 us/call
-    eb=14        :   2077.79 us/call
+    eb=1         :    539.28 us/call
+    eb=7         :   2237.93 us/call
+    eb=14        :   2067.30 us/call
     Chose        : 1 elem/block
 
     ---Autotune opgrad (lx: 6)----
-    1D    ch=1024:    181.11 us/call
-    1D    ch=512 :    176.07 us/call
-    1D    ch=256 :    180.08 us/call
-    1D    ch=128 :    196.21 us/call
-    KSTEP eb=1   :    223.22 us/call
-    KSTEP eb=7   :    233.86 us/call
-    KSTEP eb=14  :    244.74 us/call
-    MFMA  1wf 1 e:    247.72 us/call
-    MFMA  2wf 1 e:    212.29 us/call
-    MFMA  4wf 1 e:    185.11 us/call
-    MFMA  8wf 2 e:    181.87 us/call
+    1D    ch=1024:    177.80 us/call
+    1D    ch=512 :    173.72 us/call
+    1D    ch=256 :    175.47 us/call
+    1D    ch=128 :    191.15 us/call
+    KSTEP eb=1   :    216.13 us/call
+    KSTEP eb=7   :    224.07 us/call
+    KSTEP eb=14  :    234.00 us/call
+    MFMA  1wf 1 e:    239.04 us/call
+    MFMA  2wf 1 e:    206.92 us/call
+    MFMA  4wf 1 e:    181.24 us/call
+    MFMA  8wf 2 e:    178.43 us/call
     Chose        : 1 (1D, 512 chunk)
    KSP solver   | Field              Iters:   Start residual:   Final residual:
    1            | Pressure               14   0.316250769E+02   0.960192936E-07
    1            | X-Velocity              5   0.895992091E+01   0.893906374E-06
    1            | Y-Velocity              5   0.558094343E+00   0.456142415E-07
    1            | Z-Velocity              5   0.558094343E+00   0.456142415E-07
-   Fluid step time (s):     0.4590812E+01
+   Fluid step time (s):     0.4533386E+01
 
    ------------Scalar------------
    KSP solver   | Field              Iters:   Start residual:   Final residual:
    1            | s                       2   0.321444742E-03   0.125835462E-07
-   Scalar step time:        0.8699910E-02
+   Scalar step time:        0.8842536E-02
 
    ---------Step summary---------
-   Total time for step        1 (s):   0.4601392E+01
-   Total elapsed time (s):             0.4601412E+01
+   Total time for step        1 (s):   0.4544103E+01
+   Total elapsed time (s):             0.4544123E+01
  ------------------------------------------------------------------------------
  Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
  ------------------------------------------------------------------------------
@@ -490,16 +490,16 @@ Value: 0.000000E+00
    2            | X-Velocity              4   0.447087676E+00   0.887070971E-06
    2            | Y-Velocity              4   0.127801949E+00   0.265581302E-06
    2            | Z-Velocity              4   0.127801949E+00   0.265581302E-06
-   Fluid step time (s):     0.1457972E+00
+   Fluid step time (s):     0.1451303E+00
 
    ------------Scalar------------
    KSP solver   | Field              Iters:   Start residual:   Final residual:
    2            | s                       2   0.393660267E-03   0.156315140E-07
-   Scalar step time:        0.8043570E-02
+   Scalar step time:        0.8158761E-02
 
    ---------Step summary---------
-   Total time for step        2 (s):   0.1540966E+00
-   Total elapsed time (s):             0.4755536E+01
+   Total time for step        2 (s):   0.1535352E+00
+   Total elapsed time (s):             0.4697688E+01
  Normal end.
 
  -Adjoint Starting simulation--
@@ -514,22 +514,22 @@ Value: 0.000000E+00
    --------Adjoint scalar--------
    KSP solver   | Field              Iters:   Start residual:   Final residual:
    1            | Adjoint Scalar          2   0.248418841E-01   0.943147161E-06
-   Scalar step time:        0.3999373E-02
+   Scalar step time:        0.4029976E-02
 
    --------Adjoint fluid---------
 
     ---Autotune dudxyz (lx: 10)---
-    1D    ch=1024:    463.21 us/call
-    1D    ch=512 :    509.44 us/call
-    1D    ch=256 :    561.58 us/call
-    1D    ch=128 :    785.93 us/call
-    KSTEP eb=1   :    454.06 us/call
-    KSTEP eb=2   :    460.78 us/call
-    KSTEP eb=5   :    509.52 us/call
-    MFMA  1wf 1 e:   2703.18 us/call
-    MFMA  2wf 1 e:   1671.88 us/call
-    MFMA  4wf 1 e:   1004.45 us/call
-    MFMA  8wf 1 e:    729.95 us/call
+    1D    ch=1024:    450.72 us/call
+    1D    ch=512 :    492.59 us/call
+    1D    ch=256 :    548.65 us/call
+    1D    ch=128 :    777.44 us/call
+    KSTEP eb=1   :    445.07 us/call
+    KSTEP eb=2   :    452.20 us/call
+    KSTEP eb=5   :    512.29 us/call
+    MFMA  1wf 1 e:   2676.06 us/call
+    MFMA  2wf 1 e:   1665.96 us/call
+    MFMA  4wf 1 e:    977.06 us/call
+    MFMA  8wf 1 e:    722.36 us/call
     Chose        : 2 (KSTEP, 1 elem/block)
    -- AMG level 0 -- Chebyshev approx. max eig       1.114
    -- AMG level 1 -- Chebyshev approx. max eig       0.147
@@ -539,11 +539,11 @@ Value: 0.000000E+00
    1            | Adjoint Velocity V      4   0.442560803E+00   0.746427234E-06
    1            | Adjoint Velocity W      4   0.442560804E+00   0.746427235E-06
    1            | Adjoint Pressure       10   0.142981082E-01   0.544532040E-07
-   Fluid step time (s):     0.3514217E+01
+   Fluid step time (s):     0.3467607E+01
 
    ---------Step summary---------
-   Total time for step        1 (s):   0.3514487E+01
-   Total elapsed time (s):             0.3514507E+01
+   Total time for step        1 (s):   0.3467878E+01
+   Total elapsed time (s):             0.3467909E+01
  ------------------------------------------------------------------------------
  Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
  ------------------------------------------------------------------------------
@@ -552,7 +552,7 @@ Value: 0.000000E+00
    --------Adjoint scalar--------
    KSP solver   | Field              Iters:   Start residual:   Final residual:
    2            | Adjoint Scalar          2   0.158095522E-01   0.600314422E-06
-   Scalar step time:        0.3925128E-02
+   Scalar step time:        0.3957825E-02
 
    --------Adjoint fluid---------
    KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -560,11 +560,11 @@ Value: 0.000000E+00
    2            | Adjoint Velocity V      4   0.422582429E+00   0.919658302E-06
    2            | Adjoint Velocity W      4   0.422582456E+00   0.919658354E-06
    2            | Adjoint Pressure       10   0.181805588E-01   0.711158215E-07
-   Fluid step time (s):     0.1153640E+00
+   Fluid step time (s):     0.1147331E+00
 
    ---------Step summary---------
-   Total time for step        2 (s):   0.1157495E+00
-   Total elapsed time (s):             0.3630277E+01
+   Total time for step        2 (s):   0.1151304E+00
+   Total elapsed time (s):             0.3583053E+01
  Normal end.
 Filter
 Iterations:   Start residual:     Final residual:
@@ -597,20 +597,20 @@ Writing to optimization_data.csv
 
     ------------Fluid-------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
-    1            | Pressure               17   0.125443726E+06   0.318853921E-07
+    1            | Pressure               17   0.125443726E+06   0.318854676E-07
     1            | X-Velocity              5   0.895992091E+01   0.893906374E-06
     1            | Y-Velocity              5   0.558094343E+00   0.456142415E-07
     1            | Z-Velocity              5   0.558094343E+00   0.456142415E-07
-    Fluid step time (s):     0.1689707E+00
+    Fluid step time (s):     0.1672767E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | s                       2   0.321444743E-03   0.125835462E-07
-    Scalar step time:        0.9033424E-02
+    Scalar step time:        0.8608923E-02
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.1782765E+00
-    Total elapsed time (s):             0.1782797E+00
+    Total time for step        1 (s):   0.1761533E+00
+    Total elapsed time (s):             0.1761568E+00
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -624,16 +624,16 @@ Writing to optimization_data.csv
     2            | X-Velocity              4   0.415845434E+00   0.828059554E-06
     2            | Y-Velocity              4   0.119013068E+00   0.247559340E-06
     2            | Z-Velocity              4   0.119013068E+00   0.247559341E-06
-    Fluid step time (s):     0.1435243E+00
+    Fluid step time (s):     0.1427732E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | s                       2   0.375853971E-03   0.149295023E-07
-    Scalar step time:        0.7877700E-02
+    Scalar step time:        0.8097403E-02
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.1516518E+00
-    Total elapsed time (s):             0.3299549E+00
+    Total time for step        2 (s):   0.1511143E+00
+    Total elapsed time (s):             0.3272944E+00
   Normal end.
 
   -Adjoint Starting simulation--
@@ -648,7 +648,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | Adjoint Scalar          2   0.828383120E-02   0.314660531E-06
-    Scalar step time:        0.3973101E-02
+    Scalar step time:        0.3983786E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -656,11 +656,11 @@ Writing to optimization_data.csv
     1            | Adjoint Velocity V      4   0.398411888E+00   0.677431568E-06
     1            | Adjoint Velocity W      4   0.398411890E+00   0.677431567E-06
     1            | Adjoint Pressure       10   0.157815078E-01   0.614231096E-07
-    Fluid step time (s):     0.1153307E+00
+    Fluid step time (s):     0.1148659E+00
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.1155637E+00
-    Total elapsed time (s):             0.1155640E+00
+    Total time for step        1 (s):   0.1150921E+00
+    Total elapsed time (s):             0.1150925E+00
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -669,7 +669,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | Adjoint Scalar          2   0.135533424E-01   0.514538873E-06
-    Scalar step time:        0.3928655E-02
+    Scalar step time:        0.3940131E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -677,11 +677,11 @@ Writing to optimization_data.csv
     2            | Adjoint Velocity V      4   0.401122005E+00   0.877842030E-06
     2            | Adjoint Velocity W      4   0.401122039E+00   0.877842094E-06
     2            | Adjoint Pressure       10   0.147137936E-01   0.566354588E-07
-    Fluid step time (s):     0.1148120E+00
+    Fluid step time (s):     0.1143686E+00
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.1151795E+00
-    Total elapsed time (s):             0.2307598E+00
+    Total time for step        2 (s):   0.1147461E+00
+    Total elapsed time (s):             0.2298568E+00
   Normal end.
  Filter
  Iterations:   Start residual:     Final residual:
@@ -712,20 +712,20 @@ Writing to optimization_data.csv
 
     ------------Fluid-------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
-    1            | Pressure               17   0.125553080E+06   0.318882344E-07
+    1            | Pressure               17   0.125553080E+06   0.318882368E-07
     1            | X-Velocity              5   0.895992091E+01   0.893906374E-06
     1            | Y-Velocity              5   0.558094343E+00   0.456142415E-07
     1            | Z-Velocity              5   0.558094343E+00   0.456142415E-07
-    Fluid step time (s):     0.1622220E+00
+    Fluid step time (s):     0.1618200E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | s                       2   0.321444743E-03   0.125835462E-07
-    Scalar step time:        0.8586370E-02
+    Scalar step time:        0.8819121E-02
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.1710855E+00
-    Total elapsed time (s):             0.1710891E+00
+    Total time for step        1 (s):   0.1709027E+00
+    Total elapsed time (s):             0.1709060E+00
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -735,20 +735,20 @@ Writing to optimization_data.csv
 
     ------------Fluid-------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
-    2            | Pressure               15   0.515714320E+02   0.195271679E-07
-    2            | X-Velocity              4   0.384265328E+00   0.776757491E-06
+    2            | Pressure               15   0.515714320E+02   0.195271680E-07
+    2            | X-Velocity              4   0.384265328E+00   0.776757492E-06
     2            | Y-Velocity              4   0.110436981E+00   0.228840552E-06
     2            | Z-Velocity              4   0.110436981E+00   0.228840553E-06
-    Fluid step time (s):     0.1435134E+00
+    Fluid step time (s):     0.1427890E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | s                       2   0.358964649E-03   0.141991869E-07
-    Scalar step time:        0.8417444E-02
+    Scalar step time:        0.8024902E-02
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.1521698E+00
-    Total elapsed time (s):             0.3232827E+00
+    Total time for step        2 (s):   0.1510591E+00
+    Total elapsed time (s):             0.3219871E+00
   Normal end.
 
   -Adjoint Starting simulation--
@@ -763,7 +763,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | Adjoint Scalar          2   0.827794087E-02   0.314290444E-06
-    Scalar step time:        0.3994914E-02
+    Scalar step time:        0.3984337E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -771,11 +771,11 @@ Writing to optimization_data.csv
     1            | Adjoint Velocity V      4   0.363059592E+00   0.626847222E-06
     1            | Adjoint Velocity W      4   0.363059595E+00   0.626847225E-06
     1            | Adjoint Pressure       10   0.135335856E-01   0.504330139E-07
-    Fluid step time (s):     0.1150205E+00
+    Fluid step time (s):     0.1148455E+00
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.1152506E+00
-    Total elapsed time (s):             0.1152514E+00
+    Total time for step        1 (s):   0.1150722E+00
+    Total elapsed time (s):             0.1150726E+00
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -784,7 +784,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | Adjoint Scalar          2   0.135503334E-01   0.514437096E-06
-    Scalar step time:        0.3919316E-02
+    Scalar step time:        0.3933298E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -792,11 +792,11 @@ Writing to optimization_data.csv
     2            | Adjoint Velocity V      4   0.378893016E+00   0.836935640E-06
     2            | Adjoint Velocity W      4   0.378893046E+00   0.836935699E-06
     2            | Adjoint Pressure       10   0.130296399E-01   0.476173663E-07
-    Fluid step time (s):     0.1144782E+00
+    Fluid step time (s):     0.1143668E+00
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.1148343E+00
-    Total elapsed time (s):             0.2301040E+00
+    Total time for step        2 (s):   0.1147484E+00
+    Total elapsed time (s):             0.2298370E+00
   Normal end.
  Filter
  Iterations:   Start residual:     Final residual:
@@ -827,20 +827,20 @@ Writing to optimization_data.csv
 
     ------------Fluid-------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
-    1            | Pressure               17   0.125661624E+06   0.318913314E-07
+    1            | Pressure               17   0.125661624E+06   0.318914043E-07
     1            | X-Velocity              5   0.895992091E+01   0.893906374E-06
     1            | Y-Velocity              5   0.558094343E+00   0.456142415E-07
     1            | Z-Velocity              5   0.558094343E+00   0.456142415E-07
-    Fluid step time (s):     0.1624765E+00
+    Fluid step time (s):     0.1617052E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | s                       2   0.321444743E-03   0.125835462E-07
-    Scalar step time:        0.8249769E-02
+    Scalar step time:        0.8721621E-02
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.1709940E+00
-    Total elapsed time (s):             0.1709975E+00
+    Total time for step        1 (s):   0.1706941E+00
+    Total elapsed time (s):             0.1706972E+00
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -850,20 +850,20 @@ Writing to optimization_data.csv
 
     ------------Fluid-------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
-    2            | Pressure               15   0.515308049E+02   0.195223834E-07
+    2            | Pressure               15   0.515308049E+02   0.195223833E-07
     2            | X-Velocity              4   0.350269719E+00   0.718311665E-06
     2            | Y-Velocity              4   0.993819629E-01   0.205715781E-06
     2            | Z-Velocity              4   0.993819629E-01   0.205715782E-06
-    Fluid step time (s):     0.1435334E+00
+    Fluid step time (s):     0.1428820E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | s                       2   0.338990983E-03   0.133879117E-07
-    Scalar step time:        0.8078247E-02
+    Scalar step time:        0.8056674E-02
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.1518629E+00
-    Total elapsed time (s):             0.3228836E+00
+    Total time for step        2 (s):   0.1512072E+00
+    Total elapsed time (s):             0.3219288E+00
   Normal end.
 
   -Adjoint Starting simulation--
@@ -878,7 +878,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | Adjoint Scalar          2   0.827983260E-02   0.314352276E-06
-    Scalar step time:        0.3965787E-02
+    Scalar step time:        0.3994266E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -886,11 +886,11 @@ Writing to optimization_data.csv
     1            | Adjoint Velocity V      4   0.311433210E+00   0.540845819E-06
     1            | Adjoint Velocity W      4   0.311433211E+00   0.540845814E-06
     1            | Adjoint Pressure       10   0.122123936E-01   0.438652723E-07
-    Fluid step time (s):     0.1150569E+00
+    Fluid step time (s):     0.1149265E+00
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.1152845E+00
-    Total elapsed time (s):             0.1152848E+00
+    Total time for step        1 (s):   0.1151575E+00
+    Total elapsed time (s):             0.1151578E+00
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -899,7 +899,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | Adjoint Scalar          2   0.135508473E-01   0.514460424E-06
-    Scalar step time:        0.3967280E-02
+    Scalar step time:        0.3953317E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -907,11 +907,11 @@ Writing to optimization_data.csv
     2            | Adjoint Velocity V      4   0.356185128E+00   0.793908800E-06
     2            | Adjoint Velocity W      4   0.356185156E+00   0.793908852E-06
     2            | Adjoint Pressure       10   0.118502474E-01   0.423223893E-07
-    Fluid step time (s):     0.1146915E+00
+    Fluid step time (s):     0.1146607E+00
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.1150583E+00
-    Total elapsed time (s):             0.2303653E+00
+    Total time for step        2 (s):   0.1150427E+00
+    Total elapsed time (s):             0.2302165E+00
   Normal end.
  Filter
  Iterations:   Start residual:     Final residual:
@@ -942,20 +942,20 @@ Writing to optimization_data.csv
 
     ------------Fluid-------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
-    1            | Pressure               17   0.125776254E+06   0.318943535E-07
+    1            | Pressure               17   0.125776254E+06   0.318942836E-07
     1            | X-Velocity              5   0.895992091E+01   0.893906374E-06
     1            | Y-Velocity              5   0.558094343E+00   0.456142415E-07
     1            | Z-Velocity              5   0.558094343E+00   0.456142415E-07
-    Fluid step time (s):     0.1627229E+00
+    Fluid step time (s):     0.1616444E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | s                       2   0.321444743E-03   0.125835462E-07
-    Scalar step time:        0.1045745E-01
+    Scalar step time:        0.8709839E-02
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.1734610E+00
-    Total elapsed time (s):             0.1734642E+00
+    Total time for step        1 (s):   0.1706230E+00
+    Total elapsed time (s):             0.1706261E+00
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -969,16 +969,16 @@ Writing to optimization_data.csv
     2            | X-Velocity              4   0.313976349E+00   0.657627375E-06
     2            | Y-Velocity              4   0.852096070E-01   0.176635222E-06
     2            | Z-Velocity              4   0.852096069E-01   0.176635222E-06
-    Fluid step time (s):     0.1453944E+00
+    Fluid step time (s):     0.1428170E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | s                       2   0.314641270E-03   0.124139452E-07
-    Scalar step time:        0.8450407E-02
+    Scalar step time:        0.8153802E-02
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.1541102E+00
-    Total elapsed time (s):             0.3275991E+00
+    Total time for step        2 (s):   0.1512265E+00
+    Total elapsed time (s):             0.3218768E+00
   Normal end.
 
   -Adjoint Starting simulation--
@@ -993,7 +993,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | Adjoint Scalar          2   0.827991327E-02   0.314353860E-06
-    Scalar step time:        0.3968011E-02
+    Scalar step time:        0.3981370E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -1001,11 +1001,11 @@ Writing to optimization_data.csv
     1            | Adjoint Velocity V      4   0.233865065E+00   0.410528006E-06
     1            | Adjoint Velocity W      4   0.233865063E+00   0.410528001E-06
     1            | Adjoint Pressure       10   0.109098884E-01   0.386362222E-07
-    Fluid step time (s):     0.1154185E+00
+    Fluid step time (s):     0.1147921E+00
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.1156496E+00
-    Total elapsed time (s):             0.1156500E+00
+    Total time for step        1 (s):   0.1150183E+00
+    Total elapsed time (s):             0.1150187E+00
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -1014,7 +1014,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | Adjoint Scalar          2   0.135508732E-01   0.514461486E-06
-    Scalar step time:        0.3934256E-02
+    Scalar step time:        0.3938127E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -1022,11 +1022,11 @@ Writing to optimization_data.csv
     2            | Adjoint Velocity V      4   0.328647378E+00   0.737649450E-06
     2            | Adjoint Velocity W      4   0.328647403E+00   0.737649496E-06
     2            | Adjoint Pressure       10   0.104594003E-01   0.368912707E-07
-    Fluid step time (s):     0.1150812E+00
+    Fluid step time (s):     0.1142462E+00
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.1154155E+00
-    Total elapsed time (s):             0.2310870E+00
+    Total time for step        2 (s):   0.1146161E+00
+    Total elapsed time (s):             0.2296511E+00
   Normal end.
  Filter
  Iterations:   Start residual:     Final residual:
@@ -1057,20 +1057,20 @@ Writing to optimization_data.csv
 
     ------------Fluid-------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
-    1            | Pressure               17   0.125897319E+06   0.318973512E-07
+    1            | Pressure               17   0.125897319E+06   0.318973130E-07
     1            | X-Velocity              5   0.895992091E+01   0.893906374E-06
     1            | Y-Velocity              5   0.558094343E+00   0.456142415E-07
     1            | Z-Velocity              5   0.558094343E+00   0.456142415E-07
-    Fluid step time (s):     0.1624860E+00
+    Fluid step time (s):     0.1617161E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | s                       2   0.321444743E-03   0.125835462E-07
-    Scalar step time:        0.8293323E-02
+    Scalar step time:        0.8651095E-02
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.1710484E+00
-    Total elapsed time (s):             0.1710522E+00
+    Total time for step        1 (s):   0.1706397E+00
+    Total elapsed time (s):             0.1706431E+00
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -1081,19 +1081,19 @@ Writing to optimization_data.csv
     ------------Fluid-------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | Pressure               15   0.514611112E+02   0.195167701E-07
-    2            | X-Velocity              4   0.282056197E+00   0.599295542E-06
+    2            | X-Velocity              4   0.282056196E+00   0.599295541E-06
     2            | Y-Velocity              4   0.719942940E-01   0.149578303E-06
     2            | Z-Velocity              4   0.719942940E-01   0.149578303E-06
-    Fluid step time (s):     0.1433632E+00
+    Fluid step time (s):     0.1427710E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | s                       2   0.293321859E-03   0.115629316E-07
-    Scalar step time:        0.8252524E-02
+    Scalar step time:        0.8050632E-02
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.1518649E+00
-    Total elapsed time (s):             0.3229404E+00
+    Total time for step        2 (s):   0.1510743E+00
+    Total elapsed time (s):             0.3217406E+00
   Normal end.
 
   -Adjoint Starting simulation--
@@ -1108,7 +1108,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | Adjoint Scalar          2   0.827991240E-02   0.314353720E-06
-    Scalar step time:        0.3959684E-02
+    Scalar step time:        0.3991310E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -1116,11 +1116,11 @@ Writing to optimization_data.csv
     1            | Adjoint Velocity V      4   0.170350312E+00   0.312230393E-06
     1            | Adjoint Velocity W      4   0.170350311E+00   0.312230388E-06
     1            | Adjoint Pressure       10   0.957889396E-02   0.333272959E-07
-    Fluid step time (s):     0.1152582E+00
+    Fluid step time (s):     0.1148878E+00
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.1154879E+00
-    Total elapsed time (s):             0.1154884E+00
+    Total time for step        1 (s):   0.1151183E+00
+    Total elapsed time (s):             0.1151187E+00
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -1129,7 +1129,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | Adjoint Scalar          2   0.135508733E-01   0.514461479E-06
-    Scalar step time:        0.3918936E-02
+    Scalar step time:        0.3946986E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -1137,11 +1137,11 @@ Writing to optimization_data.csv
     2            | Adjoint Velocity V      4   0.297773293E+00   0.669988897E-06
     2            | Adjoint Velocity W      4   0.297773315E+00   0.669988937E-06
     2            | Adjoint Pressure       10   0.919729631E-02   0.318523608E-07
-    Fluid step time (s):     0.1150168E+00
+    Fluid step time (s):     0.1142970E+00
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.1153779E+00
-    Total elapsed time (s):             0.2308846E+00
+    Total time for step        2 (s):   0.1146706E+00
+    Total elapsed time (s):             0.2298071E+00
   Normal end.
  Filter
  Iterations:   Start residual:     Final residual:
@@ -1172,20 +1172,20 @@ Writing to optimization_data.csv
 
     ------------Fluid-------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
-    1            | Pressure               17   0.126006292E+06   0.319001432E-07
+    1            | Pressure               17   0.126006292E+06   0.319000583E-07
     1            | X-Velocity              5   0.895992091E+01   0.893906374E-06
     1            | Y-Velocity              5   0.558094343E+00   0.456142415E-07
     1            | Z-Velocity              5   0.558094343E+00   0.456142415E-07
-    Fluid step time (s):     0.1624267E+00
+    Fluid step time (s):     0.1616335E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | s                       2   0.321444743E-03   0.125835462E-07
-    Scalar step time:        0.1039471E-01
+    Scalar step time:        0.8599445E-02
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.1730968E+00
-    Total elapsed time (s):             0.1731001E+00
+    Total time for step        1 (s):   0.1705042E+00
+    Total elapsed time (s):             0.1705073E+00
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -1195,20 +1195,20 @@ Writing to optimization_data.csv
 
     ------------Fluid-------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
-    2            | Pressure               15   0.514357687E+02   0.195149841E-07
+    2            | Pressure               15   0.514357687E+02   0.195149842E-07
     2            | X-Velocity              4   0.255237214E+00   0.548255257E-06
     2            | Y-Velocity              4   0.603912666E-01   0.125989224E-06
     2            | Z-Velocity              4   0.603912666E-01   0.125989224E-06
-    Fluid step time (s):     0.1433736E+00
+    Fluid step time (s):     0.1427828E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | s                       2   0.275508310E-03   0.108474003E-07
-    Scalar step time:        0.8872262E-02
+    Scalar step time:        0.8051653E-02
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.1524840E+00
-    Total elapsed time (s):             0.3256084E+00
+    Total time for step        2 (s):   0.1510852E+00
+    Total elapsed time (s):             0.3216138E+00
   Normal end.
 
   -Adjoint Starting simulation--
@@ -1223,7 +1223,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | Adjoint Scalar          2   0.827991219E-02   0.314353710E-06
-    Scalar step time:        0.3970906E-02
+    Scalar step time:        0.3990729E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -1231,11 +1231,11 @@ Writing to optimization_data.csv
     1            | Adjoint Velocity V      4   0.118499733E+00   0.225866885E-06
     1            | Adjoint Velocity W      4   0.118499732E+00   0.225866877E-06
     1            | Adjoint Pressure       10   0.837061945E-02   0.285598187E-07
-    Fluid step time (s):     0.1150789E+00
+    Fluid step time (s):     0.1149062E+00
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.1153059E+00
-    Total elapsed time (s):             0.1153063E+00
+    Total time for step        1 (s):   0.1151400E+00
+    Total elapsed time (s):             0.1151404E+00
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -1244,7 +1244,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | Adjoint Scalar          2   0.135508732E-01   0.514461477E-06
-    Scalar step time:        0.3919868E-02
+    Scalar step time:        0.3948437E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -1252,11 +1252,11 @@ Writing to optimization_data.csv
     2            | Adjoint Velocity V      4   0.265938572E+00   0.597665920E-06
     2            | Adjoint Velocity W      4   0.265938590E+00   0.597665955E-06
     2            | Adjoint Pressure       10   0.801994175E-02   0.272907095E-07
-    Fluid step time (s):     0.1147932E+00
+    Fluid step time (s):     0.1142456E+00
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.1151664E+00
-    Total elapsed time (s):             0.2304893E+00
+    Total time for step        2 (s):   0.1146167E+00
+    Total elapsed time (s):             0.2297768E+00
   Normal end.
  Filter
  Iterations:   Start residual:     Final residual:
@@ -1287,20 +1287,20 @@ Writing to optimization_data.csv
 
     ------------Fluid-------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
-    1            | Pressure               17   0.126099666E+06   0.319024313E-07
+    1            | Pressure               17   0.126099666E+06   0.319024101E-07
     1            | X-Velocity              5   0.895992091E+01   0.893906374E-06
     1            | Y-Velocity              5   0.558094343E+00   0.456142415E-07
     1            | Z-Velocity              5   0.558094343E+00   0.456142415E-07
-    Fluid step time (s):     0.1621930E+00
+    Fluid step time (s):     0.1617070E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | s                       2   0.321444743E-03   0.125835462E-07
-    Scalar step time:        0.8267482E-02
+    Scalar step time:        0.8630355E-02
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.1707315E+00
-    Total elapsed time (s):             0.1707348E+00
+    Total time for step        1 (s):   0.1706038E+00
+    Total elapsed time (s):             0.1706070E+00
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -1314,16 +1314,16 @@ Writing to optimization_data.csv
     2            | X-Velocity              4   0.233669403E+00   0.509319716E-06
     2            | Y-Velocity              4   0.508983114E-01   0.105719887E-06
     2            | Z-Velocity              4   0.508983114E-01   0.105719887E-06
-    Fluid step time (s):     0.1434867E+00
+    Fluid step time (s):     0.1427837E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | s                       2   0.262214256E-03   0.102878300E-07
-    Scalar step time:        0.8093377E-02
+    Scalar step time:        0.7933866E-02
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.1518211E+00
-    Total elapsed time (s):             0.3225806E+00
+    Total time for step        2 (s):   0.1509665E+00
+    Total elapsed time (s):             0.3215960E+00
   Normal end.
 
   -Adjoint Starting simulation--
@@ -1338,7 +1338,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | Adjoint Scalar          2   0.827991220E-02   0.314353711E-06
-    Scalar step time:        0.3955566E-02
+    Scalar step time:        0.3981491E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -1346,11 +1346,11 @@ Writing to optimization_data.csv
     1            | Adjoint Velocity V      4   0.818615356E-01   0.160702522E-06
     1            | Adjoint Velocity W      4   0.818615355E-01   0.160702520E-06
     1            | Adjoint Pressure       10   0.713537241E-02   0.240107080E-07
-    Fluid step time (s):     0.1153160E+00
+    Fluid step time (s):     0.1148295E+00
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.1155450E+00
-    Total elapsed time (s):             0.1155454E+00
+    Total time for step        1 (s):   0.1150564E+00
+    Total elapsed time (s):             0.1150567E+00
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -1359,7 +1359,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | Adjoint Scalar          2   0.135508732E-01   0.514461477E-06
-    Scalar step time:        0.3913726E-02
+    Scalar step time:        0.3940031E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -1367,11 +1367,11 @@ Writing to optimization_data.csv
     2            | Adjoint Velocity V      4   0.234426022E+00   0.523284622E-06
     2            | Adjoint Velocity W      4   0.234426037E+00   0.523284651E-06
     2            | Adjoint Pressure       10   0.677866697E-02   0.228217754E-07
-    Fluid step time (s):     0.1148939E+00
+    Fluid step time (s):     0.1143537E+00
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.1152515E+00
-    Total elapsed time (s):             0.2308128E+00
+    Total time for step        2 (s):   0.1147278E+00
+    Total elapsed time (s):             0.2298012E+00
   Normal end.
  Filter
  Iterations:   Start residual:     Final residual:
@@ -1402,20 +1402,20 @@ Writing to optimization_data.csv
 
     ------------Fluid-------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
-    1            | Pressure               17   0.126177088E+06   0.319044230E-07
+    1            | Pressure               17   0.126177088E+06   0.319045067E-07
     1            | X-Velocity              5   0.895992091E+01   0.893906374E-06
     1            | Y-Velocity              5   0.558094343E+00   0.456142415E-07
     1            | Z-Velocity              5   0.558094343E+00   0.456142415E-07
-    Fluid step time (s):     0.1622103E+00
+    Fluid step time (s):     0.1616404E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | s                       2   0.321444743E-03   0.125835462E-07
-    Scalar step time:        0.1087811E-01
+    Scalar step time:        0.8590938E-02
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.1733551E+00
-    Total elapsed time (s):             0.1733583E+00
+    Total time for step        1 (s):   0.1704988E+00
+    Total elapsed time (s):             0.1705024E+00
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -1429,16 +1429,16 @@ Writing to optimization_data.csv
     2            | X-Velocity              4   0.217399982E+00   0.480235096E-06
     2            | Y-Velocity              4   0.435108202E-01   0.898238940E-07
     2            | Z-Velocity              4   0.435108201E-01   0.898238936E-07
-    Fluid step time (s):     0.1432831E+00
+    Fluid step time (s):     0.1428005E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | s                       2   0.253088364E-03   0.990098090E-08
-    Scalar step time:        0.8302922E-02
+    Scalar step time:        0.8023720E-02
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.1518331E+00
-    Total elapsed time (s):             0.3252140E+00
+    Total time for step        2 (s):   0.1510769E+00
+    Total elapsed time (s):             0.3216024E+00
   Normal end.
 
   -Adjoint Starting simulation--
@@ -1453,7 +1453,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | Adjoint Scalar          2   0.827991220E-02   0.314353711E-06
-    Scalar step time:        0.4086591E-02
+    Scalar step time:        0.3985749E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -1461,11 +1461,11 @@ Writing to optimization_data.csv
     1            | Adjoint Velocity V      4   0.567464359E-01   0.117023543E-06
     1            | Adjoint Velocity W      4   0.567464353E-01   0.117023543E-06
     1            | Adjoint Pressure       10   0.598012530E-02   0.198594880E-07
-    Fluid step time (s):     0.1154152E+00
+    Fluid step time (s):     0.1148309E+00
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.1156438E+00
-    Total elapsed time (s):             0.1156443E+00
+    Total time for step        1 (s):   0.1150564E+00
+    Total elapsed time (s):             0.1150567E+00
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -1474,7 +1474,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | Adjoint Scalar          2   0.135508732E-01   0.514461477E-06
-    Scalar step time:        0.3925930E-02
+    Scalar step time:        0.3961803E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -1482,11 +1482,11 @@ Writing to optimization_data.csv
     2            | Adjoint Velocity V      4   0.205104893E+00   0.452957633E-06
     2            | Adjoint Velocity W      4   0.205104905E+00   0.452957658E-06
     2            | Adjoint Pressure       10   0.569855846E-02   0.189587059E-07
-    Fluid step time (s):     0.1148525E+00
+    Fluid step time (s):     0.1143007E+00
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.1152150E+00
-    Total elapsed time (s):             0.2308768E+00
+    Total time for step        2 (s):   0.1146860E+00
+    Total elapsed time (s):             0.2297625E+00
   Normal end.
  Filter
  Iterations:   Start residual:     Final residual:
@@ -1517,20 +1517,20 @@ Writing to optimization_data.csv
 
     ------------Fluid-------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
-    1            | Pressure               17   0.126239946E+06   0.319061198E-07
+    1            | Pressure               17   0.126239946E+06   0.319061774E-07
     1            | X-Velocity              5   0.895992091E+01   0.893906374E-06
     1            | Y-Velocity              5   0.558094343E+00   0.456142415E-07
     1            | Z-Velocity              5   0.558094343E+00   0.456142415E-07
-    Fluid step time (s):     0.1622580E+00
+    Fluid step time (s):     0.1617484E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | s                       2   0.321444743E-03   0.125835462E-07
-    Scalar step time:        0.8214511E-02
+    Scalar step time:        0.8518258E-02
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.1707419E+00
-    Total elapsed time (s):             0.1707457E+00
+    Total time for step        1 (s):   0.1705369E+00
+    Total elapsed time (s):             0.1705404E+00
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -1540,20 +1540,20 @@ Writing to optimization_data.csv
 
     ------------Fluid-------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
-    2            | Pressure               15   0.513844679E+02   0.195124977E-07
-    2            | X-Velocity              4   0.205156411E+00   0.459670176E-06
+    2            | Pressure               15   0.513844679E+02   0.195124976E-07
+    2            | X-Velocity              4   0.205156412E+00   0.459670176E-06
     2            | Y-Velocity              4   0.378389030E-01   0.775565502E-07
     2            | Z-Velocity              4   0.378389030E-01   0.775565500E-07
-    Fluid step time (s):     0.1435335E+00
+    Fluid step time (s):     0.1426615E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | s                       2   0.246989788E-03   0.964278696E-08
-    Scalar step time:        0.8202508E-02
+    Scalar step time:        0.8069218E-02
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.1519806E+00
-    Total elapsed time (s):             0.3227502E+00
+    Total time for step        2 (s):   0.1509773E+00
+    Total elapsed time (s):             0.3215411E+00
   Normal end.
 
   -Adjoint Starting simulation--
@@ -1568,19 +1568,19 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | Adjoint Scalar          2   0.827991220E-02   0.314353711E-06
-    Scalar step time:        0.3963022E-02
+    Scalar step time:        0.4027751E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | Adjoint Velocity U      5   0.136092817E+01   0.140457024E-06
     1            | Adjoint Velocity V      4   0.397563657E-01   0.838003792E-07
-    1            | Adjoint Velocity W      4   0.397563656E-01   0.838003797E-07
+    1            | Adjoint Velocity W      4   0.397563656E-01   0.838003796E-07
     1            | Adjoint Pressure       10   0.500853292E-02   0.164141950E-07
-    Fluid step time (s):     0.1152930E+00
+    Fluid step time (s):     0.1149305E+00
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.1155239E+00
-    Total elapsed time (s):             0.1155243E+00
+    Total time for step        1 (s):   0.1152029E+00
+    Total elapsed time (s):             0.1152034E+00
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -1589,7 +1589,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | Adjoint Scalar          2   0.135508732E-01   0.514461477E-06
-    Scalar step time:        0.3930199E-02
+    Scalar step time:        0.3950120E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -1597,11 +1597,11 @@ Writing to optimization_data.csv
     2            | Adjoint Velocity V      4   0.178601985E+00   0.389659095E-06
     2            | Adjoint Velocity W      4   0.178601996E+00   0.389659115E-06
     2            | Adjoint Pressure       10   0.479323318E-02   0.157656060E-07
-    Fluid step time (s):     0.1143505E+00
+    Fluid step time (s):     0.1137126E+00
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.1147099E+00
-    Total elapsed time (s):             0.2302518E+00
+    Total time for step        2 (s):   0.1140898E+00
+    Total elapsed time (s):             0.2293117E+00
   Normal end.
  Filter
  Iterations:   Start residual:     Final residual:
@@ -1632,20 +1632,20 @@ Writing to optimization_data.csv
 
     ------------Fluid-------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
-    1            | Pressure               17   0.126291285E+06   0.319073813E-07
+    1            | Pressure               17   0.126291285E+06   0.319073794E-07
     1            | X-Velocity              5   0.895992091E+01   0.893906374E-06
     1            | Y-Velocity              5   0.558094343E+00   0.456142415E-07
     1            | Z-Velocity              5   0.558094343E+00   0.456142415E-07
-    Fluid step time (s):     0.1624378E+00
+    Fluid step time (s):     0.1615813E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | s                       2   0.321444743E-03   0.125835462E-07
-    Scalar step time:        0.8364230E-02
+    Scalar step time:        0.8667306E-02
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.1710745E+00
-    Total elapsed time (s):             0.1710778E+00
+    Total time for step        1 (s):   0.1705163E+00
+    Total elapsed time (s):             0.1705195E+00
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -1659,16 +1659,16 @@ Writing to optimization_data.csv
     2            | X-Velocity              4   0.195668248E+00   0.444381845E-06
     2            | Y-Velocity              4   0.334071461E-01   0.680744906E-07
     2            | Z-Velocity              4   0.334071461E-01   0.680744904E-07
-    Fluid step time (s):     0.1434871E+00
+    Fluid step time (s):     0.1427520E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | s                       2   0.242842547E-03   0.946868390E-08
-    Scalar step time:        0.8263715E-02
+    Scalar step time:        0.7999633E-02
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.1519985E+00
-    Total elapsed time (s):             0.3230993E+00
+    Total time for step        2 (s):   0.1510135E+00
+    Total elapsed time (s):             0.3215542E+00
   Normal end.
 
   -Adjoint Starting simulation--
@@ -1683,7 +1683,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | Adjoint Scalar          2   0.827991220E-02   0.314353711E-06
-    Scalar step time:        0.3964815E-02
+    Scalar step time:        0.3980259E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -1691,11 +1691,11 @@ Writing to optimization_data.csv
     1            | Adjoint Velocity V      4   0.279731928E-01   0.607976807E-07
     1            | Adjoint Velocity W      4   0.279731931E-01   0.607976837E-07
     1            | Adjoint Pressure       10   0.420485046E-02   0.135748088E-07
-    Fluid step time (s):     0.1155899E+00
+    Fluid step time (s):     0.1148597E+00
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.1158185E+00
-    Total elapsed time (s):             0.1158191E+00
+    Total time for step        1 (s):   0.1150842E+00
+    Total elapsed time (s):             0.1150846E+00
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -1704,7 +1704,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | Adjoint Scalar          2   0.135508732E-01   0.514461477E-06
-    Scalar step time:        0.3949336E-02
+    Scalar step time:        0.3950020E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -1712,11 +1712,11 @@ Writing to optimization_data.csv
     2            | Adjoint Velocity V      4   0.154763514E+00   0.333206559E-06
     2            | Adjoint Velocity W      4   0.154763523E+00   0.333206576E-06
     2            | Adjoint Pressure       10   0.403817925E-02   0.130994602E-07
-    Fluid step time (s):     0.1143045E+00
+    Fluid step time (s):     0.1137324E+00
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.1146337E+00
-    Total elapsed time (s):             0.2304817E+00
+    Total time for step        2 (s):   0.1141178E+00
+    Total elapsed time (s):             0.2292161E+00
   Normal end.
  Filter
  Iterations:   Start residual:     Final residual:
@@ -1747,20 +1747,20 @@ Writing to optimization_data.csv
 
     ------------Fluid-------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
-    1            | Pressure               17   0.126334246E+06   0.319085262E-07
+    1            | Pressure               17   0.126334246E+06   0.319085538E-07
     1            | X-Velocity              5   0.895992091E+01   0.893906374E-06
     1            | Y-Velocity              5   0.558094343E+00   0.456142415E-07
     1            | Z-Velocity              5   0.558094343E+00   0.456142415E-07
-    Fluid step time (s):     0.1624419E+00
+    Fluid step time (s):     0.1616436E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | s                       2   0.321444743E-03   0.125835462E-07
-    Scalar step time:        0.8278124E-02
+    Scalar step time:        0.8661555E-02
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.1709880E+00
-    Total elapsed time (s):             0.1709918E+00
+    Total time for step        1 (s):   0.1705728E+00
+    Total elapsed time (s):             0.1705760E+00
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -1774,16 +1774,16 @@ Writing to optimization_data.csv
     2            | X-Velocity              4   0.187386425E+00   0.430716767E-06
     2            | Y-Velocity              4   0.297053866E-01   0.604009207E-07
     2            | Z-Velocity              4   0.297053866E-01   0.604009206E-07
-    Fluid step time (s):     0.1434974E+00
+    Fluid step time (s):     0.1429065E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | s                       2   0.239887418E-03   0.934606848E-08
-    Scalar step time:        0.8078026E-02
+    Scalar step time:        0.8056433E-02
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.1518227E+00
-    Total elapsed time (s):             0.3228372E+00
+    Total time for step        2 (s):   0.1512058E+00
+    Total elapsed time (s):             0.3218032E+00
   Normal end.
 
   -Adjoint Starting simulation--
@@ -1798,7 +1798,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | Adjoint Scalar          2   0.827991220E-02   0.314353711E-06
-    Scalar step time:        0.3975606E-02
+    Scalar step time:        0.3981351E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -1806,11 +1806,11 @@ Writing to optimization_data.csv
     1            | Adjoint Velocity V      3   0.190722940E-01   0.772361392E-06
     1            | Adjoint Velocity W      3   0.190722949E-01   0.772361550E-06
     1            | Adjoint Pressure        9   0.350890878E-02   0.855062501E-07
-    Fluid step time (s):     0.1059522E+00
+    Fluid step time (s):     0.1055262E+00
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.1061789E+00
-    Total elapsed time (s):             0.1061793E+00
+    Total time for step        1 (s):   0.1057630E+00
+    Total elapsed time (s):             0.1057633E+00
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -1819,7 +1819,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | Adjoint Scalar          2   0.135508732E-01   0.514461477E-06
-    Scalar step time:        0.3935559E-02
+    Scalar step time:        0.3944149E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -1827,11 +1827,11 @@ Writing to optimization_data.csv
     2            | Adjoint Velocity V      4   0.132653041E+00   0.281924677E-06
     2            | Adjoint Velocity W      4   0.132653010E+00   0.281924621E-06
     2            | Adjoint Pressure        9   0.336318056E-02   0.825599725E-07
-    Fluid step time (s):     0.1063493E+00
+    Fluid step time (s):     0.1056927E+00
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.1067238E+00
-    Total elapsed time (s):             0.2129169E+00
+    Total time for step        2 (s):   0.1060615E+00
+    Total elapsed time (s):             0.2118404E+00
   Normal end.
  Filter
  Iterations:   Start residual:     Final residual:
@@ -1862,20 +1862,20 @@ Writing to optimization_data.csv
 
     ------------Fluid-------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
-    1            | Pressure               17   0.126372000E+06   0.319095650E-07
+    1            | Pressure               17   0.126372000E+06   0.319094998E-07
     1            | X-Velocity              5   0.895992091E+01   0.893906374E-06
     1            | Y-Velocity              5   0.558094343E+00   0.456142415E-07
     1            | Z-Velocity              5   0.558094343E+00   0.456142415E-07
-    Fluid step time (s):     0.1625175E+00
+    Fluid step time (s):     0.1617232E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | s                       2   0.321444743E-03   0.125835462E-07
-    Scalar step time:        0.9088661E-02
+    Scalar step time:        0.8834110E-02
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.1718791E+00
-    Total elapsed time (s):             0.1718822E+00
+    Total time for step        1 (s):   0.1708265E+00
+    Total elapsed time (s):             0.1708295E+00
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -1885,20 +1885,20 @@ Writing to optimization_data.csv
 
     ------------Fluid-------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
-    2            | Pressure               15   0.513670583E+02   0.195128669E-07
+    2            | Pressure               15   0.513670583E+02   0.195128670E-07
     2            | X-Velocity              4   0.181165190E+00   0.419900463E-06
     2            | Y-Velocity              4   0.267989342E-01   0.545109206E-07
     2            | Z-Velocity              4   0.267989342E-01   0.545109205E-07
-    Fluid step time (s):     0.1434882E+00
+    Fluid step time (s):     0.1427527E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | s                       2   0.237803945E-03   0.925952860E-08
-    Scalar step time:        0.8285708E-02
+    Scalar step time:        0.8037837E-02
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.1520049E+00
-    Total elapsed time (s):             0.3239119E+00
+    Total time for step        2 (s):   0.1510332E+00
+    Total elapsed time (s):             0.3218856E+00
   Normal end.
 
   -Adjoint Starting simulation--
@@ -1913,7 +1913,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | Adjoint Scalar          2   0.827991220E-02   0.314353711E-06
-    Scalar step time:        0.3986587E-02
+    Scalar step time:        0.3978675E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -1921,11 +1921,11 @@ Writing to optimization_data.csv
     1            | Adjoint Velocity V      3   0.127748422E-01   0.521956563E-06
     1            | Adjoint Velocity W      3   0.127748436E-01   0.521956791E-06
     1            | Adjoint Pressure        9   0.288046024E-02   0.684009950E-07
-    Fluid step time (s):     0.1061581E+00
+    Fluid step time (s):     0.1056950E+00
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.1063869E+00
-    Total elapsed time (s):             0.1063873E+00
+    Total time for step        1 (s):   0.1059324E+00
+    Total elapsed time (s):             0.1059329E+00
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -1934,7 +1934,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | Adjoint Scalar          2   0.135508732E-01   0.514461477E-06
-    Scalar step time:        0.3924637E-02
+    Scalar step time:        0.3981101E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -1942,11 +1942,11 @@ Writing to optimization_data.csv
     2            | Adjoint Velocity V      4   0.112463924E+00   0.236286641E-06
     2            | Adjoint Velocity W      4   0.112463900E+00   0.236286597E-06
     2            | Adjoint Pressure        9   0.275604481E-02   0.657464795E-07
-    Fluid step time (s):     0.1061625E+00
+    Fluid step time (s):     0.1061217E+00
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.1065315E+00
-    Total elapsed time (s):             0.2129382E+00
+    Total time for step        2 (s):   0.1064934E+00
+    Total elapsed time (s):             0.2124422E+00
   Normal end.
  Filter
  Iterations:   Start residual:     Final residual:
@@ -1977,20 +1977,20 @@ Writing to optimization_data.csv
 
     ------------Fluid-------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
-    1            | Pressure               17   0.126404203E+06   0.319103616E-07
+    1            | Pressure               17   0.126404203E+06   0.319103470E-07
     1            | X-Velocity              5   0.895992091E+01   0.893906374E-06
     1            | Y-Velocity              5   0.558094343E+00   0.456142415E-07
     1            | Z-Velocity              5   0.558094343E+00   0.456142415E-07
-    Fluid step time (s):     0.1621962E+00
+    Fluid step time (s):     0.1616298E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | s                       2   0.321444743E-03   0.125835462E-07
-    Scalar step time:        0.8251102E-02
+    Scalar step time:        0.8622199E-02
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.1707182E+00
-    Total elapsed time (s):             0.1707214E+00
+    Total time for step        1 (s):   0.1705216E+00
+    Total elapsed time (s):             0.1705248E+00
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -2004,16 +2004,16 @@ Writing to optimization_data.csv
     2            | X-Velocity              4   0.177037932E+00   0.412760762E-06
     2            | Y-Velocity              4   0.246728039E-01   0.502075389E-07
     2            | Z-Velocity              4   0.246728039E-01   0.502075388E-07
-    Fluid step time (s):     0.1437934E+00
+    Fluid step time (s):     0.1427342E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | s                       2   0.236396901E-03   0.920109038E-08
-    Scalar step time:        0.1089468E-01
+    Scalar step time:        0.8013821E-02
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.1549321E+00
-    Total elapsed time (s):             0.3256774E+00
+    Total time for step        2 (s):   0.1509873E+00
+    Total elapsed time (s):             0.3215350E+00
   Normal end.
 
   -Adjoint Starting simulation--
@@ -2028,7 +2028,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | Adjoint Scalar          2   0.827991220E-02   0.314353711E-06
-    Scalar step time:        0.3996787E-02
+    Scalar step time:        0.4011329E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -2036,11 +2036,11 @@ Writing to optimization_data.csv
     1            | Adjoint Velocity V      3   0.870028710E-02   0.359038493E-06
     1            | Adjoint Velocity W      3   0.870028923E-02   0.359038815E-06
     1            | Adjoint Pressure        9   0.235332652E-02   0.537072352E-07
-    Fluid step time (s):     0.1059080E+00
+    Fluid step time (s):     0.1056471E+00
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.1061366E+00
-    Total elapsed time (s):             0.1061371E+00
+    Total time for step        1 (s):   0.1058772E+00
+    Total elapsed time (s):             0.1058778E+00
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -2049,7 +2049,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | Adjoint Scalar          2   0.135508732E-01   0.514461477E-06
-    Scalar step time:        0.3918285E-02
+    Scalar step time:        0.3937667E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -2057,11 +2057,11 @@ Writing to optimization_data.csv
     2            | Adjoint Velocity V      4   0.945837980E-01   0.196783480E-06
     2            | Adjoint Velocity W      4   0.945837796E-01   0.196783448E-06
     2            | Adjoint Pressure        9   0.226721746E-02   0.518258381E-07
-    Fluid step time (s):     0.1061571E+00
+    Fluid step time (s):     0.1057811E+00
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.1065223E+00
-    Total elapsed time (s):             0.2126767E+00
+    Total time for step        2 (s):   0.1061545E+00
+    Total elapsed time (s):             0.2120498E+00
   Normal end.
  Filter
  Iterations:   Start residual:     Final residual:
@@ -2092,20 +2092,20 @@ Writing to optimization_data.csv
 
     ------------Fluid-------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
-    1            | Pressure               17   0.126431053E+06   0.319110535E-07
+    1            | Pressure               17   0.126431053E+06   0.319110609E-07
     1            | X-Velocity              5   0.895992091E+01   0.893906374E-06
     1            | Y-Velocity              5   0.558094343E+00   0.456142415E-07
     1            | Z-Velocity              5   0.558094343E+00   0.456142415E-07
-    Fluid step time (s):     0.1625496E+00
+    Fluid step time (s):     0.1616978E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | s                       2   0.321444743E-03   0.125835462E-07
-    Scalar step time:        0.8471287E-02
+    Scalar step time:        0.8219859E-02
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.1712924E+00
-    Total elapsed time (s):             0.1712959E+00
+    Total time for step        1 (s):   0.1701919E+00
+    Total elapsed time (s):             0.1701954E+00
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -2119,16 +2119,16 @@ Writing to optimization_data.csv
     2            | X-Velocity              4   0.174288482E+00   0.407998235E-06
     2            | Y-Velocity              4   0.231294332E-01   0.470819832E-07
     2            | Z-Velocity              4   0.231294331E-01   0.470819831E-07
-    Fluid step time (s):     0.1435060E+00
+    Fluid step time (s):     0.1427853E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | s                       2   0.235438490E-03   0.916128428E-08
-    Scalar step time:        0.8262333E-02
+    Scalar step time:        0.8141518E-02
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.1520153E+00
-    Total elapsed time (s):             0.3233366E+00
+    Total time for step        2 (s):   0.1511784E+00
+    Total elapsed time (s):             0.3213941E+00
   Normal end.
 
   -Adjoint Starting simulation--
@@ -2143,7 +2143,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | Adjoint Scalar          2   0.827991220E-02   0.314353711E-06
-    Scalar step time:        0.3956129E-02
+    Scalar step time:        0.3998995E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -2151,11 +2151,11 @@ Writing to optimization_data.csv
     1            | Adjoint Velocity V      3   0.603404614E-02   0.252366208E-06
     1            | Adjoint Velocity W      3   0.603404927E-02   0.252366655E-06
     1            | Adjoint Pressure        9   0.193724485E-02   0.418864097E-07
-    Fluid step time (s):     0.1059837E+00
+    Fluid step time (s):     0.1054657E+00
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.1062134E+00
-    Total elapsed time (s):             0.1062140E+00
+    Total time for step        1 (s):   0.1056922E+00
+    Total elapsed time (s):             0.1056926E+00
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -2164,7 +2164,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | Adjoint Scalar          2   0.135508732E-01   0.514461477E-06
-    Scalar step time:        0.3943895E-02
+    Scalar step time:        0.3934420E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -2172,11 +2172,11 @@ Writing to optimization_data.csv
     2            | Adjoint Velocity V      4   0.788508977E-01   0.162585067E-06
     2            | Adjoint Velocity W      4   0.788508841E-01   0.162585045E-06
     2            | Adjoint Pressure        9   0.187756371E-02   0.405438441E-07
-    Fluid step time (s):     0.1062999E+00
+    Fluid step time (s):     0.1056671E+00
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.1066710E+00
-    Total elapsed time (s):             0.2129074E+00
+    Total time for step        2 (s):   0.1060427E+00
+    Total elapsed time (s):             0.2117491E+00
   Normal end.
  Filter
  Iterations:   Start residual:     Final residual:
@@ -2207,20 +2207,20 @@ Writing to optimization_data.csv
 
     ------------Fluid-------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
-    1            | Pressure               17   0.126453742E+06   0.319116488E-07
+    1            | Pressure               17   0.126453742E+06   0.319116483E-07
     1            | X-Velocity              5   0.895992091E+01   0.893906374E-06
     1            | Y-Velocity              5   0.558094343E+00   0.456142415E-07
     1            | Z-Velocity              5   0.558094343E+00   0.456142415E-07
-    Fluid step time (s):     0.1625002E+00
+    Fluid step time (s):     0.1617184E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | s                       2   0.321444743E-03   0.125835462E-07
-    Scalar step time:        0.8404969E-02
+    Scalar step time:        0.8576481E-02
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.1711825E+00
-    Total elapsed time (s):             0.1711861E+00
+    Total time for step        1 (s):   0.1705717E+00
+    Total elapsed time (s):             0.1705752E+00
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -2234,16 +2234,16 @@ Writing to optimization_data.csv
     2            | X-Velocity              4   0.172443966E+00   0.404760923E-06
     2            | Y-Velocity              4   0.220181134E-01   0.448306872E-07
     2            | Z-Velocity              4   0.220181134E-01   0.448306872E-07
-    Fluid step time (s):     0.1433496E+00
+    Fluid step time (s):     0.1428123E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | s                       2   0.234781814E-03   0.913399796E-08
-    Scalar step time:        0.8853997E-02
+    Scalar step time:        0.8014372E-02
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.1524506E+00
-    Total elapsed time (s):             0.3236603E+00
+    Total time for step        2 (s):   0.1510837E+00
+    Total elapsed time (s):             0.3216826E+00
   Normal end.
 
   -Adjoint Starting simulation--
@@ -2258,7 +2258,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | Adjoint Scalar          2   0.827991220E-02   0.314353711E-06
-    Scalar step time:        0.3969664E-02
+    Scalar step time:        0.3995468E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -2266,11 +2266,11 @@ Writing to optimization_data.csv
     1            | Adjoint Velocity V      3   0.427947025E-02   0.183183957E-06
     1            | Adjoint Velocity W      3   0.427947470E-02   0.183184547E-06
     1            | Adjoint Pressure        9   0.161086003E-02   0.328774350E-07
-    Fluid step time (s):     0.1052331E+00
+    Fluid step time (s):     0.1049950E+00
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.1054655E+00
-    Total elapsed time (s):             0.1054659E+00
+    Total time for step        1 (s):   0.1052235E+00
+    Total elapsed time (s):             0.1052239E+00
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -2279,7 +2279,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | Adjoint Scalar          2   0.135508732E-01   0.514461477E-06
-    Scalar step time:        0.3939516E-02
+    Scalar step time:        0.3952024E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -2287,11 +2287,11 @@ Writing to optimization_data.csv
     2            | Adjoint Velocity V      4   0.650352611E-01   0.132927471E-06
     2            | Adjoint Velocity W      4   0.650352514E-01   0.132927456E-06
     2            | Adjoint Pressure        9   0.156872273E-02   0.319146505E-07
-    Fluid step time (s):     0.1061746E+00
+    Fluid step time (s):     0.1060771E+00
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.1065312E+00
-    Total elapsed time (s):             0.2120139E+00
+    Total time for step        2 (s):   0.1064499E+00
+    Total elapsed time (s):             0.2116878E+00
   Normal end.
  Filter
  Iterations:   Start residual:     Final residual:
@@ -2322,20 +2322,20 @@ Writing to optimization_data.csv
 
     ------------Fluid-------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
-    1            | Pressure               17   0.126473177E+06   0.319122327E-07
+    1            | Pressure               17   0.126473177E+06   0.319121924E-07
     1            | X-Velocity              5   0.895992091E+01   0.893906374E-06
     1            | Y-Velocity              5   0.558094343E+00   0.456142415E-07
     1            | Z-Velocity              5   0.558094343E+00   0.456142415E-07
-    Fluid step time (s):     0.1624173E+00
+    Fluid step time (s):     0.1618187E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | s                       2   0.321444743E-03   0.125835462E-07
-    Scalar step time:        0.8375873E-02
+    Scalar step time:        0.8879958E-02
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.1710692E+00
-    Total elapsed time (s):             0.1710727E+00
+    Total time for step        1 (s):   0.1709658E+00
+    Total elapsed time (s):             0.1709690E+00
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -2349,16 +2349,16 @@ Writing to optimization_data.csv
     2            | X-Velocity              4   0.171208208E+00   0.402535689E-06
     2            | Y-Velocity              4   0.212293195E-01   0.432362991E-07
     2            | Z-Velocity              4   0.212293195E-01   0.432362990E-07
-    Fluid step time (s):     0.1435511E+00
+    Fluid step time (s):     0.1427356E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | s                       2   0.234332882E-03   0.911532791E-08
-    Scalar step time:        0.8242575E-02
+    Scalar step time:        0.8077885E-02
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.1520358E+00
-    Total elapsed time (s):             0.3231299E+00
+    Total time for step        2 (s):   0.1510668E+00
+    Total elapsed time (s):             0.3220581E+00
   Normal end.
 
   -Adjoint Starting simulation--
@@ -2373,7 +2373,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | Adjoint Scalar          2   0.827991220E-02   0.314353711E-06
-    Scalar step time:        0.3965486E-02
+    Scalar step time:        0.3989066E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -2381,11 +2381,11 @@ Writing to optimization_data.csv
     1            | Adjoint Velocity V      3   0.314132415E-02   0.139773487E-06
     1            | Adjoint Velocity W      3   0.314133023E-02   0.139774202E-06
     1            | Adjoint Pressure        9   0.135840574E-02   0.271550630E-07
-    Fluid step time (s):     0.1052324E+00
+    Fluid step time (s):     0.1049180E+00
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.1054799E+00
-    Total elapsed time (s):             0.1054804E+00
+    Total time for step        1 (s):   0.1051444E+00
+    Total elapsed time (s):             0.1051448E+00
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -2394,7 +2394,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | Adjoint Scalar          2   0.135508732E-01   0.514461477E-06
-    Scalar step time:        0.3943224E-02
+    Scalar step time:        0.3973405E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -2402,11 +2402,11 @@ Writing to optimization_data.csv
     2            | Adjoint Velocity V      4   0.529428736E-01   0.107264228E-06
     2            | Adjoint Velocity W      4   0.529428668E-01   0.107264218E-06
     2            | Adjoint Pressure        9   0.132826824E-02   0.265322110E-07
-    Fluid step time (s):     0.1063944E+00
+    Fluid step time (s):     0.1057406E+00
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.1067681E+00
-    Total elapsed time (s):             0.2122670E+00
+    Total time for step        2 (s):   0.1061095E+00
+    Total elapsed time (s):             0.2112717E+00
   Normal end.
  Filter
  Iterations:   Start residual:     Final residual:
@@ -2437,20 +2437,20 @@ Writing to optimization_data.csv
 
     ------------Fluid-------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
-    1            | Pressure               17   0.126489992E+06   0.319126869E-07
+    1            | Pressure               17   0.126489992E+06   0.319126637E-07
     1            | X-Velocity              5   0.895992091E+01   0.893906374E-06
     1            | Y-Velocity              5   0.558094343E+00   0.456142415E-07
     1            | Z-Velocity              5   0.558094343E+00   0.456142415E-07
-    Fluid step time (s):     0.1622363E+00
+    Fluid step time (s):     0.1616449E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | s                       2   0.321444743E-03   0.125835462E-07
-    Scalar step time:        0.8298483E-02
+    Scalar step time:        0.8652979E-02
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.1708122E+00
-    Total elapsed time (s):             0.1708162E+00
+    Total time for step        1 (s):   0.1705677E+00
+    Total elapsed time (s):             0.1705712E+00
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -2464,16 +2464,16 @@ Writing to optimization_data.csv
     2            | X-Velocity              4   0.170391354E+00   0.401002967E-06
     2            | Y-Velocity              4   0.206821240E-01   0.421384927E-07
     2            | Z-Velocity              4   0.206821239E-01   0.421384927E-07
-    Fluid step time (s):     0.1433536E+00
+    Fluid step time (s):     0.1428573E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | s                       2   0.234029710E-03   0.910270430E-08
-    Scalar step time:        0.8283934E-02
+    Scalar step time:        0.8048779E-02
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.1518773E+00
-    Total elapsed time (s):             0.3227203E+00
+    Total time for step        2 (s):   0.1511579E+00
+    Total elapsed time (s):             0.3217542E+00
   Normal end.
 
   -Adjoint Starting simulation--
@@ -2488,7 +2488,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | Adjoint Scalar          2   0.827991220E-02   0.314353711E-06
-    Scalar step time:        0.3986757E-02
+    Scalar step time:        0.3984527E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -2496,11 +2496,11 @@ Writing to optimization_data.csv
     1            | Adjoint Velocity V      3   0.243212504E-02   0.113725866E-06
     1            | Adjoint Velocity W      3   0.243213289E-02   0.113726647E-06
     1            | Adjoint Pressure        9   0.116850355E-02   0.246067906E-07
-    Fluid step time (s):     0.1052422E+00
+    Fluid step time (s):     0.1048430E+00
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.1054695E+00
-    Total elapsed time (s):             0.1054699E+00
+    Total time for step        1 (s):   0.1050715E+00
+    Total elapsed time (s):             0.1050719E+00
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -2509,7 +2509,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | Adjoint Scalar          2   0.135508732E-01   0.514461477E-06
-    Scalar step time:        0.3938595E-02
+    Scalar step time:        0.3925903E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -2517,11 +2517,11 @@ Writing to optimization_data.csv
     2            | Adjoint Velocity V      4   0.424495771E-01   0.852923197E-07
     2            | Adjoint Velocity W      4   0.424495724E-01   0.852923132E-07
     2            | Adjoint Pressure        9   0.114684967E-02   0.242475435E-07
-    Fluid step time (s):     0.1062857E+00
+    Fluid step time (s):     0.1056410E+00
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.1066455E+00
-    Total elapsed time (s):             0.2121334E+00
+    Total time for step        2 (s):   0.1060078E+00
+    Total elapsed time (s):             0.2110964E+00
   Normal end.
  Filter
  Iterations:   Start residual:     Final residual:
@@ -2552,20 +2552,20 @@ Writing to optimization_data.csv
 
     ------------Fluid-------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
-    1            | Pressure               17   0.126504596E+06   0.319129910E-07
+    1            | Pressure               17   0.126504596E+06   0.319130492E-07
     1            | X-Velocity              5   0.895992091E+01   0.893906374E-06
     1            | Y-Velocity              5   0.558094343E+00   0.456142415E-07
     1            | Z-Velocity              5   0.558094343E+00   0.456142415E-07
-    Fluid step time (s):     0.1630811E+00
+    Fluid step time (s):     0.1616227E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | s                       2   0.321444743E-03   0.125835462E-07
-    Scalar step time:        0.8420459E-02
+    Scalar step time:        0.8759686E-02
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.1717755E+00
-    Total elapsed time (s):             0.1717791E+00
+    Total time for step        1 (s):   0.1706488E+00
+    Total elapsed time (s):             0.1706523E+00
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -2579,16 +2579,16 @@ Writing to optimization_data.csv
     2            | X-Velocity              4   0.169906782E+00   0.399990821E-06
     2            | Y-Velocity              4   0.203286867E-01   0.414622014E-07
     2            | Z-Velocity              4   0.203286867E-01   0.414622014E-07
-    Fluid step time (s):     0.1441003E+00
+    Fluid step time (s):     0.1429366E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | s                       2   0.233833547E-03   0.909449623E-08
-    Scalar step time:        0.8560259E-02
+    Scalar step time:        0.8108364E-02
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.1529086E+00
-    Total elapsed time (s):             0.3247107E+00
+    Total time for step        2 (s):   0.1513016E+00
+    Total elapsed time (s):             0.3219801E+00
   Normal end.
 
   -Adjoint Starting simulation--
@@ -2603,7 +2603,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | Adjoint Scalar          2   0.827991220E-02   0.314353711E-06
-    Scalar step time:        0.3982970E-02
+    Scalar step time:        0.3981681E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -2611,11 +2611,11 @@ Writing to optimization_data.csv
     1            | Adjoint Velocity V      3   0.201973696E-02   0.981777689E-07
     1            | Adjoint Velocity W      3   0.201974643E-02   0.981785693E-07
     1            | Adjoint Pressure        9   0.976247649E-03   0.202474271E-07
-    Fluid step time (s):     0.1057795E+00
+    Fluid step time (s):     0.1048069E+00
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.1060112E+00
-    Total elapsed time (s):             0.1060116E+00
+    Total time for step        1 (s):   0.1050373E+00
+    Total elapsed time (s):             0.1050381E+00
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -2624,7 +2624,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | Adjoint Scalar          2   0.135508732E-01   0.514461477E-06
-    Scalar step time:        0.3949605E-02
+    Scalar step time:        0.3933248E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -2632,11 +2632,11 @@ Writing to optimization_data.csv
     2            | Adjoint Velocity V      4   0.338596798E-01   0.681157559E-07
     2            | Adjoint Velocity W      4   0.338596770E-01   0.681157526E-07
     2            | Adjoint Pressure        9   0.960797441E-03   0.199532959E-07
-    Fluid step time (s):     0.1069475E+00
+    Fluid step time (s):     0.1057426E+00
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.1073129E+00
-    Total elapsed time (s):             0.2133397E+00
+    Total time for step        2 (s):   0.1061137E+00
+    Total elapsed time (s):             0.2111701E+00
   Normal end.
  Filter
  Iterations:   Start residual:     Final residual:
@@ -2667,20 +2667,20 @@ Writing to optimization_data.csv
 
     ------------Fluid-------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
-    1            | Pressure               17   0.126514381E+06   0.319132494E-07
+    1            | Pressure               17   0.126514381E+06   0.319132517E-07
     1            | X-Velocity              5   0.895992091E+01   0.893906374E-06
     1            | Y-Velocity              5   0.558094343E+00   0.456142415E-07
     1            | Z-Velocity              5   0.558094343E+00   0.456142415E-07
-    Fluid step time (s):     0.1625048E+00
+    Fluid step time (s):     0.1617441E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | s                       2   0.321444743E-03   0.125835462E-07
-    Scalar step time:        0.8788311E-02
+    Scalar step time:        0.8587041E-02
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.1715674E+00
-    Total elapsed time (s):             0.1715710E+00
+    Total time for step        1 (s):   0.1705984E+00
+    Total elapsed time (s):             0.1706018E+00
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -2690,20 +2690,20 @@ Writing to optimization_data.csv
 
     ------------Fluid-------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
-    2            | Pressure               15   0.513598018E+02   0.195146703E-07
+    2            | Pressure               15   0.513598018E+02   0.195146702E-07
     2            | X-Velocity              4   0.169595081E+00   0.399264007E-06
     2            | Y-Velocity              3   0.200915365E-01   0.992797549E-06
     2            | Z-Velocity              3   0.200915365E-01   0.992797549E-06
-    Fluid step time (s):     0.1421768E+00
+    Fluid step time (s):     0.1415887E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | s                       2   0.233701708E-03   0.908905533E-08
-    Scalar step time:        0.8307651E-02
+    Scalar step time:        0.8051103E-02
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.1507334E+00
-    Total elapsed time (s):             0.3223279E+00
+    Total time for step        2 (s):   0.1498871E+00
+    Total elapsed time (s):             0.3205115E+00
   Normal end.
 
   -Adjoint Starting simulation--
@@ -2718,7 +2718,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | Adjoint Scalar          2   0.827991220E-02   0.314353711E-06
-    Scalar step time:        0.3970657E-02
+    Scalar step time:        0.3980409E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -2726,11 +2726,11 @@ Writing to optimization_data.csv
     1            | Adjoint Velocity V      3   0.178957311E-02   0.892395177E-07
     1            | Adjoint Velocity W      3   0.178958380E-02   0.892403171E-07
     1            | Adjoint Pressure        9   0.795150179E-03   0.154900489E-07
-    Fluid step time (s):     0.1056926E+00
+    Fluid step time (s):     0.1049854E+00
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.1059185E+00
-    Total elapsed time (s):             0.1059189E+00
+    Total time for step        1 (s):   0.1052135E+00
+    Total elapsed time (s):             0.1052139E+00
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -2739,7 +2739,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | Adjoint Scalar          2   0.135508732E-01   0.514461477E-06
-    Scalar step time:        0.3951519E-02
+    Scalar step time:        0.3941423E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -2747,11 +2747,11 @@ Writing to optimization_data.csv
     2            | Adjoint Velocity V      4   0.264716800E-01   0.540398615E-07
     2            | Adjoint Velocity W      4   0.264716789E-01   0.540398615E-07
     2            | Adjoint Pressure        9   0.783390353E-03   0.151759196E-07
-    Fluid step time (s):     0.1064941E+00
+    Fluid step time (s):     0.1061174E+00
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.1068556E+00
-    Total elapsed time (s):             0.2127925E+00
+    Total time for step        2 (s):   0.1064963E+00
+    Total elapsed time (s):             0.2117269E+00
   Normal end.
  Filter
  Iterations:   Start residual:     Final residual:
@@ -2782,20 +2782,20 @@ Writing to optimization_data.csv
 
     ------------Fluid-------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
-    1            | Pressure               17   0.126521556E+06   0.319134290E-07
+    1            | Pressure               17   0.126521556E+06   0.319134454E-07
     1            | X-Velocity              5   0.895992091E+01   0.893906374E-06
     1            | Y-Velocity              5   0.558094343E+00   0.456142415E-07
     1            | Z-Velocity              5   0.558094343E+00   0.456142415E-07
-    Fluid step time (s):     0.1632942E+00
+    Fluid step time (s):     0.1619118E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | s                       2   0.321444743E-03   0.125835462E-07
-    Scalar step time:        0.8689810E-02
+    Scalar step time:        0.8740858E-02
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.1722607E+00
-    Total elapsed time (s):             0.1722640E+00
+    Total time for step        1 (s):   0.1709241E+00
+    Total elapsed time (s):             0.1709272E+00
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -2805,20 +2805,20 @@ Writing to optimization_data.csv
 
     ------------Fluid-------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
-    2            | Pressure               15   0.513596009E+02   0.195147519E-07
-    2            | X-Velocity              4   0.169386523E+00   0.398740785E-06
+    2            | Pressure               15   0.513596009E+02   0.195147518E-07
+    2            | X-Velocity              4   0.169386523E+00   0.398740784E-06
     2            | Y-Velocity              3   0.199347887E-01   0.984172061E-06
     2            | Z-Velocity              3   0.199347887E-01   0.984172060E-06
-    Fluid step time (s):     0.1421078E+00
+    Fluid step time (s):     0.1415553E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | s                       2   0.233615258E-03   0.908542365E-08
-    Scalar step time:        0.8034483E-02
+    Scalar step time:        0.8024802E-02
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.1504025E+00
-    Total elapsed time (s):             0.3226955E+00
+    Total time for step        2 (s):   0.1498309E+00
+    Total elapsed time (s):             0.3207795E+00
   Normal end.
 
   -Adjoint Starting simulation--
@@ -2833,7 +2833,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | Adjoint Scalar          2   0.827991220E-02   0.314353711E-06
-    Scalar step time:        0.3961718E-02
+    Scalar step time:        0.4014395E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -2841,11 +2841,11 @@ Writing to optimization_data.csv
     1            | Adjoint Velocity V      3   0.167700371E-02   0.846843322E-07
     1            | Adjoint Velocity W      3   0.167701512E-02   0.846851276E-07
     1            | Adjoint Pressure        9   0.653203428E-03   0.130190674E-07
-    Fluid step time (s):     0.1053188E+00
+    Fluid step time (s):     0.1049214E+00
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.1055500E+00
-    Total elapsed time (s):             0.1055504E+00
+    Total time for step        1 (s):   0.1051500E+00
+    Total elapsed time (s):             0.1051504E+00
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -2854,7 +2854,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | Adjoint Scalar          2   0.135508732E-01   0.514461477E-06
-    Scalar step time:        0.3950297E-02
+    Scalar step time:        0.3945250E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -2862,11 +2862,11 @@ Writing to optimization_data.csv
     2            | Adjoint Velocity V      4   0.200526481E-01   0.422619347E-07
     2            | Adjoint Velocity W      4   0.200526485E-01   0.422619372E-07
     2            | Adjoint Pressure        9   0.644500494E-03   0.129061001E-07
-    Fluid step time (s):     0.1066410E+00
+    Fluid step time (s):     0.1057219E+00
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.1069846E+00
-    Total elapsed time (s):             0.2125555E+00
+    Total time for step        2 (s):   0.1060813E+00
+    Total elapsed time (s):             0.2112532E+00
   Normal end.
  Filter
  Iterations:   Start residual:     Final residual:
@@ -2897,20 +2897,20 @@ Writing to optimization_data.csv
 
     ------------Fluid-------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
-    1            | Pressure               17   0.126527911E+06   0.319136480E-07
+    1            | Pressure               17   0.126527911E+06   0.319136709E-07
     1            | X-Velocity              5   0.895992091E+01   0.893906374E-06
     1            | Y-Velocity              5   0.558094343E+00   0.456142415E-07
     1            | Z-Velocity              5   0.558094343E+00   0.456142415E-07
-    Fluid step time (s):     0.1627495E+00
+    Fluid step time (s):     0.1616268E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | s                       2   0.321444743E-03   0.125835462E-07
-    Scalar step time:        0.8285148E-02
+    Scalar step time:        0.8616137E-02
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.1713068E+00
-    Total elapsed time (s):             0.1713102E+00
+    Total time for step        1 (s):   0.1705118E+00
+    Total elapsed time (s):             0.1705150E+00
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -2920,20 +2920,20 @@ Writing to optimization_data.csv
 
     ------------Fluid-------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
-    2            | Pressure               15   0.513594625E+02   0.195148528E-07
+    2            | Pressure               15   0.513594625E+02   0.195148527E-07
     2            | X-Velocity              4   0.169254687E+00   0.398340090E-06
     2            | Y-Velocity              3   0.198397710E-01   0.978948440E-06
     2            | Z-Velocity              3   0.198397710E-01   0.978948440E-06
-    Fluid step time (s):     0.1427598E+00
+    Fluid step time (s):     0.1415370E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | s                       2   0.233563237E-03   0.908317968E-08
-    Scalar step time:        0.8247515E-02
+    Scalar step time:        0.8073777E-02
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.1512639E+00
-    Total elapsed time (s):             0.3225975E+00
+    Total time for step        2 (s):   0.1498630E+00
+    Total elapsed time (s):             0.3203995E+00
   Normal end.
 
   -Adjoint Starting simulation--
@@ -2948,7 +2948,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | Adjoint Scalar          2   0.827991220E-02   0.314353711E-06
-    Scalar step time:        0.3982890E-02
+    Scalar step time:        0.3983144E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -2956,11 +2956,11 @@ Writing to optimization_data.csv
     1            | Adjoint Velocity V      3   0.162503540E-02   0.824321353E-07
     1            | Adjoint Velocity W      3   0.162504718E-02   0.824329279E-07
     1            | Adjoint Pressure        8   0.534059074E-03   0.912251446E-07
-    Fluid step time (s):     0.9809279E-01
+    Fluid step time (s):     0.9703514E-01
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.9832680E-01
-    Total elapsed time (s):             0.9832719E-01
+    Total time for step        1 (s):   0.9726062E-01
+    Total elapsed time (s):             0.9726104E-01
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -2969,7 +2969,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | Adjoint Scalar          2   0.135508732E-01   0.514461477E-06
-    Scalar step time:        0.3937162E-02
+    Scalar step time:        0.3956814E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -2977,11 +2977,11 @@ Writing to optimization_data.csv
     2            | Adjoint Velocity V      3   0.148278743E-01   0.786743612E-06
     2            | Adjoint Velocity W      3   0.148278801E-01   0.786743902E-06
     2            | Adjoint Pressure        8   0.527579552E-03   0.911657115E-07
-    Fluid step time (s):     0.9713704E-01
+    Fluid step time (s):     0.9668274E-01
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.9749725E-01
-    Total elapsed time (s):             0.1958431E+00
+    Total time for step        2 (s):   0.9705421E-01
+    Total elapsed time (s):             0.1943314E+00
   Normal end.
  Filter
  Iterations:   Start residual:     Final residual:
@@ -3012,20 +3012,20 @@ Writing to optimization_data.csv
 
     ------------Fluid-------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
-    1            | Pressure               17   0.126533053E+06   0.319137843E-07
+    1            | Pressure               17   0.126533053E+06   0.319137712E-07
     1            | X-Velocity              5   0.895992091E+01   0.893906374E-06
     1            | Y-Velocity              5   0.558094343E+00   0.456142415E-07
     1            | Z-Velocity              5   0.558094343E+00   0.456142415E-07
-    Fluid step time (s):     0.1629784E+00
+    Fluid step time (s):     0.1616800E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | s                       2   0.321444743E-03   0.125835462E-07
-    Scalar step time:        0.8692304E-02
+    Scalar step time:        0.8593373E-02
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.1719395E+00
-    Total elapsed time (s):             0.1719429E+00
+    Total time for step        1 (s):   0.1705439E+00
+    Total elapsed time (s):             0.1705471E+00
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -3039,16 +3039,16 @@ Writing to optimization_data.csv
     2            | X-Velocity              4   0.169171800E+00   0.398028816E-06
     2            | Y-Velocity              3   0.197875127E-01   0.976049195E-06
     2            | Z-Velocity              3   0.197875127E-01   0.976049195E-06
-    Fluid step time (s):     0.1427447E+00
+    Fluid step time (s):     0.1414500E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | s                       2   0.233536468E-03   0.908197314E-08
-    Scalar step time:        0.8021648E-02
+    Scalar step time:        0.8013961E-02
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.1510264E+00
-    Total elapsed time (s):             0.3229917E+00
+    Total time for step        2 (s):   0.1497153E+00
+    Total elapsed time (s):             0.3202859E+00
   Normal end.
 
   -Adjoint Starting simulation--
@@ -3063,7 +3063,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | Adjoint Scalar          2   0.827991220E-02   0.314353711E-06
-    Scalar step time:        0.3979894E-02
+    Scalar step time:        0.3997232E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -3071,11 +3071,11 @@ Writing to optimization_data.csv
     1            | Adjoint Velocity V      3   0.160481012E-02   0.814713591E-07
     1            | Adjoint Velocity W      3   0.160482204E-02   0.814721507E-07
     1            | Adjoint Pressure        8   0.424168031E-03   0.710948761E-07
-    Fluid step time (s):     0.9763316E-01
+    Fluid step time (s):     0.9702728E-01
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.9786361E-01
-    Total elapsed time (s):             0.9786399E-01
+    Total time for step        1 (s):   0.9725768E-01
+    Total elapsed time (s):             0.9725807E-01
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -3084,7 +3084,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | Adjoint Scalar          2   0.135508732E-01   0.514461477E-06
-    Scalar step time:        0.3932532E-02
+    Scalar step time:        0.3946373E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -3092,11 +3092,11 @@ Writing to optimization_data.csv
     2            | Adjoint Velocity V      3   0.109250401E-01   0.591748437E-06
     2            | Adjoint Velocity W      3   0.109250477E-01   0.591748806E-06
     2            | Adjoint Pressure        8   0.419892311E-03   0.707163966E-07
-    Fluid step time (s):     0.9721676E-01
+    Fluid step time (s):     0.9666339E-01
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.9758592E-01
-    Total elapsed time (s):             0.1954634E+00
+    Total time for step        2 (s):   0.9703122E-01
+    Total elapsed time (s):             0.1943057E+00
   Normal end.
  Filter
  Iterations:   Start residual:     Final residual:
@@ -3127,20 +3127,20 @@ Writing to optimization_data.csv
 
     ------------Fluid-------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
-    1            | Pressure               17   0.126536716E+06   0.319138618E-07
+    1            | Pressure               17   0.126536716E+06   0.319138337E-07
     1            | X-Velocity              5   0.895992091E+01   0.893906374E-06
     1            | Y-Velocity              5   0.558094343E+00   0.456142415E-07
     1            | Z-Velocity              5   0.558094343E+00   0.456142415E-07
-    Fluid step time (s):     0.1625005E+00
+    Fluid step time (s):     0.1616782E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | s                       2   0.321444743E-03   0.125835462E-07
-    Scalar step time:        0.8460777E-02
+    Scalar step time:        0.8817707E-02
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.1712338E+00
-    Total elapsed time (s):             0.1712371E+00
+    Total time for step        1 (s):   0.1707623E+00
+    Total elapsed time (s):             0.1707653E+00
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -3154,16 +3154,16 @@ Writing to optimization_data.csv
     2            | X-Velocity              4   0.169117748E+00   0.397777494E-06
     2            | Y-Velocity              3   0.197595600E-01   0.974423425E-06
     2            | Z-Velocity              3   0.197595600E-01   0.974423425E-06
-    Fluid step time (s):     0.1425968E+00
+    Fluid step time (s):     0.1415272E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | s                       2   0.233523612E-03   0.908133508E-08
-    Scalar step time:        0.8009394E-02
+    Scalar step time:        0.8174832E-02
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.1508440E+00
-    Total elapsed time (s):             0.3221033E+00
+    Total time for step        2 (s):   0.1499504E+00
+    Total elapsed time (s):             0.3207367E+00
   Normal end.
 
   -Adjoint Starting simulation--
@@ -3178,7 +3178,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | Adjoint Scalar          2   0.827991220E-02   0.314353711E-06
-    Scalar step time:        0.4042535E-02
+    Scalar step time:        0.4001029E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -3186,11 +3186,11 @@ Writing to optimization_data.csv
     1            | Adjoint Velocity V      3   0.159859490E-02   0.811202019E-07
     1            | Adjoint Velocity W      3   0.159860688E-02   0.811209932E-07
     1            | Adjoint Pressure        8   0.328693356E-03   0.543415441E-07
-    Fluid step time (s):     0.9748289E-01
+    Fluid step time (s):     0.9704186E-01
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.9771711E-01
-    Total elapsed time (s):             0.9771751E-01
+    Total time for step        1 (s):   0.9726894E-01
+    Total elapsed time (s):             0.9726935E-01
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -3199,7 +3199,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | Adjoint Scalar          2   0.135508732E-01   0.514461477E-06
-    Scalar step time:        0.3937953E-02
+    Scalar step time:        0.3967774E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -3207,11 +3207,11 @@ Writing to optimization_data.csv
     2            | Adjoint Velocity V      3   0.808021239E-02   0.445635030E-06
     2            | Adjoint Velocity W      3   0.808022203E-02   0.445635494E-06
     2            | Adjoint Pressure        8   0.326007400E-03   0.536460335E-07
-    Fluid step time (s):     0.9729628E-01
+    Fluid step time (s):     0.9679649E-01
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.9764268E-01
-    Total elapsed time (s):             0.1953779E+00
+    Total time for step        2 (s):   0.9716896E-01
+    Total elapsed time (s):             0.1944554E+00
   Normal end.
  Filter
  Iterations:   Start residual:     Final residual:
@@ -3242,20 +3242,20 @@ Writing to optimization_data.csv
 
     ------------Fluid-------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
-    1            | Pressure               17   0.126539047E+06   0.319139608E-07
+    1            | Pressure               17   0.126539047E+06   0.319138922E-07
     1            | X-Velocity              5   0.895992091E+01   0.893906374E-06
     1            | Y-Velocity              5   0.558094343E+00   0.456142415E-07
     1            | Z-Velocity              5   0.558094343E+00   0.456142415E-07
-    Fluid step time (s):     0.1635705E+00
+    Fluid step time (s):     0.1617655E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | s                       2   0.321444743E-03   0.125835462E-07
-    Scalar step time:        0.8712183E-02
+    Scalar step time:        0.8726992E-02
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.1725501E+00
-    Total elapsed time (s):             0.1725532E+00
+    Total time for step        1 (s):   0.1707605E+00
+    Total elapsed time (s):             0.1707636E+00
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -3266,19 +3266,19 @@ Writing to optimization_data.csv
     ------------Fluid-------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | Pressure               15   0.513592401E+02   0.195150496E-07
-    2            | X-Velocity              4   0.169083615E+00   0.397579397E-06
+    2            | X-Velocity              4   0.169083615E+00   0.397579398E-06
     2            | Y-Velocity              3   0.197448821E-01   0.973513213E-06
     2            | Z-Velocity              3   0.197448821E-01   0.973513212E-06
-    Fluid step time (s):     0.1429223E+00
+    Fluid step time (s):     0.1414884E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | s                       2   0.233517397E-03   0.908100392E-08
-    Scalar step time:        0.7867000E-02
+    Scalar step time:        0.8128062E-02
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.1510465E+00
-    Total elapsed time (s):             0.3236255E+00
+    Total time for step        2 (s):   0.1498671E+00
+    Total elapsed time (s):             0.3206542E+00
   Normal end.
 
   -Adjoint Starting simulation--
@@ -3293,7 +3293,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | Adjoint Scalar          2   0.827991220E-02   0.314353711E-06
-    Scalar step time:        0.3977119E-02
+    Scalar step time:        0.3979237E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -3301,11 +3301,11 @@ Writing to optimization_data.csv
     1            | Adjoint Velocity V      3   0.159687086E-02   0.809963901E-07
     1            | Adjoint Velocity W      3   0.159688284E-02   0.809971813E-07
     1            | Adjoint Pressure        8   0.248613430E-03   0.399314291E-07
-    Fluid step time (s):     0.9774902E-01
+    Fluid step time (s):     0.9703701E-01
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.9798051E-01
-    Total elapsed time (s):             0.9798090E-01
+    Total time for step        1 (s):   0.9726767E-01
+    Total elapsed time (s):             0.9726804E-01
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -3314,7 +3314,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | Adjoint Scalar          2   0.135508732E-01   0.514461477E-06
-    Scalar step time:        0.3931269E-02
+    Scalar step time:        0.3930963E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -3322,11 +3322,11 @@ Writing to optimization_data.csv
     2            | Adjoint Velocity V      3   0.606152926E-02   0.337365965E-06
     2            | Adjoint Velocity W      3   0.606154133E-02   0.337366541E-06
     2            | Adjoint Pressure        8   0.246828183E-03   0.391531955E-07
-    Fluid step time (s):     0.9727283E-01
+    Fluid step time (s):     0.9643236E-01
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.9763727E-01
-    Total elapsed time (s):             0.1956350E+00
+    Total time for step        2 (s):   0.9679200E-01
+    Total elapsed time (s):             0.1940738E+00
   Normal end.
  Filter
  Iterations:   Start residual:     Final residual:
@@ -3357,20 +3357,20 @@ Writing to optimization_data.csv
 
     ------------Fluid-------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
-    1            | Pressure               17   0.126540619E+06   0.319139576E-07
+    1            | Pressure               17   0.126540619E+06   0.319139217E-07
     1            | X-Velocity              5   0.895992091E+01   0.893906374E-06
     1            | Y-Velocity              5   0.558094343E+00   0.456142415E-07
     1            | Z-Velocity              5   0.558094343E+00   0.456142415E-07
-    Fluid step time (s):     0.1638459E+00
+    Fluid step time (s):     0.1616809E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | s                       2   0.321444743E-03   0.125835462E-07
-    Scalar step time:        0.8818929E-02
+    Scalar step time:        0.8655614E-02
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.1729328E+00
-    Total elapsed time (s):             0.1729359E+00
+    Total time for step        1 (s):   0.1706066E+00
+    Total elapsed time (s):             0.1706100E+00
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -3381,19 +3381,19 @@ Writing to optimization_data.csv
     ------------Fluid-------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | Pressure               15   0.513592131E+02   0.195150747E-07
-    2            | X-Velocity              4   0.169062833E+00   0.397421981E-06
+    2            | X-Velocity              4   0.169062833E+00   0.397421980E-06
     2            | Y-Velocity              3   0.197369403E-01   0.973004584E-06
     2            | Z-Velocity              3   0.197369403E-01   0.973004584E-06
-    Fluid step time (s):     0.1436428E+00
+    Fluid step time (s):     0.1414829E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | s                       2   0.233514424E-03   0.908085586E-08
-    Scalar step time:        0.7883600E-02
+    Scalar step time:        0.8045021E-02
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.1517915E+00
-    Total elapsed time (s):             0.3247501E+00
+    Total time for step        2 (s):   0.1497783E+00
+    Total elapsed time (s):             0.3204118E+00
   Normal end.
 
   -Adjoint Starting simulation--
@@ -3408,7 +3408,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | Adjoint Scalar          2   0.827991220E-02   0.314353711E-06
-    Scalar step time:        0.3994182E-02
+    Scalar step time:        0.4000288E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -3416,11 +3416,11 @@ Writing to optimization_data.csv
     1            | Adjoint Velocity V      3   0.159635946E-02   0.809487351E-07
     1            | Adjoint Velocity W      3   0.159637145E-02   0.809495263E-07
     1            | Adjoint Pressure        8   0.188716018E-03   0.300445925E-07
-    Fluid step time (s):     0.9754622E-01
+    Fluid step time (s):     0.9709731E-01
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.9777930E-01
-    Total elapsed time (s):             0.9777969E-01
+    Total time for step        1 (s):   0.9733125E-01
+    Total elapsed time (s):             0.9733165E-01
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -3429,7 +3429,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | Adjoint Scalar          2   0.135508732E-01   0.514461477E-06
-    Scalar step time:        0.3920429E-02
+    Scalar step time:        0.3955921E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -3437,11 +3437,11 @@ Writing to optimization_data.csv
     2            | Adjoint Velocity V      3   0.460688278E-02   0.257688616E-06
     2            | Adjoint Velocity W      3   0.460689758E-02   0.257689320E-06
     2            | Adjoint Pressure        8   0.187149709E-03   0.293416265E-07
-    Fluid step time (s):     0.9693707E-01
+    Fluid step time (s):     0.9662487E-01
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.9730573E-01
-    Total elapsed time (s):             0.1951029E+00
+    Total time for step        2 (s):   0.9699480E-01
+    Total elapsed time (s):             0.1943404E+00
   Normal end.
  Filter
  Iterations:   Start residual:     Final residual:
@@ -3472,20 +3472,20 @@ Writing to optimization_data.csv
 
     ------------Fluid-------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
-    1            | Pressure               17   0.126541703E+06   0.319139826E-07
+    1            | Pressure               17   0.126541703E+06   0.319139627E-07
     1            | X-Velocity              5   0.895992091E+01   0.893906374E-06
     1            | Y-Velocity              5   0.558094343E+00   0.456142415E-07
     1            | Z-Velocity              5   0.558094343E+00   0.456142415E-07
-    Fluid step time (s):     0.1628054E+00
+    Fluid step time (s):     0.1616836E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | s                       2   0.321444743E-03   0.125835462E-07
-    Scalar step time:        0.8343659E-02
+    Scalar step time:        0.8672576E-02
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.1714212E+00
-    Total elapsed time (s):             0.1714247E+00
+    Total time for step        1 (s):   0.1706251E+00
+    Total elapsed time (s):             0.1706282E+00
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -3495,20 +3495,20 @@ Writing to optimization_data.csv
 
     ------------Fluid-------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
-    2            | Pressure               15   0.513591986E+02   0.195150892E-07
-    2            | X-Velocity              4   0.169050568E+00   0.397302883E-06
+    2            | Pressure               15   0.513591986E+02   0.195150891E-07
+    2            | X-Velocity              4   0.169050568E+00   0.397302884E-06
     2            | Y-Velocity              3   0.197323613E-01   0.972705257E-06
     2            | Z-Velocity              3   0.197323613E-01   0.972705256E-06
-    Fluid step time (s):     0.1428575E+00
+    Fluid step time (s):     0.1416986E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | s                       2   0.233513079E-03   0.908079442E-08
-    Scalar step time:        0.8077496E-02
+    Scalar step time:        0.8083185E-02
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.1511806E+00
-    Total elapsed time (s):             0.3226272E+00
+    Total time for step        2 (s):   0.1500338E+00
+    Total elapsed time (s):             0.3206849E+00
   Normal end.
 
   -Adjoint Starting simulation--
@@ -3523,7 +3523,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | Adjoint Scalar          2   0.827991220E-02   0.314353711E-06
-    Scalar step time:        0.3976787E-02
+    Scalar step time:        0.3985689E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -3531,11 +3531,11 @@ Writing to optimization_data.csv
     1            | Adjoint Velocity V      3   0.159618459E-02   0.809286529E-07
     1            | Adjoint Velocity W      3   0.159619658E-02   0.809294441E-07
     1            | Adjoint Pressure        8   0.146194599E-03   0.234020744E-07
-    Fluid step time (s):     0.9773560E-01
+    Fluid step time (s):     0.9702867E-01
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.9797073E-01
-    Total elapsed time (s):             0.9797114E-01
+    Total time for step        1 (s):   0.9726539E-01
+    Total elapsed time (s):             0.9726580E-01
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -3544,7 +3544,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | Adjoint Scalar          2   0.135508732E-01   0.514461477E-06
-    Scalar step time:        0.3942592E-02
+    Scalar step time:        0.3952475E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -3552,11 +3552,11 @@ Writing to optimization_data.csv
     2            | Adjoint Velocity V      3   0.349531892E-02   0.196422670E-06
     2            | Adjoint Velocity W      3   0.349533736E-02   0.196423545E-06
     2            | Adjoint Pressure        8   0.144391045E-03   0.231547370E-07
-    Fluid step time (s):     0.9749835E-01
+    Fluid step time (s):     0.9684930E-01
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.9786384E-01
-    Total elapsed time (s):             0.1958491E+00
+    Total time for step        2 (s):   0.9722186E-01
+    Total elapsed time (s):             0.1945050E+00
   Normal end.
  Filter
  Iterations:   Start residual:     Final residual:
@@ -3587,20 +3587,20 @@ Writing to optimization_data.csv
 
     ------------Fluid-------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
-    1            | Pressure               17   0.126542476E+06   0.319140382E-07
+    1            | Pressure               17   0.126542476E+06   0.319140057E-07
     1            | X-Velocity              5   0.895992091E+01   0.893906374E-06
     1            | Y-Velocity              5   0.558094343E+00   0.456142415E-07
     1            | Z-Velocity              5   0.558094343E+00   0.456142415E-07
-    Fluid step time (s):     0.1631030E+00
+    Fluid step time (s):     0.1616379E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | s                       2   0.321444743E-03   0.125835462E-07
-    Scalar step time:        0.8330505E-02
+    Scalar step time:        0.8692726E-02
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.1717047E+00
-    Total elapsed time (s):             0.1717079E+00
+    Total time for step        1 (s):   0.1705978E+00
+    Total elapsed time (s):             0.1706013E+00
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -3611,19 +3611,19 @@ Writing to optimization_data.csv
     ------------Fluid-------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | Pressure               15   0.513591895E+02   0.195151013E-07
-    2            | X-Velocity              4   0.169044647E+00   0.397213099E-06
+    2            | X-Velocity              4   0.169044646E+00   0.397213099E-06
     2            | Y-Velocity              3   0.197296464E-01   0.972523547E-06
     2            | Z-Velocity              3   0.197296464E-01   0.972523546E-06
-    Fluid step time (s):     0.1427317E+00
+    Fluid step time (s):     0.1415106E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | s                       2   0.233512440E-03   0.908076734E-08
-    Scalar step time:        0.8329954E-02
+    Scalar step time:        0.8030483E-02
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.1513081E+00
-    Total elapsed time (s):             0.3230370E+00
+    Total time for step        2 (s):   0.1497951E+00
+    Total elapsed time (s):             0.3204186E+00
   Normal end.
 
   -Adjoint Starting simulation--
@@ -3638,7 +3638,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | Adjoint Scalar          2   0.827991220E-02   0.314353711E-06
-    Scalar step time:        0.4155104E-02
+    Scalar step time:        0.4005067E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -3646,11 +3646,11 @@ Writing to optimization_data.csv
     1            | Adjoint Velocity V      3   0.159612028E-02   0.809203578E-07
     1            | Adjoint Velocity W      3   0.159613227E-02   0.809211490E-07
     1            | Adjoint Pressure        8   0.110627413E-03   0.181166614E-07
-    Fluid step time (s):     0.9791200E-01
+    Fluid step time (s):     0.9700216E-01
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.9815023E-01
-    Total elapsed time (s):             0.9815091E-01
+    Total time for step        1 (s):   0.9722716E-01
+    Total elapsed time (s):             0.9722764E-01
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -3659,7 +3659,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | Adjoint Scalar          2   0.135508732E-01   0.514461477E-06
-    Scalar step time:        0.3921311E-02
+    Scalar step time:        0.3932516E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -3667,11 +3667,11 @@ Writing to optimization_data.csv
     2            | Adjoint Velocity V      3   0.261781142E-02   0.146936123E-06
     2            | Adjoint Velocity W      3   0.261783514E-02   0.146937272E-06
     2            | Adjoint Pressure        8   0.109067787E-03   0.179247563E-07
-    Fluid step time (s):     0.9653453E-01
+    Fluid step time (s):     0.9627368E-01
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.9689745E-01
-    Total elapsed time (s):             0.1950623E+00
+    Total time for step        2 (s):   0.9664681E-01
+    Total elapsed time (s):             0.1938920E+00
   Normal end.
  Filter
  Iterations:   Start residual:     Final residual:
@@ -3702,20 +3702,20 @@ Writing to optimization_data.csv
 
     ------------Fluid-------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
-    1            | Pressure               17   0.126543052E+06   0.319139925E-07
+    1            | Pressure               17   0.126543052E+06   0.319139967E-07
     1            | X-Velocity              5   0.895992091E+01   0.893906374E-06
     1            | Y-Velocity              5   0.558094343E+00   0.456142415E-07
     1            | Z-Velocity              5   0.558094343E+00   0.456142415E-07
-    Fluid step time (s):     0.1633384E+00
+    Fluid step time (s):     0.2753945E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | s                       2   0.321444743E-03   0.125835462E-07
-    Scalar step time:        0.9121324E-02
+    Scalar step time:        0.2462701E-01
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.1727274E+00
-    Total elapsed time (s):             0.1727344E+00
+    Total time for step        1 (s):   0.3422612E+00
+    Total elapsed time (s):             0.3425668E+00
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -3729,16 +3729,16 @@ Writing to optimization_data.csv
     2            | X-Velocity              4   0.169042955E+00   0.397150525E-06
     2            | Y-Velocity              3   0.197281104E-01   0.972419265E-06
     2            | Z-Velocity              3   0.197281104E-01   0.972419265E-06
-    Fluid step time (s):     0.1427449E+00
+    Fluid step time (s):     0.1416041E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | s                       2   0.233512133E-03   0.908075613E-08
-    Scalar step time:        0.8053119E-02
+    Scalar step time:        0.8017698E-02
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.1510468E+00
-    Total elapsed time (s):             0.3238034E+00
+    Total time for step        2 (s):   0.1498747E+00
+    Total elapsed time (s):             0.4924705E+00
   Normal end.
 
   -Adjoint Starting simulation--
@@ -3753,7 +3753,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | Adjoint Scalar          2   0.827991220E-02   0.314353711E-06
-    Scalar step time:        0.3972430E-02
+    Scalar step time:        0.1595820E-01
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -3761,11 +3761,11 @@ Writing to optimization_data.csv
     1            | Adjoint Velocity V      3   0.159609802E-02   0.809170109E-07
     1            | Adjoint Velocity W      3   0.159611001E-02   0.809178021E-07
     1            | Adjoint Pressure        7   0.788314961E-04   0.997261326E-07
-    Fluid step time (s):     0.8987967E-01
+    Fluid step time (s):     0.1013052E+00
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.9010968E-01
-    Total elapsed time (s):             0.9011007E-01
+    Total time for step        1 (s):   0.1015441E+00
+    Total elapsed time (s):             0.1015454E+00
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -3774,7 +3774,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | Adjoint Scalar          2   0.135508732E-01   0.514461477E-06
-    Scalar step time:        0.3932773E-02
+    Scalar step time:        0.3942806E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -3782,11 +3782,11 @@ Writing to optimization_data.csv
     2            | Adjoint Velocity V      3   0.195206134E-02   0.106950968E-06
     2            | Adjoint Velocity W      3   0.195208211E-02   0.106952376E-06
     2            | Adjoint Pressure        7   0.782148387E-04   0.978336076E-07
-    Fluid step time (s):     0.8884486E-01
+    Fluid step time (s):     0.8843695E-01
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.8920762E-01
-    Total elapsed time (s):             0.1793349E+00
+    Total time for step        2 (s):   0.8880934E-01
+    Total elapsed time (s):             0.1903702E+00
   Normal end.
  Filter
  Iterations:   Start residual:     Final residual:
@@ -3817,20 +3817,20 @@ Writing to optimization_data.csv
 
     ------------Fluid-------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
-    1            | Pressure               17   0.126543494E+06   0.319142521E-07
+    1            | Pressure               17   0.126543494E+06   0.319140246E-07
     1            | X-Velocity              5   0.895992091E+01   0.893906374E-06
     1            | Y-Velocity              5   0.558094343E+00   0.456142415E-07
     1            | Z-Velocity              5   0.558094343E+00   0.456142415E-07
-    Fluid step time (s):     0.1625196E+00
+    Fluid step time (s):     0.1617069E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | s                       2   0.321444743E-03   0.125835462E-07
-    Scalar step time:        0.8340735E-02
+    Scalar step time:        0.8665934E-02
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.1711286E+00
-    Total elapsed time (s):             0.1711319E+00
+    Total time for step        1 (s):   0.1706379E+00
+    Total elapsed time (s):             0.1706412E+00
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -3844,16 +3844,16 @@ Writing to optimization_data.csv
     2            | X-Velocity              4   0.169043665E+00   0.397109997E-06
     2            | Y-Velocity              3   0.197273931E-01   0.972369590E-06
     2            | Z-Velocity              3   0.197273931E-01   0.972369589E-06
-    Fluid step time (s):     0.1421574E+00
+    Fluid step time (s):     0.1415032E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | s                       2   0.233512038E-03   0.908075112E-08
-    Scalar step time:        0.8201506E-02
+    Scalar step time:        0.8217876E-02
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.1506049E+00
-    Total elapsed time (s):             0.3217594E+00
+    Total time for step        2 (s):   0.1499637E+00
+    Total elapsed time (s):             0.3206276E+00
   Normal end.
 
   -Adjoint Starting simulation--
@@ -3868,7 +3868,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | Adjoint Scalar          2   0.827991220E-02   0.314353711E-06
-    Scalar step time:        0.3959765E-02
+    Scalar step time:        0.3974728E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -3876,11 +3876,11 @@ Writing to optimization_data.csv
     1            | Adjoint Velocity V      3   0.159609206E-02   0.809158664E-07
     1            | Adjoint Velocity W      3   0.159610405E-02   0.809166575E-07
     1            | Adjoint Pressure        7   0.527402464E-04   0.647598384E-07
-    Fluid step time (s):     0.8962834E-01
+    Fluid step time (s):     0.8927165E-01
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.8985734E-01
-    Total elapsed time (s):             0.8985797E-01
+    Total time for step        1 (s):   0.8950077E-01
+    Total elapsed time (s):             0.8950111E-01
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -3889,7 +3889,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | Adjoint Scalar          2   0.135508732E-01   0.514461477E-06
-    Scalar step time:        0.3922413E-02
+    Scalar step time:        0.3960150E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -3897,11 +3897,11 @@ Writing to optimization_data.csv
     2            | Adjoint Velocity V      3   0.154348075E-02   0.776789407E-07
     2            | Adjoint Velocity W      3   0.154350391E-02   0.776812672E-07
     2            | Adjoint Pressure        7   0.522754113E-04   0.641243236E-07
-    Fluid step time (s):     0.8847531E-01
+    Fluid step time (s):     0.8803542E-01
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.8883474E-01
-    Total elapsed time (s):             0.1787119E+00
+    Total time for step        2 (s):   0.8841361E-01
+    Total elapsed time (s):             0.1779327E+00
   Normal end.
  Filter
  Iterations:   Start residual:     Final residual:
@@ -3932,20 +3932,20 @@ Writing to optimization_data.csv
 
     ------------Fluid-------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
-    1            | Pressure               17   0.126543811E+06   0.319140585E-07
+    1            | Pressure               17   0.126543811E+06   0.319140142E-07
     1            | X-Velocity              5   0.895992091E+01   0.893906374E-06
     1            | Y-Velocity              5   0.558094343E+00   0.456142415E-07
     1            | Z-Velocity              5   0.558094343E+00   0.456142415E-07
-    Fluid step time (s):     0.1622256E+00
+    Fluid step time (s):     0.1616074E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | s                       2   0.321444743E-03   0.125835462E-07
-    Scalar step time:        0.8500994E-02
+    Scalar step time:        0.8688637E-02
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.1709993E+00
-    Total elapsed time (s):             0.1710024E+00
+    Total time for step        1 (s):   0.1705659E+00
+    Total elapsed time (s):             0.1705691E+00
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -3955,20 +3955,20 @@ Writing to optimization_data.csv
 
     ------------Fluid-------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
-    2            | Pressure               15   0.513591789E+02   0.195151314E-07
+    2            | Pressure               15   0.513591789E+02   0.195151313E-07
     2            | X-Velocity              4   0.169044446E+00   0.397092300E-06
     2            | Y-Velocity              3   0.197272260E-01   0.972357655E-06
     2            | Z-Velocity              3   0.197272260E-01   0.972357655E-06
-    Fluid step time (s):     0.1423853E+00
+    Fluid step time (s):     0.1415283E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | s                       2   0.233512023E-03   0.908074697E-08
-    Scalar step time:        0.8811365E-02
+    Scalar step time:        0.8044330E-02
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.1514420E+00
-    Total elapsed time (s):             0.3224661E+00
+    Total time for step        2 (s):   0.1498228E+00
+    Total elapsed time (s):             0.3204167E+00
   Normal end.
 
   -Adjoint Starting simulation--
@@ -3983,7 +3983,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | Adjoint Scalar          2   0.827991220E-02   0.314353711E-06
-    Scalar step time:        0.3964856E-02
+    Scalar step time:        0.3993134E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -3991,11 +3991,11 @@ Writing to optimization_data.csv
     1            | Adjoint Velocity V      3   0.159609115E-02   0.809156082E-07
     1            | Adjoint Velocity W      3   0.159610314E-02   0.809163994E-07
     1            | Adjoint Pressure        7   0.414794241E-04   0.460930867E-07
-    Fluid step time (s):     0.8960139E-01
+    Fluid step time (s):     0.8920826E-01
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.8982692E-01
-    Total elapsed time (s):             0.8982737E-01
+    Total time for step        1 (s):   0.8943638E-01
+    Total elapsed time (s):             0.8943674E-01
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -4004,7 +4004,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | Adjoint Scalar          2   0.135508732E-01   0.514461477E-06
-    Scalar step time:        0.3923696E-02
+    Scalar step time:        0.3957996E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -4012,11 +4012,11 @@ Writing to optimization_data.csv
     2            | Adjoint Velocity V      3   0.143148873E-02   0.679954033E-07
     2            | Adjoint Velocity W      3   0.143151328E-02   0.679984413E-07
     2            | Adjoint Pressure        7   0.412910087E-04   0.457462960E-07
-    Fluid step time (s):     0.8836337E-01
+    Fluid step time (s):     0.8809058E-01
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.8873331E-01
-    Total elapsed time (s):             0.1785809E+00
+    Total time for step        2 (s):   0.8845989E-01
+    Total elapsed time (s):             0.1779155E+00
   Normal end.
  Filter
  Iterations:   Start residual:     Final residual:
@@ -4047,20 +4047,20 @@ Writing to optimization_data.csv
 
     ------------Fluid-------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
-    1            | Pressure               17   0.126543949E+06   0.319140525E-07
+    1            | Pressure               17   0.126543949E+06   0.319140173E-07
     1            | X-Velocity              5   0.895992091E+01   0.893906374E-06
     1            | Y-Velocity              5   0.558094343E+00   0.456142415E-07
     1            | Z-Velocity              5   0.558094343E+00   0.456142415E-07
-    Fluid step time (s):     0.1631590E+00
+    Fluid step time (s):     0.1616459E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | s                       2   0.321444743E-03   0.125835462E-07
-    Scalar step time:        0.8563877E-02
+    Scalar step time:        0.8258223E-02
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.1720011E+00
-    Total elapsed time (s):             0.1720044E+00
+    Total time for step        1 (s):   0.1701751E+00
+    Total elapsed time (s):             0.1701788E+00
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -4074,16 +4074,16 @@ Writing to optimization_data.csv
     2            | X-Velocity              4   0.169044561E+00   0.397089352E-06
     2            | Y-Velocity              3   0.197272163E-01   0.972356893E-06
     2            | Z-Velocity              3   0.197272163E-01   0.972356892E-06
-    Fluid step time (s):     0.1422813E+00
+    Fluid step time (s):     0.1415865E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | s                       2   0.233512021E-03   0.908074534E-08
-    Scalar step time:        0.8538678E-02
+    Scalar step time:        0.7922593E-02
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.1510782E+00
-    Total elapsed time (s):             0.3231074E+00
+    Total time for step        2 (s):   0.1497640E+00
+    Total elapsed time (s):             0.3199645E+00
   Normal end.
 
   -Adjoint Starting simulation--
@@ -4098,7 +4098,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | Adjoint Scalar          2   0.827991220E-02   0.314353711E-06
-    Scalar step time:        0.3979644E-02
+    Scalar step time:        0.3989577E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -4106,11 +4106,11 @@ Writing to optimization_data.csv
     1            | Adjoint Velocity V      3   0.159609112E-02   0.809155921E-07
     1            | Adjoint Velocity W      3   0.159610311E-02   0.809163833E-07
     1            | Adjoint Pressure        7   0.402840121E-04   0.437125813E-07
-    Fluid step time (s):     0.8974354E-01
+    Fluid step time (s):     0.8916683E-01
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.8997115E-01
-    Total elapsed time (s):             0.8997164E-01
+    Total time for step        1 (s):   0.8939375E-01
+    Total elapsed time (s):             0.8939411E-01
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -4119,7 +4119,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | Adjoint Scalar          2   0.135508732E-01   0.514461477E-06
-    Scalar step time:        0.3966589E-02
+    Scalar step time:        0.3940873E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -4127,11 +4127,11 @@ Writing to optimization_data.csv
     2            | Adjoint Velocity V      3   0.142468674E-02   0.673805903E-07
     2            | Adjoint Velocity W      3   0.142471150E-02   0.673836853E-07
     2            | Adjoint Pressure        7   0.402535708E-04   0.436440204E-07
-    Fluid step time (s):     0.8889807E-01
+    Fluid step time (s):     0.8803880E-01
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.8925788E-01
-    Total elapsed time (s):             0.1792488E+00
+    Total time for step        2 (s):   0.8841349E-01
+    Total elapsed time (s):             0.1778244E+00
   Normal end.
  Filter
  Iterations:   Start residual:     Final residual:
@@ -4162,20 +4162,20 @@ Writing to optimization_data.csv
 
     ------------Fluid-------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
-    1            | Pressure               17   0.126543971E+06   0.319140882E-07
+    1            | Pressure               17   0.126543971E+06   0.319140170E-07
     1            | X-Velocity              5   0.895992091E+01   0.893906374E-06
     1            | Y-Velocity              5   0.558094343E+00   0.456142415E-07
     1            | Z-Velocity              5   0.558094343E+00   0.456142415E-07
-    Fluid step time (s):     0.1621858E+00
+    Fluid step time (s):     0.1616478E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | s                       2   0.321444743E-03   0.125835462E-07
-    Scalar step time:        0.8365764E-02
+    Scalar step time:        0.8734536E-02
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.1708222E+00
-    Total elapsed time (s):             0.1708255E+00
+    Total time for step        1 (s):   0.1706553E+00
+    Total elapsed time (s):             0.1706588E+00
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -4189,16 +4189,16 @@ Writing to optimization_data.csv
     2            | X-Velocity              4   0.169044561E+00   0.397089352E-06
     2            | Y-Velocity              3   0.197272163E-01   0.972356893E-06
     2            | Z-Velocity              3   0.197272163E-01   0.972356892E-06
-    Fluid step time (s):     0.1419838E+00
+    Fluid step time (s):     0.1414348E+00
 
     ------------Scalar------------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | s                       2   0.233512021E-03   0.908074534E-08
-    Scalar step time:        0.8154154E-02
+    Scalar step time:        0.7938445E-02
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.1503870E+00
-    Total elapsed time (s):             0.3212367E+00
+    Total time for step        2 (s):   0.1496263E+00
+    Total elapsed time (s):             0.3203086E+00
   Normal end.
 
   -Adjoint Starting simulation--
@@ -4213,7 +4213,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     1            | Adjoint Scalar          2   0.827991220E-02   0.314353711E-06
-    Scalar step time:        0.3987408E-02
+    Scalar step time:        0.3995518E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -4221,11 +4221,11 @@ Writing to optimization_data.csv
     1            | Adjoint Velocity V      3   0.159609112E-02   0.809155921E-07
     1            | Adjoint Velocity W      3   0.159610311E-02   0.809163833E-07
     1            | Adjoint Pressure        7   0.402535682E-04   0.436439059E-07
-    Fluid step time (s):     0.8963795E-01
+    Fluid step time (s):     0.8918123E-01
 
     ---------Step summary---------
-    Total time for step        1 (s):   0.8986889E-01
-    Total elapsed time (s):             0.8986932E-01
+    Total time for step        1 (s):   0.8941397E-01
+    Total elapsed time (s):             0.8941436E-01
   ------------------------------------------------------------------------------
   Step =           2 t =   1.000000000000000E-03                     [ 100.00% ]
   ------------------------------------------------------------------------------
@@ -4234,7 +4234,7 @@ Writing to optimization_data.csv
     --------Adjoint scalar--------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
     2            | Adjoint Scalar          2   0.135508732E-01   0.514461477E-06
-    Scalar step time:        0.3933464E-02
+    Scalar step time:        0.3939259E-02
 
     --------Adjoint fluid---------
     KSP solver   | Field              Iters:   Start residual:   Final residual:
@@ -4242,11 +4242,11 @@ Writing to optimization_data.csv
     2            | Adjoint Velocity V      3   0.142468536E-02   0.673805248E-07
     2            | Adjoint Velocity W      3   0.142471015E-02   0.673836212E-07
     2            | Adjoint Pressure        7   0.402534858E-04   0.436437709E-07
-    Fluid step time (s):     0.8826843E-01
+    Fluid step time (s):     0.8806022E-01
 
     ---------Step summary---------
-    Total time for step        2 (s):   0.8863360E-01
-    Total elapsed time (s):             0.1785190E+00
+    Total time for step        2 (s):   0.8843516E-01
+    Total elapsed time (s):             0.1778647E+00
   Normal end.
  Filter
  Iterations:   Start residual:     Final residual:
@@ -4255,7 +4255,7 @@ Writing to optimization_data.csv
  *** WARNING: Optimizer stopped, design change below threshold of:     0.00.  ***
 
 Example concluded.
-Execution time: 00:01:35
+Execution time: 00:01:09
 ================================================================================
 Cleaning up the results.
 ================================================================================
@@ -4271,6 +4271,6 @@ Archiving nek5000 files.
 Clean-up concluded.
 ================================================================================
 JobID,JobName,State,ExitCode,NNodes,NTasks,ReqMem,Elapsed,MaxRSS,MaxRSSTask,MaxRSSNode,AveRSS,MaxVMSize,TRESUsageInMax
-22035607,mem_test/small,COMPLETED,0:0,1,,65536M,00:01:51,,,,,,
-22035607.batch,batch,COMPLETED,0:0,1,1,,00:01:51,21090304,0,nid005028,21090304,509878272,cpu=00:00:00,energy=153568,fs/disk=12542113,mem=21090304,pages=0,vmem=509878272
-22035607.0,neko,COMPLETED,0:0,1,1,,00:01:34,8130613248,0,nid005028,8130613248,26071429120,cpu=00:01:24,energy=131807,fs/disk=6891114,mem=8130613248,pages=3930,vmem=26071429120
+22095355,mem_test/small,COMPLETED,0:0,1,,65536M,00:01:25,,,,,,
+22095355.batch,batch,COMPLETED,0:0,1,1,,00:01:25,21102592,0,nid007899,21102592,509878272,cpu=00:00:00,energy=116729,fs/disk=12542044,mem=21102592,pages=0,vmem=509878272
+22095355.0,neko,COMPLETED,0:0,1,1,,00:01:09,8134623232,0,nid007899,8134623232,26071429120,cpu=00:00:56,energy=95763,fs/disk=6884472,mem=8134623232,pages=4064,vmem=26071429120
