@@ -2,7 +2,7 @@
 mkdir -p mem_test/fail mem_test/pass
 rm -fr mem_test/fail/* mem_test/pass/*
 
-FAILED_FILES=$(find logs/mem_test -name output.log)
+FAILED_FILES=$(find logs/ -name output.log)
 for f in $FAILED_FILES; do
     JOBID=$(grep -E "Job ID:" $f | awk {'printf $3'})
     [ -z "$JOBID" ] && continue
@@ -15,7 +15,7 @@ for f in $FAILED_FILES; do
     cp -f $f $(dirname $f)/error.log -t mem_test/fail/$(basename $(dirname $f))
 done
 
-PASS_FILES="$(find results/mem_test -name output.log)"
+PASS_FILES="$(find results/ -name output.log)"
 for f in $PASS_FILES; do
     JOBID=$(grep -E "Job ID:" $f | awk {'printf $3'})
     [ -z "$JOBID" ] && continue
