@@ -14,16 +14,52 @@
 
 ## Status at a glance
 
-**Bottom line, for a reader arriving cold.** Across the whole host-side range
-now searched — April 2026 to September 2026, including the ALE merge
-specifically alleged to be the cause — **nothing increased per-element
-memory cost; it fell by about 4.8%.** Combined with the `ReqMem` finding
-below, this investigation's conclusion is that **the OOMs are an allocation
-change, not a code change**: the cluster now grants these jobs 5.25 GiB/rank
-against 60 GiB/rank in May, and it is the budget that shrank, not the code's
-need that grew. The CPU-vs-CUDA device control has since completed too, and
-agrees — see "Closed, for everything this container can test", below, which
-also states precisely what remains open.
+> **This investigation is OPEN.** It closes on one criterion: a full-scale
+> `steady_200`/`unsteady_200` (or the `mem_test` `full` case) documented
+> completing on LUMI, with its `sacct` row (`ReqMem`, `MaxRSS`, `State`) and
+> per-rank peak recorded in this document beside the May benchmark's own
+> figures. That has not happened yet. See "The investigation's closing
+> criterion", immediately below, before reading anything else here as a
+> settled conclusion.
+
+**Bottom line, for a reader arriving cold.** What is established by
+measurement, across the whole host-side range now searched — April 2026 to
+September 2026, including the ALE merge specifically alleged to be the
+cause: **nothing increased per-element memory cost; it fell by about
+4.8%**, across a four-point series (pre-ALE, post-ALE, the May anchor, the
+September top endpoint) that is monotonically decreasing throughout. The
+CPU-vs-CUDA device control agrees: both backends show the same endpoint
+lower than the anchor, by a similar margin (CPU **-87.8 MB**, CUDA
+**-59.3 MB**). Separately, `sacct` shows the cluster now grants these jobs
+**5.25 GiB/rank** against **60 GiB/rank** in May — an 11.4x drop, from
+`#SBATCH` blocks that are textually identical between the two jobs.
+
+Put together, these measurements support a **leading hypothesis**, not yet a
+demonstrated fact: that **the OOMs are an allocation change, not a code
+change** — that it is the granted budget that shrank, not the code's memory
+need that grew. That inference is strong: every measurement taken so far is
+consistent with it and none contradicts it. But it is not confirmed, because
+**nothing in this investigation has yet shown a full-scale LUMI run actually
+succeeding since the failures began.** Until that is observed and recorded,
+treat "allocation change, not code change" as the working explanation under
+test, not as this investigation's conclusion. See "The investigation's
+closing criterion", directly below, and "Exhausted, for everything this
+container can test", further down, for what has and has not actually been
+established.
+
+**The investigation's closing criterion, stated explicitly.** This document
+closes only when — and not before — a full-scale run (`steady_200`,
+`unsteady_200`, or the `mem_test` `full` case) is documented completing on
+LUMI, with its `sacct` row (`ReqMem`, `MaxRSS`, `State`) and its per-rank
+peak recorded in this document alongside the May benchmark's own figures, so
+the two can be compared directly. The captured logs under `mem_test/pass/`
+and `mem_test/fail/` are the established place to add that evidence — the
+same pattern already used for every other run recorded here. Nothing below
+substitutes for this, however consistent the local measurements are with the
+hypothesis: **if the confirmation run still fails, that refutes the leading
+hypothesis above and reopens the search for a code-side cause** — see "The
+actionable fix" under "The `ReqMem` gap, explained", below, which is the
+immediate next action.
 
 **Established.** The excess consumption is Neko-TOP's, not Neko's: the same
 case passes against pure Neko at every size. The failing runs die building the
@@ -78,17 +114,21 @@ case. **The headline finding is no longer "which commit increased memory" but
 log lines, and what this does and does not establish about *why* the default
 changed: see "The `ReqMem` gap, explained" under Bisecting, below.
 
-**Closed, for everything this container can test.** The CPU-vs-CUDA device
-control is now complete too, and agrees with the CPU result: CUDA anchor (2
-ranks) medians **2132.8 MB**, CUDA top endpoint medians **2073.5 MB**, a delta
-of **-59.3 MB**, against the CPU delta of **-87.8 MB** — both negative and of
+**Exhausted, for everything this container can test — not the same as this
+investigation being closed.** The CPU-vs-CUDA device control is now complete
+too, and agrees with the CPU result: CUDA anchor (2 ranks) medians
+**2132.8 MB**, CUDA top endpoint medians **2073.5 MB**, a delta of
+**-59.3 MB**, against the CPU delta of **-87.8 MB** — both negative and of
 similar order, so CUDA shows no growth that the CPU measurement was hiding.
 Device-side memory growth is ruled out for the shared and CUDA-specific code
 paths measured here; the anchor runs that previously failed to complete turned
 out to be a mixed-cubin build defect, not a memory finding — see "The
 CPU-vs-CUDA control, completed" under Bisecting, below, for the full result
-and the fix. That closes every avenue this container can actually test. What
-is left is narrower than before, and is genuinely out of reach here:
+and the fix. That exhausts every avenue this container can actually test — it
+shows the leading hypothesis is contradicted by nothing reachable here, which
+is not the same as it being confirmed. Confirmation needs the cluster run in
+"The investigation's closing criterion", above. What is left is narrower than
+before, and is genuinely out of reach here:
 
 - The **HIP-specific path** — principally Neko `10689388af1` "Zero-copy
   unified memory for MI300A" (#2666) — is confirmed unreachable in any CUDA
@@ -98,11 +138,13 @@ is left is narrower than before, and is genuinely out of reach here:
   HAVE_CUDA` branch. This container has no ROCm toolchain. Testable only on
   the production cluster.
 
-- The **`--mem=0` confirmation run** on LUMI, which would verify the
-  investigation's actual conclusion — that the OOMs follow from a budget
-  reduction of 60 to 5.25 GiB/rank, not a code change — rather than test
-  another code path. See "The actionable fix" under "The `ReqMem` gap,
-  explained", above.
+- The **`--mem=0` confirmation run** on LUMI — the one action that actually
+  closes this investigation, not merely this container's part of it. It
+  tests the leading hypothesis directly: that the OOMs follow from a budget
+  reduction of 60 to 5.25 GiB/rank, not a code change. A pass confirms it; a
+  failure refutes it and reopens the search. See "The actionable fix" under
+  "The `ReqMem` gap, explained", above, and "The investigation's closing
+  criterion" under "Status at a glance", above.
 
 - A **cluster run with the probes**, for the per-rank component budget at real
   problem sizes, and recovery of the historical `single_node_capacity.csv`
@@ -423,11 +465,15 @@ F2003 interface, but misleading.
    needed.
 7. Confirm against full-size `steady_200` and `unsteady_200`.
 8. **Cluster action, independent of the bisect and not verifiable from this
-   container:** add `#SBATCH --mem=0` (the whole node, explicitly) to
+   container — and the action that actually closes this investigation:** add
+   `#SBATCH --mem=0` (the whole node, explicitly) to
    `scripts/jobscripts/LUMI-G/mem_test/full.sh` and its siblings
-   (`default.sh`, `small.sh`), and re-run the ladder on LUMI. If the OOMs
-   disappear, the `ReqMem`-gap explanation in "The `ReqMem` gap, explained"
-   is confirmed and that question is closed.
+   (`default.sh`, `small.sh`), and re-run the ladder on LUMI. Record the
+   outcome either way: if the OOMs disappear, the `ReqMem`-gap explanation in
+   "The `ReqMem` gap, explained" is confirmed; if they do not, that refutes
+   the leading hypothesis and reopens the search for a code-side cause. See
+   "The investigation's closing criterion" under "Status at a glance" for
+   exactly what recording the outcome requires.
 
 ## Verification
 
@@ -785,7 +831,8 @@ no further than that:
 **Superseded.** The device path was the one open question this specific
 (CPU-only) result could not answer on its own. It has since been answered for
 CUDA — see "The CPU-vs-CUDA control, completed", below — leaving only the
-HIP-specific path open; see "Closed, for everything this container can
+HIP-specific path open (and the cluster confirmation the investigation
+itself still needs); see "Exhausted, for everything this container can
 test" under "Status at a glance", above.
 
 ### The `ReqMem` gap, explained
@@ -891,14 +938,21 @@ than any of those three: memory was never requested explicitly in either
 case, so whichever default applied, it applied silently, and the fix does
 not depend on knowing which of the three it was.
 
-**The actionable fix.** Add an explicit memory request —
-`#SBATCH --mem=0`, which requests the whole node under Slurm — to
-`scripts/jobscripts/LUMI-G/mem_test/full.sh` and its siblings
-(`default.sh`, `small.sh`), and re-run the ladder on LUMI. If the OOMs
-disappear, the `ReqMem`-gap explanation is confirmed and this question is
-closed. **This is a cluster action and is explicitly NOT VERIFIED from this
-container** — it needs a real LUMI submission, which has not been done as
-part of this change.
+**The actionable fix, and the investigation's immediate next action.** Add an
+explicit memory request — `#SBATCH --mem=0`, which requests the whole node
+under Slurm — to `scripts/jobscripts/LUMI-G/mem_test/full.sh` and its
+siblings (`default.sh`, `small.sh`), re-run the ladder on LUMI, and record
+the outcome here either way. If the OOMs disappear, the `ReqMem`-gap
+explanation is confirmed for this question — though closing *this
+investigation* additionally needs the full-scale `steady_200`/`unsteady_200`
+confirmation described in "The investigation's closing criterion" under
+"Status at a glance", above. **If the OOMs do not disappear, that is a
+result, not a disappointment: it refutes the leading hypothesis this
+document currently favours and reopens the search for a code-side cause.**
+Say so plainly if it happens, rather than treating a still-failing run as an
+inconclusive retry. **This is a cluster action and is explicitly NOT VERIFIED
+from this container** — it needs a real LUMI submission, which has not been
+done as part of this change.
 
 ### The ALE hypothesis, tested and refuted
 
@@ -961,8 +1015,10 @@ hypothesis and extends the "nothing increased it" host-side finding back to
 above: one 4,096-element case, 2 ranks, CPU backend, host memory only. It
 says nothing on its own about device-side cost — that is answered
 separately, and CUDA agrees; see "The CPU-vs-CUDA control, completed",
-below, and "Closed, for everything this container can test" under "Status
-at a glance", above, for what remains open (the HIP-specific path).
+below, and "Exhausted, for everything this container can test" under
+"Status at a glance", above, for what remains open (the HIP-specific path,
+and the cluster confirmation this investigation still needs before it can
+close).
 
 ### The CPU-vs-CUDA control, completed
 
@@ -1008,8 +1064,8 @@ direction and rough size of the change.
 This is still the same case and rank count as the rest of the bisect, now on
 CUDA rather than CPU. The AMD-specific HIP path — principally Neko
 `10689388af1` "Zero-copy unified memory for MI300A" — is untouched by this
-result; see "Closed, for everything this container can test" under "Status at
-a glance", above.
+result; see "Exhausted, for everything this container can test" under
+"Status at a glance", above.
 
 ## Reference measurements
 
@@ -1400,23 +1456,45 @@ Newest last. Keep entries to a line or two.
   value. Device-side memory growth is ruled out for the shared and
   CUDA-specific code paths measured; this corroborates the CPU bisect result
   rather than merely failing to challenge it. Full detail in "The CPU-vs-CUDA
-  control, completed", above. This closes every avenue this container can
-  test; see "Status at a glance", above, for what remains (the HIP-specific
-  path, plus the cluster actions already queued).
-- **_next_** — (1) The HIP-specific path — principally Neko `10689388af1`
-  "Zero-copy unified memory for MI300A" — is confirmed unreachable in any
-  CUDA build by source inspection (new files are `.hip`, the `Makefile.am`
-  hunks sit inside `if ENABLE_HIP`, `device.F90` changes are inside `#ifdef
-  HAVE_HIP` with nothing in the `#elif HAVE_CUDA` branch), and this container
-  has no ROCm toolchain, so it is testable only on the production cluster.
-  (2) Add `#SBATCH --mem=0` to the `mem_test` jobscripts and re-run on LUMI
-  to confirm the OOMs disappear now that the `ReqMem` gap is understood — a
-  cluster action, not verifiable from this container. (3) Run the ladder on
-  LUMI with the probes for the per-rank component budget. (4) Recover the May
-  benchmark results from LUMI for a historical baseline, since
-  `single_node_capacity.csv` swept to 16,384 elements per rank at
-  `n_memory=100`, double what fails now. (5) Independently of the regression
-  question, now answered negatively across the whole host-side and CUDA range
-  searched: the unconditional adjoint Gauss over-integration stack (about a
-  third of loadup on a `dealias: false` case) remains worth gating or
-  trimming on its own merits.
+  control, completed", above. This exhausts every avenue this container can
+  test — it does not close the investigation, which still needs a documented
+  full-scale LUMI success; see "Status at a glance", above, for what remains
+  (the HIP-specific path, plus the cluster actions already queued, foremost
+  the `--mem=0` confirmation run).
+- **2026-09-16** — Corrected this document's own status framing; no
+  measurement changed. The bottom line and the section formerly headed
+  "Closed, for everything this container can test" (now "Exhausted, for
+  everything this container can test") stated the allocation-change
+  explanation as this investigation's settled conclusion. It is a leading
+  hypothesis with strong local supporting evidence, not a demonstrated fact:
+  no full-scale LUMI run has yet been observed succeeding since the failures
+  began. Added an explicit closing criterion — the investigation closes only
+  when a full-scale run is documented completing on LUMI, its `sacct` row
+  and per-rank peak recorded here beside the May benchmark's own figures, in
+  the already-established `mem_test/pass/`/`mem_test/fail/` logs — and made
+  explicit throughout that a still-failing confirmation run would refute the
+  hypothesis and reopen the search, not merely disappoint. Reordered
+  `_next_`, below, so the LUMI confirmation run is item one.
+- **_next_** — **(1) The investigation's closing action: add
+  `#SBATCH --mem=0` to the `mem_test` jobscripts (`full.sh` and its
+  siblings), re-run the full-scale ladder on LUMI, and record the outcome in
+  this document — the `sacct` row (`ReqMem`, `MaxRSS`, `State`) and per-rank
+  peak, set beside the May benchmark's own figures, in
+  "The investigation's closing criterion" under "Status at a glance".
+  Completing this is the only thing that closes the investigation; if the
+  OOMs persist, that refutes the allocation-change hypothesis and reopens the
+  search for a code-side cause, which is itself a result worth recording in
+  full, not a null outcome.** (2) The HIP-specific path — principally Neko
+  `10689388af1` "Zero-copy unified memory for MI300A" — is confirmed
+  unreachable in any CUDA build by source inspection (new files are `.hip`,
+  the `Makefile.am` hunks sit inside `if ENABLE_HIP`, `device.F90` changes are
+  inside `#ifdef HAVE_HIP` with nothing in the `#elif HAVE_CUDA` branch), and
+  this container has no ROCm toolchain, so it is testable only on the
+  production cluster. (3) Run the ladder on LUMI with the probes for the
+  per-rank component budget. (4) Recover the May benchmark results from LUMI
+  for a historical baseline, since `single_node_capacity.csv` swept to
+  16,384 elements per rank at `n_memory=100`, double what fails now.
+  (5) Independently of the regression question, now answered negatively
+  across the whole host-side and CUDA range searched: the unconditional
+  adjoint Gauss over-integration stack (about a third of loadup on a
+  `dealias: false` case) remains worth gating or trimming on its own merits.
