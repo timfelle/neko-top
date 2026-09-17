@@ -176,6 +176,11 @@ contains
     this%c_Xh_GLL => simulation%neko_case%fluid%c_Xh
     this%Xh_GLL => this%c_Xh_GLL%Xh
 
+    ! The over-integration stack is only needed if this objective dealiases
+    if (dealias) then
+       call simulation%adjoint_case%fluid_adj%require_gauss_stack()
+    end if
+
     ! GL
     this%c_Xh_GL => simulation%adjoint_case%fluid_adj%c_Xh_GL
     this%Xh_GL => this%c_Xh_GL%Xh
@@ -200,8 +205,12 @@ contains
     if (associated(this%adjoint_v)) nullify(this%adjoint_v)
     if (associated(this%adjoint_w)) nullify(this%adjoint_w)
 
+    nullify(this%c_Xh_GLL)
+    nullify(this%Xh_GLL)
+    nullify(this%c_Xh_GL)
+    nullify(this%Xh_GL)
+    nullify(this%GLL_to_GL)
     nullify(this%scratch_GL)
-
 
   end subroutine augmented_lagrangian_free
 

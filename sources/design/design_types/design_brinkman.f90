@@ -419,6 +419,12 @@ contains
     ! compute the average mass matrix
     this%avg_B = this%coef%volume / real(simulation%fluid%glb_unique_points)
 
+    ! The over-integration stack is only needed if the Brinkman terms
+    ! dealias
+    if (dealias) then
+       call simulation%adjoint_fluid%require_gauss_stack()
+    end if
+
     ! init the simple brinkman term for the forward problem
     call forward_brinkman%init_from_components( &
          simulation%fluid%f_x, &

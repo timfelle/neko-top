@@ -214,6 +214,11 @@ contains
     this%Xh_GLL => simulation%neko_case%fluid%c_Xh%Xh
     this%gdim = this%c_Xh_GLL%msh%gdim
 
+    ! The over-integration stack is only needed if this objective dealiases
+    if (dealias_sensitivity .or. dealias_forcing) then
+       call simulation%adjoint_case%fluid_adj%require_gauss_stack()
+    end if
+
     ! GL
     this%c_Xh_GL => simulation%adjoint_case%fluid_adj%c_Xh_GL
     this%Xh_GL => this%c_Xh_GL%Xh
