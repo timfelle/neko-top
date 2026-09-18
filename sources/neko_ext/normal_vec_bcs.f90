@@ -42,7 +42,7 @@ module normal_vec_bcs
   use json_module, only : json_file
   use, intrinsic :: iso_c_binding, only : c_ptr, c_null_ptr, c_associated
   use htable, only : htable_i4_t
-  use device, only : device_map, device_memcpy, device_free, &
+  use device, only : device_map, device_memcpy, device_unmap, &
        HOST_TO_DEVICE
   use time_state, only : time_state_t
   implicit none
@@ -234,10 +234,10 @@ contains
 
     call this%free_base()
     if (allocated(this%unique_mask)) then
+       if (c_associated(this%unique_mask_d)) then
+          call device_unmap(this%unique_mask, this%unique_mask_d)
+       end if
        deallocate(this%unique_mask)
-    end if
-    if (c_associated(this%unique_mask_d)) then
-       call device_free(this%unique_mask_d)
     end if
 
     call this%nx%free()
@@ -267,16 +267,16 @@ contains
     ! we also ensure that we only visit each point once
     ! and create a new mask with only unique points (this%unique_mask).
     if (allocated(this%unique_mask)) then
+       if (c_associated(this%unique_mask_d)) then
+          call device_unmap(this%unique_mask, this%unique_mask_d)
+       end if
        deallocate(this%unique_mask)
-    end if
-    if (c_associated(this%unique_mask_d)) then
-       call device_free(this%unique_mask_d)
     end if
 
     call unique_point_idx%init(this%facet_node_msk(0), htable_data)
     j = 0
     do i = 1, this%facet_node_msk(0)
-       if (unique_point_idx%get(this%facet_node_msk(i),htable_data) .ne. 0) then
+       if (unique_point_idx%get(this%facet_node_msk(i), htable_data) .ne. 0) then
           j = j + 1
           htable_data = j
           call unique_point_idx%set(this%facet_node_msk(i), j)
@@ -304,8 +304,8 @@ contains
        this%unique_mask(htable_data) = this%facet_node_msk(i)
        facet = this%facet(i)
 
-       idx = nonlinear_index(this%facet_node_msk(i), this%Xh%lx, &
-            this%Xh%lx, this%Xh%lx)
+       idx = nonlinear_index(this%facet_node_msk(i), this%Xh%lx, this%Xh%lx, &
+            this%Xh%lx)
        normal = this%coef%get_normal(idx(1), idx(2), idx(3), idx(4), facet)
        area = this%coef%get_area(idx(1), idx(2), idx(3), idx(4), facet)
        normal = normal * area !Scale normal by area

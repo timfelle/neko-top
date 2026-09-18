@@ -249,8 +249,8 @@ module adjoint_fluid_pnpn
        class(bc_t), pointer, intent(inout) :: object
        type(adjoint_fluid_pnpn_t), intent(in) :: scheme
        type(json_file), intent(inout) :: json
-       type(coef_t), intent(in) :: coef
-       type(user_t), intent(in) :: user
+       type(coef_t), target, intent(in) :: coef
+       type(user_t), target, intent(in) :: user
      end subroutine pressure_bc_factory
   end interface pressure_bc_factory
 
@@ -266,8 +266,8 @@ module adjoint_fluid_pnpn
        class(bc_t), pointer, intent(inout) :: object
        type(adjoint_fluid_pnpn_t), intent(in) :: scheme
        type(json_file), intent(inout) :: json
-       type(coef_t), intent(in) :: coef
-       type(user_t), intent(in) :: user
+       type(coef_t), target, intent(in) :: coef
+       type(user_t), target, intent(in) :: user
      end subroutine velocity_bc_factory
   end interface velocity_bc_factory
 
@@ -592,7 +592,6 @@ contains
     call this%bc_prs_surface%free()
     call this%bc_sym_surface%free()
     call this%bc_curl_curl%free()
-
     if (allocated(this%bcs_vel_projector)) then
        call this%bcs_vel_projector%free()
        deallocate(this%bcs_vel_projector)
@@ -825,8 +824,7 @@ contains
       call device_event_sync(event)
 
       ! Set residual to zero at strong velocity boundaries.
-      call this%bcs_vel_projector%apply(u_res%x, v_res%x, w_res%x, &
-           dm_Xh%size())
+      call this%bcs_vel_projector%apply(u_res%x, v_res%x, w_res%x, n)
 
       call profiler_end_region('Adjoint_velocity_residual')
 
@@ -982,7 +980,7 @@ contains
   !! @param params The json file containing the parameters.
   subroutine adjoint_fluid_pnpn_setup_bcs(this, user, params)
     use mpi_f08, only: MPI_IN_PLACE
-    class(adjoint_fluid_pnpn_t), intent(inout) :: this
+    class(adjoint_fluid_pnpn_t), target, intent(inout) :: this
     type(user_t), target, intent(in) :: user
     type(json_file), intent(inout) :: params
     integer :: i, n_bcs, j, zone_size, global_zone_size, ierr
@@ -1076,9 +1074,7 @@ contains
                 call this%bcs_vel_projector%mark(bc_i%bc_x, component = 'x')
                 call this%bcs_vel_projector%mark(bc_i%bc_y, component = 'y')
                 call this%bcs_vel_projector%mark(bc_i%bc_z, component = 'z')
-
                 call this%bcs_vel%append(bc_i)
-
                 call this%bc_sym_surface%mark_facets(bc_i%marked_facet)
              type is (non_normal_aligned_t)
                 ! The masks are marked as for symmetry, but the bc itself is
@@ -1103,12 +1099,11 @@ contains
                 ! Mark the Dirichlet dofs on every velocity component, and
                 ! additionally mark the special PnPn pressure bc.
                 if (bc_i%bc_type .eq. BC_DIRICHLET) then
+                   call this%bc_prs_surface%mark_labeled_zones( &
+                        bc_i%zone_indices)
                    call this%bcs_vel_projector%mark(bc_i, component = 'x')
                    call this%bcs_vel_projector%mark(bc_i, component = 'y')
                    call this%bcs_vel_projector%mark(bc_i, component = 'z')
-
-                   call this%bc_prs_surface%mark_labeled_zones( &
-                        bc_i%zone_indices)
                 end if
 
                 ! add all BCs to curl curl
@@ -1145,7 +1140,7 @@ contains
           if (associated(bc_i)) then
              call this%bcs_prs%append(bc_i)
 
-             ! Mark strong bcs in the dummy dp bc to force zero change.
+             ! Mark strong pressure bcs in the projector to force zero change.
              if (bc_i%bc_type .eq. BC_DIRICHLET) then
                 call this%bcs_prs_projector%mark(bc_i)
              end if
@@ -1161,12 +1156,14 @@ contains
           end if
        end do
 
+       call this%bcs_vel%init()
+       call this%bcs_prs%init()
+
     end if
 
     call this%bc_prs_surface%finalize()
     call this%bc_sym_surface%finalize()
     call this%bc_curl_curl%finalize()
-
     call this%bcs_vel_projector%finalize(rebuild_mask = .true.)
 
     ! If we have no strong pressure bcs, we will demean the pressure
