@@ -248,7 +248,7 @@ contains
           ! Sum contributions from adjoining elements at shared dofs before
           ! normalizing -- coef%B (unlike coef%Binv) is per-element/local
           ! and never gather-scattered, so dividing by it directly here
-          ! (as this branch previously did) silently drops the neighbouring
+          ! (the obvious-looking shortcut) silently drops the neighbouring
           ! element's contribution at every inter-element dof. Matches the
           ! map -> gs_h%op(ADD) -> col2(Binv) pattern already used for the
           ! (non-adjoint) dealiased scalar convection term, see
@@ -275,7 +275,7 @@ contains
           ! Sum contributions from adjoining elements at shared dofs before
           ! normalizing -- coef%B (unlike coef%Binv) is per-element/local
           ! and never gather-scattered, so dividing by it directly here
-          ! (as this branch previously did) silently drops the neighbouring
+          ! (the obvious-looking shortcut) silently drops the neighbouring
           ! element's contribution at every inter-element dof. Matches the
           ! map -> gs_h%op(ADD) -> col2(Binv) pattern already used for the
           ! (non-adjoint) dealiased scalar convection term, see
@@ -302,7 +302,7 @@ contains
           ! Sum contributions from adjoining elements at shared dofs before
           ! normalizing -- coef%B (unlike coef%Binv) is per-element/local
           ! and never gather-scattered, so dividing by it directly here
-          ! (as this branch previously did) silently drops the neighbouring
+          ! (the obvious-looking shortcut) silently drops the neighbouring
           ! element's contribution at every inter-element dof. Matches the
           ! map -> gs_h%op(ADD) -> col2(Binv) pattern already used for the
           ! (non-adjoint) dealiased scalar convection term, see
