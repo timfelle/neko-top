@@ -12,7 +12,7 @@
         "numerics": {
             "time_order": 1,
             "polynomial_order": 5,
-            "dealias": true
+            "dealias": false
         },
         "fluid": {
             "scheme": "pnpn",
@@ -92,7 +92,7 @@
     "optimization": {
         "design": {
             "type": "brinkman",
-            "dealias": true,
+            "dealias": false,
             "mapping": [
                 {
                     "type": "PDE_filter",
@@ -116,7 +116,7 @@
             }
         },
         "augmented_lagrangian": {
-            "dealias_sensitivity": true
+            "dealias_sensitivity": false
         },
         "solver": {
             "type": "mma",
@@ -132,10 +132,8 @@
         },
         "objectives": [
             {
-                "type": "brinkman_dissipation",
-                "weight": 1.0,
-                "dealias_sensitivity": true,
-                "dealias_forcing": true
+                "type": "viscous_dissipation",
+                "weight": 1.0
             }
         ]
     }
