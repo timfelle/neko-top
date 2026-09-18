@@ -46,6 +46,7 @@ module augmented_lagrangian_objective
   use design, only: design_t
   use json_module, only: json_file
   use json_utils, only: json_get_or_default
+  use adjoint_dealias_default, only: dealias_default
   use interpolation, only: interpolator_t
   use space, only: space_t, GL
   use coefs, only: coef_t
@@ -132,12 +133,14 @@ contains
     character(len=:), allocatable :: name
     character(len=:), allocatable :: mask_name
     real(kind=rp) :: weight
-    logical :: dealias
+    logical :: dealias, dealias_fallback
 
     call json_get_or_default(json, "weight", weight, 1.0_rp)
     call json_get_or_default(json, "mask_name", mask_name, "")
     call json_get_or_default(json, "name", name, "Augmented Lagrangian")
-    call json_get_or_default(json, "dealias", dealias, .true.)
+    dealias_fallback = dealias_default(simulation%neko_case%params)
+    call json_get_or_default(json, "dealias_sensitivity", dealias, &
+         dealias_fallback)
 
     call this%init_from_attributes(design, simulation, weight, name, &
          mask_name, dealias)
