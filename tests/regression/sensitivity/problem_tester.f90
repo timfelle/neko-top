@@ -24,7 +24,7 @@ program problem_tester
   use sensitivity, only: compute_sensitivity, &
        compute_sensitivity_directional, fd_read_perturbations, &
        fd_read_central_difference, fd_read_mode, fd_read_probe_index, &
-       fd_resolve_probe_index
+       fd_resolve_probe_index, fd_read_direction, fd_read_random_seed
   use user, only: user_setup
   implicit none
 
@@ -54,9 +54,17 @@ program problem_tester
   real(kind=rp) :: tolerance
   real(kind=rp), allocatable :: perturbations(:)
   logical :: use_central
-  !> True to perturb the whole design along the normalised sensitivity
-  !! direction (the Taylor test) rather than probing a single dof.
+  !> True to perturb the whole design along a normalised direction (the Taylor
+  !! test) rather than probing a single dof.
   logical :: fd_directional
+  !> True to take that direction from a seeded pseudo-random field rather than
+  !! from the gradient. The gradient direction s = g/||g|| tests only the
+  !! contraction <g,s> = ||g||, so gradient error orthogonal to g passes it
+  !! exactly; a random direction has no such systematic blind spot, and a
+  !! different one of its own. See `fd_read_direction`.
+  logical :: fd_random_direction
+  !> Seed for that random direction, reported by the run so it reproduces.
+  integer(kind=i8) :: fd_seed
   !> A fixed global design index to probe, from NEKO_TOP_FD_PROBE_INDEX. The
   !! default probe is the argmax of |sensitivity|, which *moves* whenever the
   !! sensitivity field moves, so two runs of the same case can otherwise
@@ -109,6 +117,8 @@ program problem_tester
   call fd_read_perturbations(parameters, perturbations)
   call fd_read_central_difference(parameters, use_central)
   call fd_read_mode(parameters, fd_directional)
+  call fd_read_direction(parameters, fd_random_direction)
+  call fd_read_random_seed(parameters, fd_seed)
   call fd_read_probe_index(probe_dof, probe_dof_set)
 
   ! -------------------------------------------------------------------------- !
@@ -200,6 +210,19 @@ program problem_tester
   call get_environment_variable('NEKO_TOP_DBG_PROBE', probe_env, &
        status = probe_stat)
   probe_mode = (probe_stat .eq. 0)
+
+  ! The direction only exists in directional mode -- the single-dof probe's
+  ! direction is the one-hot vector at the probed dof. Say so rather than
+  ! accept a request that silently does nothing.
+  if (fd_random_direction .and. .not. fd_directional) then
+     if (pe_rank .eq. 0) then
+        write(*, '(A)') ' FD probe: WARNING -- a random direction was ' // &
+             'requested but the mode is dof, which perturbs'
+        write(*, '(A)') ' FD probe: WARNING -- one degree of freedom along ' &
+             // 'a one-hot direction. Set NEKO_TOP_FD_MODE=directional'
+        write(*, '(A)') ' FD probe: WARNING -- to use it.'
+     end if
+  end if
 
   ! -------------------------------------------------------------------------- !
   ! Override the argmax probe with an explicitly named design dof, if one was
@@ -307,12 +330,15 @@ program problem_tester
 
   if (.not. probe_mode) then
      if (fd_directional) then
-        ! Perturb the whole design along s = g/||g|| and compare against
-        ! <g, s>. Validates the entire gradient field in one sweep rather
-        ! than one argmax-selected component of it.
+        ! Perturb the whole design along a normalised direction s and compare
+        ! against <g, s>. That is one scalar contraction of the gradient, not
+        ! the whole field: with the default s = g/||g|| it is the contraction
+        ! along g itself, which any gradient error orthogonal to g passes
+        ! exactly. NEKO_TOP_FD_DIRECTION=random picks a seeded pseudo-random s
+        ! instead, whose blind spot is a different one -- run both.
         call compute_sensitivity_directional(prob, sim, des, sensitivities, &
              perturbations, tolerance, trim(parameter_file), is_objective, &
-             sim%fluid%gs_Xh, use_central)
+             sim%fluid%gs_Xh, use_central, fd_random_direction, fd_seed)
      else
         call compute_sensitivity(prob, sim, des, sensitivities, &
              i_max, perturbations, tolerance, trim(parameter_file), &

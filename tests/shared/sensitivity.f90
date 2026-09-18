@@ -38,15 +38,39 @@
 !!    largest-|sensitivity| dof -- *moves* whenever the sensitivity field
 !!    moves, so two runs of the same case can otherwise silently differentiate
 !!    with respect to two different design variables;
-!!  * `directional` perturbs the *whole* design along the normalised
-!!    sensitivity direction and compares against the projection of the
-!!    gradient onto it. That validates the entire gradient field at once rather
-!!    than one component of it, and raises the finite-difference signal by
-!!    roughly \f$\|g\|/|g_i|\f$, which buys back round-off headroom.
+!!  * `directional` perturbs the *whole* design along a normalised direction
+!!    \f$s\f$ and compares against the projection \f$\langle g, s\rangle\f$ of
+!!    the gradient onto it. It raises the finite-difference signal by roughly
+!!    \f$\|g\|/|g_i|\f$ relative to a single dof, which buys back round-off
+!!    headroom.
 !!
 !! Both go through one perturbation code path (`fd_run_sweep` and
 !! `evaluate_perturbed`, which take a direction vector); the single-dof probe
 !! is the one-hot special case of it, so the two cannot drift apart.
+!!
+!! **What a directional sweep does and does not cover.** A directional sweep
+!! tests exactly one scalar contraction of the gradient field, \f$\langle
+!! g, s\rangle\f$, so which \f$s\f$ is used decides what it can see. With
+!! \f$s = g/\|g\|\f$ -- the default, `fd_read_direction` returning `gradient`
+!! -- the direction is built from the gradient being tested, so writing the
+!! computed gradient as \f$g = G + \delta\f$ for a true \f$G\f$ gives
+!! projection \f$= \|g\|\f$, finite difference \f$\approx \langle G, s\rangle
+!! = \|g\| - \langle \delta, s\rangle\f$ and hence relative error
+!! \f$-\langle \delta, g\rangle/\|g\|^2\f$. **Any gradient error orthogonal to
+!! \f$g\f$ therefore passes that sweep exactly.** It is sound for a sign error
+!! (a flip reports \f$-2\f$) and for a global scale error (a factor two
+!! reports \f$-0.5\f$), and it is not degenerate in the other direction --
+!! \f$\langle g,s\rangle = \|g\|\f$ is asserted, not merely printed -- but it
+!! is one contraction, along \f$g\f$ itself, and not "the whole gradient
+!! field".
+!!
+!! `fd_read_direction` returning `random` instead builds \f$s\f$ from a seeded
+!! pseudo-random field, assembled and normalised exactly as the gradient
+!! direction is. Its blind spot is a different one: it is a single random
+!! contraction, so it misses an error that happens to be orthogonal to *that*
+!! draw, but it has no systematic relationship to \f$g\f$ and so does cover
+!! error orthogonal to \f$g\f$. The two are complementary and a thorough check
+!! runs both.
 !!
 !! **Inner product.** The design-space inner product used for both the
 !! normalisation and the projection is the Euclidean one on the *assembled
@@ -83,7 +107,9 @@ module sensitivity
   implicit none
 
   private :: count_tokens, fd_lowercase, fd_sync_to_host, fd_project, &
-       fd_step_headroom, fd_report_probe, fd_run_sweep, fd_global_offset
+       fd_step_headroom, fd_report_probe, fd_run_sweep, fd_global_offset, &
+       evaluate_perturbed, report_sweep, fd_random_next, &
+       fd_require_host_backend
 
   !> Status returned by `get_environment_variable` when the value did not fit
   !! in the buffer supplied. Silently accepting a truncated list would run a
@@ -107,6 +133,27 @@ module sensitivity
   !! larger than any perturbation a sweep could sensibly request, so `min`
   !! against it is a no-op.
   real(kind=rp), parameter :: fd_no_limit = huge(1.0_rp)
+
+  !> Park-Miller "minimal standard" multiplicative congruential generator,
+  !! \f$x \leftarrow 16807\,x \bmod (2^{31}-1)\f$, used to build the `random`
+  !! perturbation direction.
+  !!
+  !! Written out rather than calling `random_number` because the intrinsic
+  !! generator is compiler- and version-dependent: the same seed would give a
+  !! different direction under a different compiler, and a run that prints its
+  !! seed would then not be reproducible in the way it claims. Both constants
+  !! and the intermediate product fit in `i8` (\f$16807 \times (2^{31}-2)
+  !! \approx 3.6\times 10^{13}\f$), so the sequence never overflows -- which
+  !! matters because signed integer overflow is not defined in Fortran.
+  integer(kind=i8), parameter :: fd_random_modulus = 2147483647_i8
+  integer(kind=i8), parameter :: fd_random_multiplier = 16807_i8
+
+  !> Seed used for the `random` perturbation direction when none is requested.
+  !! Fixed rather than time- or entropy-derived, so that two runs of the same
+  !! case on the same rank count differentiate along the *same* direction and
+  !! are therefore comparable -- the same property `NEKO_TOP_FD_PROBE_INDEX`
+  !! buys for the single-dof probe.
+  integer(kind=i8), parameter :: fd_default_random_seed = 20260911_i8
 
   interface compute_sensitivity
      module procedure compute_sensitivity_list, &
@@ -319,6 +366,137 @@ contains
 
   end subroutine fd_read_mode
 
+  !> Read which direction the `directional` sweep differentiates along.
+  !!
+  !! Sources, highest precedence first: the environment variable
+  !! `NEKO_TOP_FD_DIRECTION` (`gradient` or `random`, case-insensitive), then
+  !! the case-file key `optimization.fd_test_direction`, then `gradient` --
+  !! preserving the behaviour the directional mode has had since it was added.
+  !! Anything else is an error rather than a silent fall back to `gradient`,
+  !! which would also silently override the case file, matching how
+  !! `fd_read_mode` treats its value.
+  !!
+  !! The two exist because they have *different blind spots*, which is the
+  !! whole point of offering a choice (see the module header for the algebra):
+  !!  * `gradient` uses \f$s = g/\|g\|\f$, so it validates the one contraction
+  !!    \f$\langle g, s\rangle = \|g\|\f$ and is blind, exactly, to any
+  !!    gradient error orthogonal to \f$g\f$;
+  !!  * `random` uses a seeded pseudo-random field, which has no systematic
+  !!    relationship to \f$g\f$ and therefore *does* see error orthogonal to
+  !!    it, at the cost of being one arbitrary contraction rather than the one
+  !!    aligned with the steepest descent direction.
+  !!
+  !! Neither subsumes the other; a thorough check runs both.
+  !!
+  !! Only meaningful in `directional` mode -- the single-dof probe's direction
+  !! is the one-hot vector at the probed dof.
+  !!
+  !! @param params The case file to read the optional key from.
+  !! @param random True to differentiate along a seeded pseudo-random field
+  !!        rather than along the gradient.
+  subroutine fd_read_direction(params, random)
+    type(json_file), intent(inout) :: params
+    logical, intent(out) :: random
+
+    character(len=*), parameter :: env_name = 'NEKO_TOP_FD_DIRECTION'
+    character(len=32) :: env_value
+    character(len=:), allocatable :: direction_string
+    integer :: env_status
+
+    call get_environment_variable(env_name, env_value, status = env_status)
+    if (env_status .eq. fd_env_truncated) then
+       call neko_error(env_name // ' is longer than the buffer available ' // &
+            'to read it')
+    end if
+
+    if (env_status .eq. 0 .and. len_trim(env_value) .gt. 0) then
+       direction_string = trim(adjustl(env_value))
+    else if (params%valid_path('optimization.fd_test_direction')) then
+       call json_get(params, 'optimization.fd_test_direction', &
+            direction_string)
+       ! json-fortran deallocates its result on an exception and Neko's
+       ! json_get never checks failed(), so a key of the wrong type comes
+       ! back unallocated rather than raising an error.
+       if (.not. allocated(direction_string)) then
+          call neko_error('optimization.fd_test_direction could not be ' // &
+               'read as a string')
+       end if
+    else
+       direction_string = 'gradient'
+    end if
+
+    call fd_lowercase(direction_string)
+
+    select case (trim(direction_string))
+    case ('gradient')
+       random = .false.
+    case ('random')
+       random = .true.
+    case default
+       call neko_error('The finite-difference direction must be ' // &
+            '"gradient" or "random", not "' // trim(direction_string) // '"')
+    end select
+
+    deallocate(direction_string)
+
+  end subroutine fd_read_direction
+
+  !> Read the seed for the `random` perturbation direction.
+  !!
+  !! Sources, highest precedence first: the environment variable
+  !! `NEKO_TOP_FD_SEED`, then the case-file key
+  !! `optimization.fd_test_direction_seed`, then `fd_default_random_seed`.
+  !!
+  !! The seed is **printed by every random-direction run**, so a run can be
+  !! reproduced by copying the number out of its log -- the same contract
+  !! `NEKO_TOP_FD_PROBE_INDEX` offers for the single-dof probe. Reproducible
+  !! for a given mesh **and rank count**: each rank offsets the seed by its own
+  !! rank so that the field differs across ranks rather than repeating, which
+  !! means a different decomposition draws a different field. That is the only
+  !! scope in which two finite-difference runs are comparable anyway.
+  !!
+  !! Must be strictly positive: zero and any multiple of the modulus are the
+  !! fixed points of a multiplicative congruential sequence, which would give a
+  !! constant direction rather than a random one.
+  !!
+  !! @param params The case file to read the optional key from.
+  !! @param seed The seed to use.
+  subroutine fd_read_random_seed(params, seed)
+    type(json_file), intent(inout) :: params
+    integer(kind=i8), intent(out) :: seed
+
+    character(len=*), parameter :: env_name = 'NEKO_TOP_FD_SEED'
+    character(len=64) :: env_value
+    integer :: env_status, ios, json_seed
+
+    call get_environment_variable(env_name, env_value, status = env_status)
+    if (env_status .eq. fd_env_truncated) then
+       call neko_error(env_name // ' is longer than the buffer available ' // &
+            'to read it')
+    end if
+
+    if (env_status .eq. 0 .and. len_trim(env_value) .gt. 0) then
+       read(env_value, *, iostat = ios) seed
+       if (ios .ne. 0) then
+          call neko_error(env_name // ' could not be parsed as an integer ' // &
+               'seed')
+       end if
+    else if (params%valid_path('optimization.fd_test_direction_seed')) then
+       call json_get(params, 'optimization.fd_test_direction_seed', json_seed)
+       seed = int(json_seed, i8)
+    else
+       seed = fd_default_random_seed
+    end if
+
+    if (seed .lt. 1_i8 .or. mod(seed, fd_random_modulus) .eq. 0_i8) then
+       call neko_error('The finite-difference random seed must be ' // &
+            'strictly positive and not a multiple of 2147483647; those ' // &
+            'are the fixed points of the generator and would give a ' // &
+            'constant direction rather than a random one')
+    end if
+
+  end subroutine fd_read_random_seed
+
   !> Read the fixed design degree of freedom to probe, if one was requested.
   !!
   !! `NEKO_TOP_FD_PROBE_INDEX` names a **global design index**: a 1-based index
@@ -468,6 +646,61 @@ contains
 
   end subroutine fd_sync_to_host
 
+  !> Advance a Park-Miller sequence one step and map it into \f$(-1, 1)\f$.
+  !!
+  !! Deliberately not `random_number`: see `fd_random_modulus`. Symmetric about
+  !! zero so the resulting direction has no built-in bias towards increasing
+  !! the design, which would interact with the bound clamping.
+  !!
+  !! @param state The generator state, advanced in place. Must be in
+  !!        \f$[1, 2^{31}-2]\f$ on first entry, which
+  !!        `compute_sensitivity_directional` guarantees.
+  !! @return A pseudo-random value in \f$(-1, 1)\f$.
+  function fd_random_next(state) result(value)
+    integer(kind=i8), intent(inout) :: state
+    real(kind=rp) :: value
+
+    state = mod(fd_random_multiplier * state, fd_random_modulus)
+    value = 2.0_rp * (real(state, rp) / real(fd_random_modulus, rp)) - 1.0_rp
+
+  end function fd_random_next
+
+  !> Refuse to run on a device build, with an explanation.
+  !!
+  !! Both directional and single-dof paths gather-scatter a plain `allocate`d
+  !! host array (the perturbation direction, and the multiplicity count) to
+  !! make it single-valued on shared dofs. On a device build `gs_t%op` reaches
+  !! `gs_device`'s `gather`/`scatter`, which call `device_get_ptr` on that
+  !! buffer and abort because it was never `device_map`ped. The abort happens
+  !! deep inside the gather-scatter backend with no hint that the caller is at
+  !! fault, so this refuses at the harness boundary instead and names the fix.
+  !!
+  !! Deliberately a refusal rather than a `device_map`/`device_memcpy`/
+  !! `device_unmap` triple around each call: this is host-only test tooling --
+  !! every reduction, loop, `maxloc` and CSV row in it works on the host array
+  !! -- and the mirrored device plumbing could not be executed, let alone
+  !! tested, on the CPU-only machine this was written on. Adding unreachable
+  !! device code would recreate the exact defect being fixed here, which is a
+  !! module that *reads* as though device builds work. Whoever needs a device
+  !! build should map these buffers and delete this guard in the same change
+  !! that proves it on hardware.
+  !!
+  !! @param context Name of the routine refusing, for the message.
+  subroutine fd_require_host_backend(context)
+    character(len=*), intent(in) :: context
+
+    if (NEKO_BCKND_DEVICE .eq. 1) then
+       call neko_error(context // ': the finite-difference harness is ' // &
+            'host-only. It gather-scatters plain host arrays, which ' // &
+            'gs_device aborts on because they are not device-mapped. Run ' // &
+            'the sensitivity checks against a CPU build of Neko and ' // &
+            'Neko-TOP, or device_map/device_memcpy the direction and copy ' // &
+            'buffers in tests/shared/sensitivity.f90 (device_unmap before ' // &
+            'deallocate) and verify it on real hardware.')
+    end if
+
+  end subroutine fd_require_host_backend
+
   !> Count the blank-separated tokens in a string.
   !! @param string The string to inspect.
   !! @return The number of tokens found.
@@ -598,8 +831,10 @@ contains
   !!
   !! @param des The design, for the probed dof's coordinates.
   !! @param n Number of design degrees of freedom held locally.
-  !! @param probe_index Local index of the probed dof, negative on ranks that
-  !!        do not own it, and negative everywhere in directional mode.
+  !! @param probe_index Local index of the probed dof. **Any non-positive value
+  !!        means "not owned by this rank"** -- `maxloc` on a zero-size array
+  !!        returns 0, so 0 arrives from a rank holding no design dofs -- and
+  !!        it is non-positive on every rank in directional mode.
   !! @param design_value The design value at the probed dof.
   !! @param directional True when the whole design is perturbed along a
   !!        direction rather than one dof being probed.
@@ -619,9 +854,10 @@ contains
        if (pe_rank .eq. 0) then
           write(*, '(A)') ' FD probe: mode = directional -- every design ' // &
                'degree of freedom is perturbed together'
-          write(*, '(A)') ' FD probe: along s = g/||g||_2, so no single dof' &
-               // ' is probed and NEKO_TOP_FD_PROBE_INDEX'
-          write(*, '(A)') ' FD probe: does not apply.'
+          write(*, '(A)') ' FD probe: along the normalised direction ' // &
+               'reported above, so no single dof is probed'
+          write(*, '(A)') ' FD probe: and NEKO_TOP_FD_PROBE_INDEX does not' &
+               // ' apply.'
        end if
        return
     end if
@@ -686,8 +922,11 @@ contains
   !! @param sim The simulation driving each forward solve.
   !! @param des The design being perturbed.
   !! @param target_sensitivities The analytic sensitivities to check against.
-  !! @param i Local index of the dof to perturb, negative on ranks that do not
-  !!          own it.
+  !! @param i Local index of the dof to perturb. **Any non-positive value means
+  !!          "not owned by this rank"** -- the callers pass -1 explicitly, but
+  !!          `maxloc` on a zero-size array returns 0, so a rank holding no
+  !!          design dofs at all arrives here with 0 and must be treated the
+  !!          same way. Indexing element 0 would be out of bounds.
   !! @param perturbations The sweep of perturbation magnitudes, in any order.
   !! @param tolerance The largest acceptable minimum relative error.
   !! @param file_name The case file name, used to name the CSV log.
@@ -722,6 +961,8 @@ contains
     central = .false.
     if (present(central_difference)) central = central_difference
 
+    call fd_require_host_backend('compute_sensitivity_i')
+
     n = des%size()
     call fd_sync_to_host(target_sensitivities)
 
@@ -731,9 +972,13 @@ contains
     ! element-local copy of the dof, on every rank holding one. Perturbing only
     ! the owning index would leave the design multi-valued at that point, which
     ! is not a perturbation of any real design variable.
+    !
+    ! The ownership test is `> 0`, not `>= 0`: a rank that holds no design dofs
+    ! reaches here with i = 0, because `maxloc` on a zero-size array returns 0
+    ! rather than a negative sentinel, and `direction(0)` is out of bounds.
     allocate(direction(n))
     direction = 0.0_rp
-    if (i .ge. 0) direction(i) = 1.0_rp
+    if (i .gt. 0) direction(i) = 1.0_rp
     call gs_h%op(direction, n, GS_OP_ADD)
 
     ! The target is the derivative summed over every copy of the dof, which is
@@ -752,15 +997,30 @@ contains
 
   end subroutine compute_sensitivity_i
 
-  !> Sweep a set of perturbations along the normalised sensitivity direction
+  !> Sweep a set of perturbations along a normalised direction in design space
   !! and assert that the finite-difference estimate agrees with the projection
-  !! of the analytic gradient onto it.
+  !! of the analytic gradient onto that direction.
   !!
-  !! This is the Taylor test: instead of one lottery-selected design variable
-  !! it validates the *whole* gradient field at once, against
-  !! \f$ \langle g, s\rangle \f$ with \f$ s = g/\|g\|_2 \f$. It also raises the
-  !! finite-difference signal by roughly \f$\|g\|/|g_i|\f$ relative to the
-  !! single-dof probe, which buys back round-off headroom.
+  !! This is the Taylor test. It compares against \f$\langle g, s\rangle\f$ and
+  !! raises the finite-difference signal by roughly \f$\|g\|/|g_i|\f$ relative
+  !! to the single-dof probe, which buys back round-off headroom.
+  !!
+  !! **It validates one scalar contraction of the gradient, not the whole
+  !! field**, and which contraction depends on `random_direction`:
+  !!  * `.false.` (the default) takes \f$s = g/\|g\|_2\f$, giving
+  !!    \f$\langle g,s\rangle = \|g\|\f$. Writing the computed gradient as
+  !!    \f$g = G + \delta\f$, the relative error the sweep reports is
+  !!    \f$-\langle\delta, g\rangle/\|g\|^2\f$, so **any \f$\delta\f$
+  !!    orthogonal to \f$g\f$ passes exactly**. A sign flip reports \f$-2\f$ and
+  !!    a factor-two scale error reports \f$-0.5\f$, so it catches those
+  !!    completely;
+  !!  * `.true.` takes \f$s\f$ from a seeded pseudo-random field instead,
+  !!    assembled and normalised identically. \f$\langle g,s\rangle\f$ is then
+  !!    genuinely independent of \f$\|g\|\f$ and the sweep does see error
+  !!    orthogonal to \f$g\f$, at the cost of testing one arbitrary direction
+  !!    rather than the one that matters most to a descent step.
+  !!
+  !! Neither subsumes the other. Run both.
   !!
   !! **Inner product** (see also the module header): Euclidean on the assembled
   !! nodal design coefficients, for both the normalisation and the projection.
@@ -769,12 +1029,12 @@ contains
   !! respect to the nodal coefficients, which are the variables perturbed here.
   !! Weighting again by \f$B\f$ would count the mass matrix twice.
   !!
-  !! The direction is built from the **assembled** gradient, so it is
-  !! single-valued on shared dofs; that is what makes the projection exact and
-  !! makes the perturbation a perturbation of real design variables. The
-  !! normalisation is itself a free scaling -- what is load-bearing is that
-  !! \f$\langle g,s\rangle\f$ uses exactly the same \f$s\f$ that is added to
-  !! the design, which it does by construction.
+  !! The direction -- gradient or random -- is **assembled** with `GS_OP_ADD`
+  !! before it is used, so it is single-valued on shared dofs; that is what
+  !! makes the projection exact and makes the perturbation a perturbation of
+  !! real design variables. The normalisation is itself a free scaling -- what
+  !! is load-bearing is that \f$\langle g,s\rangle\f$ uses exactly the same
+  !! \f$s\f$ that is added to the design, which it does by construction.
   !!
   !! @param problem The problem supplying the objective/constraint value.
   !! @param sim The simulation driving each forward solve.
@@ -785,11 +1045,17 @@ contains
   !! @param file_name The case file name, used to name the CSV log.
   !! @param is_objective True to test an objective, false a constraint.
   !! @param gs_h Gather-scatter handle for the design's dofmap, used both to
-  !!             assemble the gradient and to count the copies of each dof.
+  !!             assemble the direction and to count the copies of each dof.
   !! @param central_difference (Optional) True to use a central difference.
+  !! @param random_direction (Optional) True to differentiate along a seeded
+  !!        pseudo-random direction rather than along \f$g\f$. Defaults to
+  !!        false, the gradient direction used since this mode was added.
+  !! @param random_seed (Optional) Seed for that direction; reported so the run
+  !!        can be reproduced. Defaults to `fd_default_random_seed`. Ignored
+  !!        when `random_direction` is false.
   subroutine compute_sensitivity_directional(problem, sim, des, &
        target_sensitivities, perturbations, tolerance, file_name, &
-       is_objective, gs_h, central_difference)
+       is_objective, gs_h, central_difference, random_direction, random_seed)
     class(problem_t), intent(inout) :: problem
     type(simulation_t), intent(inout) :: sim
     class(design_t), intent(inout) :: des
@@ -800,15 +1066,24 @@ contains
     logical, intent(in) :: is_objective
     type(gs_t), intent(inout) :: gs_h
     logical, intent(in), optional :: central_difference
+    logical, intent(in), optional :: random_direction
+    integer(kind=i8), intent(in), optional :: random_seed
 
     real(kind=rp), allocatable :: direction(:), copies(:)
     real(kind=rp) :: work_arr(1), gradient_norm, projection, max_component
-    real(kind=rp) :: n_design
-    logical :: central
+    real(kind=rp) :: n_design, direction_norm
+    logical :: central, random
+    integer(kind=i8) :: seed, state
     integer :: j, n
 
     central = .false.
     if (present(central_difference)) central = central_difference
+    random = .false.
+    if (present(random_direction)) random = random_direction
+    seed = fd_default_random_seed
+    if (present(random_seed)) seed = random_seed
+
+    call fd_require_host_backend('compute_sensitivity_directional')
 
     n = des%size()
     if (target_sensitivities%size() .lt. n) then
@@ -851,30 +1126,108 @@ contains
             'influences the functional.')
     end if
 
+    if (random) then
+       ! Overwrite the assembled gradient -- `gradient_norm` has already been
+       ! taken from it and is all that is still needed -- with a seeded
+       ! pseudo-random field, then put it through *exactly* the same assembly
+       ! and normalisation. Same GS_OP_ADD, so it is single-valued on shared
+       ! dofs; same inverse-multiplicity-weighted norm, so `fd_project` pairs
+       ! with it on the same footing; and the same `fd_step_headroom` clamp
+       ! inside `fd_run_sweep`, which sees only a direction vector and cannot
+       ! tell the two apart.
+       !
+       ! Offset by the rank so the field differs across ranks rather than
+       ! repeating the same local sequence on each. That makes the draw a
+       ! function of the decomposition as well as the seed, which is the same
+       ! (mesh, rank count) reproducibility scope the probe index has.
+       state = 1_i8 + mod(seed + int(pe_rank, i8), fd_random_modulus - 1_i8)
+       do j = 1, n
+          direction(j) = fd_random_next(state)
+       end do
+       call gs_h%op(direction, n, GS_OP_ADD)
+
+       work_arr(1) = 0.0_rp
+       do j = 1, n
+          work_arr(1) = work_arr(1) + direction(j)*direction(j) / copies(j)
+       end do
+       direction_norm = sqrt(glsum(work_arr, 1))
+
+       if (.not. (direction_norm .gt. 0.0_rp)) then
+          call neko_error('The random perturbation direction assembled to ' // &
+               'identically zero, which a Park-Miller sequence cannot do ' // &
+               'by chance. Check the seed and the gather-scatter handle.')
+       end if
+    else
+       direction_norm = gradient_norm
+    end if
+
     do j = 1, n
-       direction(j) = direction(j) / gradient_norm
+       direction(j) = direction(j) / direction_norm
     end do
 
     projection = fd_project(target_sensitivities%x, direction, n)
 
-    ! Reported so that an inconsistency between the normalisation and the
-    ! projection is visible rather than silent: with a consistent inner
-    ! product these two numbers are the same, because <g, g/||g||> = ||g||.
+    ! The one guard on inner-product consistency, and now asserted rather than
+    ! only printed: with a consistent inner product <g, g/||g||> = ||g||
+    ! exactly, so a divergence means the normalisation and the projection are
+    ! using two different pairings and every number downstream -- including a
+    ! plausible-looking CSV -- is measuring the wrong thing. Only true for the
+    ! gradient direction; for a random s, <g,s> is genuinely not ||g||.
+    ! Collective-safe: both operands are `glsum` results and so identical on
+    ! every rank.
+    if (.not. random) then
+       if (abs(projection - gradient_norm) .gt. 1e-10_rp*gradient_norm) then
+          call neko_error('The projection <g,s> disagrees with ||g|| for ' // &
+               's = g/||g||, so the normalisation and the projection are ' // &
+               'not using the same inner product. Every finite-difference ' // &
+               'number in this sweep would be comparing against the wrong ' // &
+               'quantity -- see the inner-product note in the module header.')
+       end if
+    end if
+
     work_arr(1) = 0.0_rp
     do j = 1, n
        work_arr(1) = work_arr(1) + 1.0_rp / copies(j)
     end do
     n_design = glsum(work_arr, 1)
+    ! `copies` has served its purpose as the multiplicity count -- both norms
+    ! and `n_design` are already reduced -- so it is reused here as scratch for
+    ! abs(direction). Nothing below reads it as a multiplicity.
     copies = abs(direction)
     max_component = glmax(copies, n)
 
     if (pe_rank .eq. 0) then
+       ! Which direction was used is printed first and unconditionally: the two
+       ! measure different things, so a sweep read without knowing which one
+       ! produced it cannot be interpreted at all.
+       if (random) then
+          write(*, '(A,I0)') ' FD directional: direction = random ' // &
+               '(seeded pseudo-random field), seed = ', seed
+          write(*, '(A)') ' FD directional: this covers gradient error ' // &
+               'orthogonal to g, which the gradient'
+          write(*, '(A)') ' FD directional: direction is blind to; it is ' // &
+               'still one contraction, of one draw.'
+       else
+          write(*, '(A)') ' FD directional: direction = gradient, ' // &
+               's = g/||g||_2'
+          write(*, '(A)') ' FD directional: this validates ONE scalar ' // &
+               'contraction of the gradient, along g itself;'
+          write(*, '(A)') ' FD directional: error orthogonal to g passes ' // &
+               'it exactly. Use NEKO_TOP_FD_DIRECTION=random'
+          write(*, '(A)') ' FD directional: for a direction with a ' // &
+               'different blind spot.'
+       end if
        write(*, '(A,E15.6E3,A,E15.6E3)') &
             ' FD directional: gradient 2-norm = ', gradient_norm, &
             '   projection onto s = ', projection
+       ! `nint(..., i8)`, not `nint(...)`: the count is a global dof count and
+       ! a default integer would silently wrap on a large enough mesh. Rounded
+       ! rather than truncated with `int` because 1/copies is inexact for any
+       ! multiplicity that is not a power of two, so a count of 272 can arrive
+       ! as 271.999... and `int` would print 271.
        write(*, '(A,E15.6E3,A,I0)') &
             ' FD directional: largest direction entry = ', max_component, &
-            '   design variables = ', nint(n_design)
+            '   design variables = ', nint(n_design, i8)
        write(*, '(A)') ' FD directional: inner product = Euclidean on the ' &
             // 'assembled nodal design'
        write(*, '(A)') ' FD directional: coefficients (the mass-matrix ' &
@@ -902,8 +1255,10 @@ contains
   !! @param direction Single-valued perturbation direction, one entry per local
   !!        design degree of freedom.
   !! @param target_derivative The analytic derivative along `direction`.
-  !! @param probe_index Local index of the probed dof in single-dof mode,
-  !!        negative on ranks that do not own it and negative everywhere in
+  !! @param probe_index Local index of the probed dof in single-dof mode.
+  !!        **Any non-positive value means "not owned by this rank"** --
+  !!        `maxloc` on a zero-size array returns 0, so 0 arrives from a rank
+  !!        holding no design dofs -- and it is non-positive on every rank in
   !!        directional mode.
   !! @param perturbations The sweep of perturbation magnitudes, in any order.
   !! @param tolerance The largest acceptable minimum relative error.
@@ -976,7 +1331,11 @@ contains
     ! holds it, and it decides the sign of the one-sided step and is quoted in
     ! the central-difference error message, both of which every rank must
     ! compose identically.
-    if (probe_index .ge. 0) then
+    !
+    ! `> 0`, not `>= 0`: a rank holding no design dofs arrives with
+    ! probe_index = 0 (`maxloc` on a zero-size array returns 0), and
+    ! `design_vector%x(0)` is out of bounds. Matches `fd_report_probe`.
+    if (probe_index .gt. 0) then
        work_arr(1) = design_vector%x(probe_index)
     else
        work_arr(1) = 0.0_rp
