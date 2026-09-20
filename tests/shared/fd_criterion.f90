@@ -60,6 +60,14 @@
 !! exists to fix, and lifts the false-red rate from 0.012 to 0.73 with no
 !! value of the bracketing factor recovering it. Sign crossings of \f$e\f$ are
 !! likewise counted and reported but never used to exclude points.
+!!
+!! **What the sweep itself must satisfy.** Three properties are demanded of
+!! the recorded sweep before any branch is evaluated, and each is refused
+!! rather than worked around: it must be finite (a NaN makes every comparison
+!! false and quietly shortens the analysis), single-signed (the model is the
+!! truncation series of *one* one-sided difference), and its magnitudes must
+!! be distinct (a repeated magnitude is one measurement counted twice, and
+!! adds plateau length at zero spread).
 module fd_criterion
   use, intrinsic :: ieee_arithmetic, only: ieee_is_nan
   use num_types, only: rp
@@ -263,6 +271,7 @@ contains
     call fd_check_finite(perturbations, errors, n)
     call fd_check_single_sign(perturbations, n)
     call fd_sort_sweep(perturbations, errors, n, m, e)
+    call fd_check_distinct(m, n)
 
     ! Diagnostics. Reported for every sweep and never gated on -- see the
     ! module header for why bracketing in particular must not be a gate.
@@ -503,6 +512,53 @@ contains
     end do
 
   end subroutine fd_sort_sweep
+
+  !> Require every perturbation magnitude of the sweep to be distinct.
+  !!
+  !! Not a tidiness check: a repeated magnitude is the same measurement
+  !! written down twice, and the plateau branch prices evidence as the spread
+  !! \f$\max e - \min e\f$ over a window. Duplicates therefore lengthen a
+  !! window at *zero* spread, so a sweep whose points have collapsed onto one
+  !! bound-limited step satisfies `fd_plateau_points` from a single
+  !! measurement and certifies a bound -- which is precisely the
+  !! assert-on-one-point rule this module exists to abolish, re-entering from
+  !! behind. The order branch is no safer: three copies of one point make two
+  !! vanishing differences and an undefined ratio.
+  !!
+  !! Refusing the sweep, rather than silently de-duplicating it, is the same
+  !! argument the NaN guard makes: the sweep that ran is not the sweep that
+  !! was asked for, and the honest response is to say so.
+  !!
+  !! @param m Perturbation magnitudes, descending -- `fd_sort_sweep` must
+  !!        have run first, so that equal magnitudes are adjacent.
+  !! @param n Number of sweep points.
+  subroutine fd_check_distinct(m, n)
+    real(kind=rp), intent(in) :: m(:)
+    integer, intent(in) :: n
+
+    integer :: k
+    character(len=32) :: value_str
+
+    do k = 1, n - 1
+       ! Descending, so the difference cannot be negative: a non-positive
+       ! one is an exact repeat, tested without comparing reals for equality.
+       if (m(k) - m(k + 1) .le. 0.0_rp) then
+          write(value_str, '(E13.6E3)') m(k)
+          call neko_error('The finite-difference sweep repeats the ' // &
+               'perturbation magnitude ' // trim(adjustl(value_str)) // &
+               '. A repeated magnitude is one measurement recorded twice: ' &
+               // 'it lengthens a plateau window at zero spread, so the ' // &
+               'criterion would certify a bound from a single point. The ' &
+               // 'likely cause is the step being clamped against a ' // &
+               'design bound -- look for the "FD sweep: requested step ' // &
+               '... clamped to" lines -- which collapses several ' // &
+               'requested points onto the same bound-limited value. Ask ' // &
+               'for perturbations that fit inside the available headroom, ' &
+               // 'or move the design away from its bounds.')
+       end if
+    end do
+
+  end subroutine fd_check_distinct
 
   !> Fill the reported-only diagnostics of a verdict.
   !!
