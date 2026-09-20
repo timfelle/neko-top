@@ -76,7 +76,7 @@ module sensitivity
   use design, only: design_t
   use utils, only: neko_error
   use num_types, only: rp, sp, i8
-  use math, only: abscmp, NEKO_EPS, glsum, glmin, glmax
+  use math, only: abscmp, NEKO_EPS, glsum, glmin, glmax, glimax
   use vector, only: vector_t
   use neko_config, only: NEKO_BCKND_DEVICE
   use problem, only : problem_t
@@ -1107,6 +1107,9 @@ contains
     logical :: prefer_negative
     type(csv_file_t) :: logger
     integer :: n, name_len, slash
+    !> Status of the rank-0 verdict-CSV write, reduced so that a failure is
+    !! acted on by every rank rather than by rank 0 alone.
+    integer :: write_status(1)
 
     n = des%size()
 
@@ -1387,9 +1390,19 @@ contains
        if (strict%enabled) then
           call fd_evaluate(sweep_perturbs, sweep_errors, tolerance, strict, &
                verdict, degenerate)
+          write_status(1) = 0
           if (pe_rank .eq. 0) then
              call fd_verdict_print(verdict, tolerance)
-             call fd_write_verdict(file_name, verdict)
+             call fd_write_verdict(file_name, verdict, write_status(1))
+          end if
+
+          ! Raised outside the rank guard, on a globally reduced status:
+          ! `neko_error` is an `error stop`, so raising it inside the guard
+          ! would abort rank 0 while every other rank walked into the next
+          ! collective -- a hang rather than a failure.
+          if (glimax(write_status, 1) .ne. 0) then
+             call neko_error('Could not open the strict-verdict CSV ' // &
+                  'FD_verdict_<case>.csv for writing')
           end if
        end if
 
@@ -1483,11 +1496,19 @@ contains
   !! accumulates. Rank 0 only -- every rank holds the same verdict, and
   !! several ranks opening one path is a genuine race.
   !!
+  !! The open status is *returned* rather than raised here: this runs inside
+  !! a rank-0 guard, and `neko_error` is an `error stop`, so failing here
+  !! would take rank 0 down alone and hang the others in the next collective.
+  !! The caller reduces the status and raises the error on every rank.
+  !!
   !! @param file_name The case file name, used to name the CSV.
   !! @param verdict The verdict to record.
-  subroutine fd_write_verdict(file_name, verdict)
+  !! @param write_status Zero on success, the `iostat` of the failed open
+  !!        otherwise.
+  subroutine fd_write_verdict(file_name, verdict, write_status)
     character(len=*), intent(in) :: file_name
     type(fd_verdict_t), intent(in) :: verdict
+    integer, intent(out) :: write_status
 
     !> Field separator, written as a named constant rather than inline so
     !! that the row and its header cannot disagree about it.
@@ -1536,9 +1557,8 @@ contains
     inquire(file = trim(path), exist = exists)
     open(newunit = unit_id, file = trim(path), action = 'write', &
          position = 'append', status = 'unknown', iostat = ios)
-    if (ios .ne. 0) then
-       call neko_error('Could not open ' // trim(path) // ' for writing')
-    end if
+    write_status = ios
+    if (ios .ne. 0) return
     if (.not. exists) write(unit_id, '(A)') header
     write(unit_id, '(A)') trim(row)
     close(unit_id)
