@@ -24,7 +24,8 @@ program problem_tester
   use sensitivity, only: compute_sensitivity, &
        compute_sensitivity_directional, fd_read_perturbations, &
        fd_read_central_difference, fd_read_mode, fd_read_probe_index, &
-       fd_resolve_probe_index, fd_read_strict_options
+       fd_resolve_probe_index, fd_read_strict_options, &
+       fd_assertion_skipped, FD_SKIP_EXIT_CODE
   use fd_criterion, only: fd_strict_options_t
   use user, only: user_setup
   implicit none
@@ -235,5 +236,12 @@ program problem_tester
 
   ! Finalize the Neko environment
   call neko_finalize()
+
+  ! A build that skipped the assertion made no gradient check at all, and a
+  ! zero exit would be reported by CTest as a pass. Exit with the skip code
+  ! instead; this lane's CMakeLists turns it into a reported SKIP through
+  ! `SKIP_REGULAR_EXPRESSION`, its `SKIP_RETURN_CODE` being already spoken
+  ! for by the opt-in gate.
+  if (fd_assertion_skipped()) stop FD_SKIP_EXIT_CODE
 
 end program problem_tester

@@ -96,7 +96,7 @@ module sensitivity
   private :: count_tokens, fd_lowercase, fd_sync_to_host, fd_project, &
        fd_step_headroom, fd_report_probe, fd_run_sweep, fd_global_offset, &
        fd_write_verdict, fd_sensitivity_floor, fd_sensitivity_scale, &
-       fd_assert_verdict
+       fd_assert_verdict, fd_skipped_assertion
 
   !> Status returned by `get_environment_variable` when the value did not fit
   !! in the buffer supplied. Silently accepting a truncated list would run a
@@ -139,6 +139,19 @@ module sensitivity
   !! larger than any perturbation a sweep could sensibly request, so `min`
   !! against it is a no-op.
   real(kind=rp), parameter :: fd_no_limit = huge(1.0_rp)
+
+  !> Exit code a driver returns when the finite-difference assertion was
+  !! *skipped* rather than made. Deliberately not 77, which the regression
+  !! lane's opt-in gate already uses, so that the two reasons a sweep did not
+  !! run stay distinguishable in the CTest output. Wired to `SKIP_RETURN_CODE`
+  !! in `tests/unit/sensitivity/CMakeLists.txt`.
+  integer, parameter :: FD_SKIP_EXIT_CODE = 78
+
+  !> True once a sweep has declined to make its assertion. A skipped
+  !! assertion that still exits zero is reported by CTest as a pass, which is
+  !! the one outcome a gradient check must never produce, so the drivers read
+  !! this and exit with `FD_SKIP_EXIT_CODE` instead.
+  logical :: fd_skipped_assertion = .false.
 
   interface compute_sensitivity
      module procedure compute_sensitivity_list, &
@@ -1371,6 +1384,12 @@ contains
     degenerate = abs(target_derivative) .le. eps_sens
 
     if (rp .eq. sp) then
+       ! Recorded before the banner and outside the rank guard: every rank
+       ! takes this branch (the precision is a compile-time property), and
+       ! the driver turns it into a non-zero exit code so that CTest reports
+       ! a skip rather than a pass.
+       fd_skipped_assertion = .true.
+
        ! In single precision the functional itself is only reproducible to
        ! about 1e-7 relative, so the smallest perturbation at which a
        ! one-sided difference resolves anything is of order sqrt(1e-7) ~ 0.34
@@ -1757,6 +1776,20 @@ contains
 
   !> Computes the relative difference between two numbers
   !! \f$ \frac{a - b}{|b|} \f$
+  !> Whether any sweep in this run declined to make its assertion.
+  !!
+  !! Read by the drivers, which exit with `FD_SKIP_EXIT_CODE` when it is
+  !! true: a gradient check that silently performed no check must not be
+  !! reported as a pass.
+  !!
+  !! @return True if an assertion was skipped rather than made.
+  function fd_assertion_skipped() result(skipped)
+    logical :: skipped
+
+    skipped = fd_skipped_assertion
+
+  end function fd_assertion_skipped
+
   function relative_error(a, b) result(err)
     real(kind=rp), intent(in) :: a, b
     real(kind=rp) :: err

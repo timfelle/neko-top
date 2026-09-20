@@ -92,11 +92,19 @@ foreach(case_file ${test_list})
         COMMAND $<TARGET_FILE:problem_tester_sensitivity_bin> ${case_file}
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     )
+    # 78 is the driver's "the assertion was skipped, not made" exit code
+    # (FD_SKIP_EXIT_CODE in tests/shared/sensitivity.f90), returned by a
+    # single-precision build, where the functional is not reproducible
+    # enough for any finite-difference verdict to mean anything. Without
+    # this the driver exits 0 and CTest reports a green gradient check that
+    # checked nothing. 77 is deliberately avoided: the regression lane uses
+    # it for its opt-in gate, and the two reasons must stay distinguishable.
     set_tests_properties(${case_name}_sensitivity
         PROPERTIES
             DEPENDS "problem_tester_sensitivity_bin;sensitivity_test_prepare"
             LABELS "sensitivity;unit"
             ENVIRONMENT "NEKO_LOG_FILE=neko.log"
+            SKIP_RETURN_CODE 78
             TIMEOUT 300
     )
 endforeach()

@@ -22,7 +22,7 @@ program problem_tester
   use math, only: abscmp, copy
   use device_math, only: device_copy
   use sensitivity, only: compute_sensitivity, fd_read_strict_options, &
-       fd_read_perturbations
+       fd_read_perturbations, fd_assertion_skipped, FD_SKIP_EXIT_CODE
   use fd_criterion, only: fd_strict_options_t
   implicit none
 
@@ -173,5 +173,11 @@ program problem_tester
 
   ! Finalize the Neko environment
   call neko_finalize()
+
+  ! A build that skipped the assertion made no gradient check at all, and a
+  ! zero exit would be reported by CTest as a pass. Exit with the skip code
+  ! instead -- `SKIP_RETURN_CODE` in this test's CMakeLists turns it into a
+  ! reported SKIP.
+  if (fd_assertion_skipped()) stop FD_SKIP_EXIT_CODE
 
 end program problem_tester

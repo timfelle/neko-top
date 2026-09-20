@@ -103,11 +103,20 @@ foreach(case_name ${sensitivity_regression_cases})
     else()
         set(case_timeout 1800)
     endif()
+    # Two distinct reasons this lane can decline to run, and CTest's
+    # SKIP_RETURN_CODE holds exactly one code (a "77;78" list matches only
+    # the first — measured with cmake 4.2.3), so the second reason is
+    # matched on the driver's banner instead:
+    #   77 — the opt-in gate above (run_sensitivity_regression_check.sh);
+    #   the banner — a single-precision build, where the driver exits with
+    #   FD_SKIP_EXIT_CODE = 78 having made no assertion. Both must report
+    #   SKIP rather than a pass that checked nothing.
     set_tests_properties(${case_name}_sensitivity_regression PROPERTIES
         DEPENDS "sensitivity_regression_build"
         LABELS "regression;sensitivity"
         RESOURCE_LOCK "sensitivity_regression_workspace"
         SKIP_RETURN_CODE 77
+        SKIP_REGULAR_EXPRESSION "FD sweep: SKIPPED"
         TIMEOUT ${case_timeout}
     )
 endforeach()
