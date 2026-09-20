@@ -371,6 +371,21 @@ contains
             'positive')
     end if
 
+    ! A band at least as wide as the order it is centred on is meaningless --
+    ! it accepts every measured order down to zero as "the expected one" --
+    ! and it is not merely useless: it admits p_hat ~ 0, where the Richardson
+    ! extrapolation is singular. `fd_solve_order` bisects [0, 6] sixty times,
+    ! so its smallest non-zero root is 3/2**60 = 2.6e-18, at which
+    ! `ratio**p - 1.0_rp` is exactly 0.0 in double precision. Removing the
+    ! invalid state here is preferable to guarding the division downstream.
+    if (opts%order_tolerance .ge. opts%p_expected) then
+       call neko_error('optimization.fd_test_order_tolerance must be ' // &
+            'smaller than optimization.fd_test_order: a band at least as ' // &
+            'wide as the expected order accepts a measured order of zero, ' &
+            // 'which is not a truncation branch at all and makes the ' // &
+            'Richardson extrapolation singular.')
+    end if
+
   end subroutine fd_read_strict_options
 
   !> Read whether the sweep perturbs a single design degree of freedom or the
