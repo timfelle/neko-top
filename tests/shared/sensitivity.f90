@@ -1468,7 +1468,7 @@ contains
           ! collective -- a hang rather than a failure.
           if (glimax(write_status, 1) .ne. 0) then
              call neko_error('Could not open the strict-verdict CSV ' // &
-                  'FD_verdict_<case>.csv for writing')
+                  'for this case for writing')
           end if
        end if
 
