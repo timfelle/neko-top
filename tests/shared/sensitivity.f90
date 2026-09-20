@@ -904,7 +904,10 @@ contains
     ! is not a perturbation of any real design variable.
     allocate(direction(n))
     direction = 0.0_rp
-    if (i .ge. 0) direction(i) = 1.0_rp
+    ! `.gt. 0`, not `.ge. 0`: the index is 1-based, so 0 is not an owned
+    ! entry -- it is what `maxloc` returns on a zero-size local design, and
+    ! `direction(0)` is a write past the start of the array.
+    if (i .gt. 0) direction(i) = 1.0_rp
     call gs_h%op(direction, n, GS_OP_ADD)
 
     ! The target is the derivative summed over every copy of the dof, which is
@@ -1167,7 +1170,7 @@ contains
     ! holds it, and it decides the sign of the one-sided step and is quoted in
     ! the central-difference error message, both of which every rank must
     ! compose identically.
-    if (probe_index .ge. 0) then
+    if (probe_index .gt. 0) then
        work_arr(1) = design_vector%x(probe_index)
     else
        work_arr(1) = 0.0_rp
