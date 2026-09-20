@@ -50,7 +50,8 @@ point of a sweep a gating assertion should use is an open question, not one
 this change answers.
 
 The regression driver (`tests/regression/sensitivity/problem_tester.f90`)
-takes two optional keys under `optimization`, alongside `fd_test_tolerance`:
+takes three optional keys under `optimization`, alongside
+`fd_test_tolerance`:
 
 - `fd_test_perturbations`: a JSON array of strictly positive perturbation
   magnitudes, any length and any order. Defaults to
@@ -126,7 +127,9 @@ Three further optional keys, all under `optimization`:
 - `fd_test_order_tolerance`: half-width of the accepted band around that
   order. Defaults to `0.10`. Tightening it from 0.25 to 0.10 trims the
   largest-perturbation points, where the functional is strongly nonlinear,
-  out of the fit window — measured false-red 0.0023 against 0.0123.
+  out of the fit window — measured false-red 0.0023 against 0.0123. It must
+  be smaller than `fd_test_order`: a band as wide as the order accepts a
+  measured order of zero, which is no truncation branch at all.
 - `fd_test_plateau_fraction`: how flat, as a fraction of the tolerance, a
   window must be to bound the bias. Defaults to `0.25`.
 
@@ -145,6 +148,15 @@ distinguishes a FIT *estimate* from a BOUNDED *bound* — they are different
 claims and must not be read as the same number. `FD_check_<case>.csv` is
 untouched by all of this, schema and contents both.
 
+The criterion refuses a sweep it cannot read rather than analysing it
+anyway: one carrying a NaN, one mixing step signs, or one **repeating a
+perturbation magnitude**. The last is the likely one in practice, because
+the step is clamped against the design bounds and several requested points
+can collapse onto the same bound-limited value; the error message names the
+repeated magnitude. A repeat is one measurement recorded twice, and because
+a plateau is priced by the *spread* of its errors, duplicates would lengthen
+a window at zero spread and certify a bound from a single point.
+
 ## Two guards that apply whether or not the criterion is on
 
 - **Degenerate sensitivities.** An analytic sensitivity below `1e-10` of the
@@ -155,7 +167,9 @@ untouched by all of this, schema and contents both.
 - **Single precision.** A `--enable-real=sp` build skips the assertion,
   loudly. There the functional is reproducible to only ~1e-7 relative, which
   puts the smallest perturbation that resolves anything above 0.3 — larger
-  than any sweep — so the assertion was gating on round-off.
+  than any sweep — so the assertion was gating on round-off. The driver
+  then exits with code 78, which both lanes report to CTest as a **SKIP**:
+  a check that made no check must not read as a pass.
 
 ## Which direction the sweep differentiates along
 
@@ -172,9 +186,14 @@ Every run therefore now prints the dof it actually probed, in every mode:
 
 ```
  FD probe: mode = dof -- global design index 1276 (rank 1, local index 340)
- FD probe: design value    1.000000, location [   0.410654   0.589346   0.160654]
- FD probe: reproduce this exact dof in another run by setting NEKO_TOP_FD_PROBE_INDEX to the number above.
+ FD probe: design value    1.000000, location [   0.410654   0.589346
+   0.160654]
+ FD probe: reproduce this exact dof in another run by setting
+ NEKO_TOP_FD_PROBE_INDEX to the number above.
 ```
+
+(the last two records are each printed as a single line; they are wrapped
+above only to fit the page.)
 
 `NEKO_TOP_FD_PROBE_INDEX=<n>` pins the probe to that exact dof instead of the
 argmax, which is what makes two runs comparable. The index is a 1-based index
@@ -240,7 +259,8 @@ Two further details make it exact rather than approximately right:
   multi-valued direction would not be a perturbation of any real design
   variable;
 - the projection pairs the *unassembled* per-copy sensitivities with that
-  single-valued direction. Since `Σ_j g_j s_j = Σ_I s_I Σ_{j ∈ copies(I)} g_j`,
+  single-valued direction. Since
+  `Σ_j g_j s_j = Σ_I s_I Σ_{j ∈ copies(I)} g_j`,
   this is the assembled Euclidean inner product without ever dividing by a
   multiplicity — and for a one-hot direction it reduces exactly to the
   assembled derivative at the single dof, which is what `dof` mode has always
@@ -270,8 +290,8 @@ scalar-scheme fix first — see `known-bugs-backlog.md` #9). The heavier,
 realistic (~1000-timestep) versions of these and other cases
 (`dissipation`, `dissipation_weights`, unsteady variants) live in
 `tests/regression/sensitivity/` instead — that suite is opt-in
-(`NEKO_TOP_RUN_SENSITIVITY_REGRESSION=1`) and not part of the default/PR-blocking
-test budget, since it's too slow to gate every PR.
+(`NEKO_TOP_RUN_SENSITIVITY_REGRESSION=1`) and not part of the
+default/PR-blocking test budget, since it's too slow to gate every PR.
 
 ## Adding New Tests
 
