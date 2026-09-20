@@ -360,7 +360,9 @@ contains
             // 'estimate: over this window')
        call fd_add_message(verdict, 'truncation is too small to separate ' &
             // 'from the bias.')
-    else
+    else if (len_trim(reason) .gt. 0) then
+       ! `fd_order_run` leaves `reason` empty when it *did* find a run, so an
+       ! unconditional append prints a bare ' FD strict: ' line.
        call fd_add_message(verdict, reason)
     end if
 
@@ -752,6 +754,12 @@ contains
   !! \f$ R(p) = (m_0^p - m_1^p)/(m_1^p - m_2^p) \f$, continued at
   !! \f$p \le 0\f$ by its limit \f$\log(m_0/m_1)/\log(m_1/m_2)\f$ so that the
   !! bisection has a finite value at the bottom of its bracket.
+  !!
+  !! Neither divisor can vanish: `fd_check_distinct` has already refused any
+  !! sweep with a repeated magnitude, so \f$m_0 > m_1 > m_2 > 0\f$ strictly,
+  !! which makes \f$\log(m_1/m_2) > 0\f$ and \f$m_1^p > m_2^p\f$ for every
+  !! \f$p > 0\f$. That guarantee is a property of this module rather than of
+  !! its caller, so it holds for the recorded-sweep use too.
   !!
   !! @param p The order.
   !! @param m0 Largest of the three magnitudes.

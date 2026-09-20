@@ -93,10 +93,16 @@ module sensitivity
        FD_STATUS_UNREACHABLE
   implicit none
 
+  ! Everything the drivers do not call. The module parameters belong here
+  ! too: they are implementation constants of the harness, and the list named
+  ! only one of them, silently leaving the rest part of the module's
+  ! interface.
   private :: count_tokens, fd_lowercase, fd_sync_to_host, fd_project, &
        fd_step_headroom, fd_report_probe, fd_run_sweep, fd_global_offset, &
        fd_write_verdict, fd_sensitivity_floor, fd_sensitivity_scale, &
-       fd_assert_verdict, fd_skipped_assertion
+       fd_assert_verdict, fd_skipped_assertion, fd_env_truncated, &
+       fd_default_perturbations, fd_strict_perturbations, fd_design_lower, &
+       fd_design_upper, fd_no_limit, fd_direction_floor
 
   !> Status returned by `get_environment_variable` when the value did not fit
   !! in the buffer supplied. Silently accepting a truncated list would run a
