@@ -30,6 +30,47 @@ The test is done through a few common files:
 - `CMakeLists.txt`: Defines the build process and, via the `test_list`
   variable, registers one CTest per case file.
 
+## Configuring the sweep
+
+The assertion is made on the error at the **smallest** perturbation of the
+sweep, which is the rule this harness has always used: for a one-sided
+forward difference the error at large perturbations is dominated by
+truncation and must not be asserted against.
+
+Separately, and for information only, the harness *reports* the minimum
+`|error|` over the sweep and whether that minimum is interior to it
+(`BRACKETED`). A minimum sitting at either end is reported as
+`NOT BRACKETED`: at the smallest perturbation tried it means the round-off
+upturn was never reached (extend the sweep to smaller perturbations), and at
+the largest it means the error was still falling as the perturbation grew
+(extend the sweep to larger perturbations). Either way the number is only a
+bound on the floor, and the run says so explicitly rather than reporting an
+end point as if it were the floor. **Nothing is asserted on it** — which
+point of a sweep a gating assertion should use is an open question, not one
+this change answers.
+
+The regression driver (`tests/regression/sensitivity/problem_tester.f90`)
+takes two optional keys under `optimization`, alongside `fd_test_tolerance`:
+
+- `fd_test_perturbations`: a JSON array of strictly positive perturbation
+  magnitudes, any length and any order. Defaults to
+  `[1e-1, 1e-2, 1e-3, 1e-4]`, exactly the sweep used before it was
+  configurable. Bracketing a floor generally needs a much wider sweep than
+  that, e.g. 1e-1 down to 1e-7 at two points per decade.
+- `fd_test_central_difference`: `true` to use a central difference, whose
+  truncation error is O(eps^2) rather than O(eps), so it reaches the floor at
+  a far larger perturbation and separates floor from truncation much more
+  cleanly. Costs two forward solves per perturbation instead of one, and
+  needs the design variable to sit strictly inside its bounds. Defaults to
+  `false`, the one-sided forward difference.
+
+Both can also be set from the environment, which overrides the case file and
+lets one sweep be driven across several cases without editing any of them:
+`NEKO_TOP_FD_PERTURBATIONS="1e-1,5e-2,1e-2"` and `NEKO_TOP_FD_CENTRAL=1`
+(strictly `1`/`true`/`yes`/`on` or `0`/`false`/`no`/`off` — anything else is
+an error, never a silent false). The unit driver keeps its own fixed
+eight-point sweep.
+
 Currently, we have added tests for the following components:
 
 - `volume_constraint_t` (`volume.case`, `volume_filtered.case`)
