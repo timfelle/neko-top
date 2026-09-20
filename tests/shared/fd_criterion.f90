@@ -61,6 +61,7 @@
 !! value of the bracketing factor recovering it. Sign crossings of \f$e\f$ are
 !! likewise counted and reported but never used to exclude points.
 module fd_criterion
+  use, intrinsic :: ieee_arithmetic, only: ieee_is_nan
   use num_types, only: rp
   use math, only: NEKO_EPS
   use utils, only: neko_error
@@ -414,8 +415,7 @@ contains
     character(len=32) :: index_str
 
     do k = 1, n
-       if (errors(k) .ne. errors(k) .or. &
-            perturbations(k) .ne. perturbations(k)) then
+       if (ieee_is_nan(errors(k)) .or. ieee_is_nan(perturbations(k))) then
           write(index_str, '(I0)') k
           call neko_error('The finite-difference sweep contains a NaN at ' &
                // 'point ' // trim(index_str) // '. Every comparison ' // &
@@ -450,7 +450,7 @@ contains
     integer :: k
 
     do k = 1, n
-       if (perturbations(k) .eq. 0.0_rp) then
+       if (abs(perturbations(k)) .le. 0.0_rp) then
           call neko_error('The finite-difference sweep contains a zero ' // &
                'perturbation; there is no difference to take there.')
        end if
@@ -640,7 +640,7 @@ contains
     usable = .false.
     do k = 1, n - 2
        ! A vanished difference carries no order, and the ratio is undefined.
-       if (d(k) .eq. 0.0_rp .or. d(k + 1) .eq. 0.0_rp) cycle
+       if (abs(d(k)) .le. 0.0_rp .or. abs(d(k + 1)) .le. 0.0_rp) cycle
        ! Sign agreement as a product: a quotient of two differences at the
        ! bottom of the exponent range can overflow where the sign test cannot.
        if (d(k) * d(k + 1) .le. 0.0_rp) cycle
@@ -741,7 +741,7 @@ contains
 
     p = 0.0_rp
     solved = .false.
-    if (ratio .ne. ratio) return
+    if (ieee_is_nan(ratio)) return
     if (ratio .le. 0.0_rp) return
     if (ratio .le. fd_ratio_of_order(fd_order_lower, m0, m1, m2)) return
     if (ratio .ge. fd_ratio_of_order(fd_order_upper, m0, m1, m2)) return

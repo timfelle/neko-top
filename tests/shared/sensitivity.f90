@@ -625,7 +625,7 @@ contains
 
     work_arr(1) = 0.0_rp
     do j = 1, n
-       if (direction(j) .ne. 0.0_rp) then
+       if (abs(direction(j)) .gt. 0.0_rp) then
           work_arr(1) = work_arr(1) + sensitivities(j) * direction(j)
        end if
     end do
@@ -695,7 +695,7 @@ contains
     local_plus(1) = fd_no_limit
     local_minus(1) = fd_no_limit
     do j = 1, n
-       if (direction(j) .eq. 0.0_rp) cycle
+       if (abs(direction(j)) .le. 0.0_rp) cycle
        up = (fd_design_upper - design_values(j)) / abs(direction(j))
        down = (design_values(j) - fd_design_lower) / abs(direction(j))
        if (direction(j) .gt. 0.0_rp) then
@@ -1600,7 +1600,7 @@ contains
     ! with a zero direction are skipped rather than having zero added, so that
     ! the untouched part of the design is bit-for-bit the baseline.
     do j = 1, size(direction)
-       if (direction(j) .ne. 0.0_rp) then
+       if (abs(direction(j)) .gt. 0.0_rp) then
           design_perturbed%x(j) = design_vector%x(j) + step * direction(j)
        end if
     end do
