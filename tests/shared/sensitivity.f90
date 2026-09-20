@@ -17,6 +17,15 @@
 !! (e.g. the volume constraint) hit that floor at round-off; PDE-coupled
 !! objectives hit a discretisation/steady-state floor set by the case.
 !!
+!! That assertion is a false green whenever the signed error crosses zero
+!! inside the sweep -- the point nearest the crossing can be arbitrarily
+!! small while the bias is not. Setting `optimization.fd_test_strict` swaps it
+!! for the criterion in `fd_criterion`, which separates the bias from
+!! truncation before asserting on it, distinguishes an inadequate sweep from a
+!! wrong gradient, and writes its verdict to `FD_verdict_<case>.csv`. It is
+!! off by default, so no existing case changes verdict; see
+!! `fd_read_strict_options`.
+!!
 !! `report_sweep` additionally *reports* the minimum \f$|error|\f$ over the
 !! sweep, and whether that minimum is interior to the sweep (a genuine
 !! finite-difference floor) or sits at one of its ends (only a bound on one).
@@ -66,7 +75,7 @@ module sensitivity
   use simulation_m, only: simulation_t
   use design, only: design_t
   use utils, only: neko_error
-  use num_types, only: rp, i8
+  use num_types, only: rp, sp, i8
   use math, only: abscmp, NEKO_EPS, glsum, glmin, glmax
   use vector, only: vector_t
   use neko_config, only: NEKO_BCKND_DEVICE
@@ -77,11 +86,17 @@ module sensitivity
   use mpi_f08, only: MPI_Allreduce, MPI_Exscan, MPI_SUM, MPI_INTEGER8
   use gather_scatter, only : gs_t, GS_OP_ADD
   use json_module, only: json_file
-  use json_utils, only: json_get
+  use json_utils, only: json_get, json_get_or_default
+  use fd_criterion, only: fd_strict_options_t, fd_verdict_t, fd_evaluate, &
+       fd_verdict_print, fd_branch_name, fd_status_name, fd_c_hat_kind, &
+       FD_STATUS_OK, FD_STATUS_FLOOR_EXCEEDED, FD_STATUS_INCONCLUSIVE, &
+       FD_STATUS_UNREACHABLE
   implicit none
 
   private :: count_tokens, fd_lowercase, fd_sync_to_host, fd_project, &
-       fd_step_headroom, fd_report_probe, fd_run_sweep, fd_global_offset
+       fd_step_headroom, fd_report_probe, fd_run_sweep, fd_global_offset, &
+       fd_write_verdict, fd_sensitivity_floor, fd_sensitivity_scale, &
+       fd_assert_verdict
 
   !> Status returned by `get_environment_variable` when the value did not fit
   !! in the buffer supplied. Silently accepting a truncated list would run a
@@ -93,6 +108,25 @@ module sensitivity
   !! case file and the CI lane behave exactly as before.
   real(kind=rp), parameter :: fd_default_perturbations(4) = [ &
        1e-1_rp, 1e-2_rp, 1e-3_rp, 1e-4_rp]
+
+  !> The sweep the strict criterion defaults to: nine points, geometric with
+  !! ratio \f$\sqrt{10}\f$, from 1e-1 down to 1e-5. Geometric because the
+  !! order estimate is a statement about consecutive *ratios*; nine points so
+  !! that a truncation run and a plateau both have room to appear; and one
+  !! decade deeper than the historical sweep because the four-point sweep
+  !! stops before the round-off upturn on every case measured.
+  real(kind=rp), parameter :: fd_strict_perturbations(9) = [ &
+       1.0e-1_rp, 3.1622776601683794e-2_rp, 1.0e-2_rp, &
+       3.1622776601683794e-3_rp, 1.0e-3_rp, 3.1622776601683794e-4_rp, &
+       1.0e-4_rp, 3.1622776601683794e-5_rp, 1.0e-5_rp]
+
+  !> Fraction of the largest sensitivity in the field below which an
+  !! individual analytic sensitivity is treated as degenerate. The historical
+  !! `max(|b|, NEKO_EPS)` guard is far too permissive: a sensitivity of 1e-12
+  !! passes it and the quotient is then reported as a relative error, which
+  !! it is not. Anything below this floor is asserted on as an absolute
+  !! difference instead.
+  real(kind=rp), parameter :: fd_sensitivity_floor = 1e-10_rp
 
   !> Bounds assumed for a design variable. These match the clamping heuristic
   !! the one-sided sweep has always used (perturb downwards once the design
@@ -123,16 +157,22 @@ contains
   !!     of them;
   !!  2. the case-file key `optimization.fd_test_perturbations`, a JSON array
   !!     of numbers, sitting beside the existing `fd_test_tolerance`;
-  !!  3. `fd_default_perturbations`, the historical four-point sweep.
+  !!  3. `fd_strict_perturbations` when the strict criterion is in use, and
+  !!     `fd_default_perturbations` -- the historical four-point sweep --
+  !!     otherwise.
   !!
   !! Entries are perturbation *magnitudes* and must be strictly positive; the
   !! sign is chosen by the sweep itself so that the perturbed design stays
   !! within its bounds. The list need not be ordered or evenly spaced.
   !!
   !! @param params The case file to read the optional key from.
+  !! @param strict True when the strict criterion is in use, which defaults
+  !!        the sweep to `fd_strict_perturbations` rather than the historical
+  !!        four points. An explicit sweep, from either source, still wins.
   !! @param perturbations Allocated and filled with the sweep to use.
-  subroutine fd_read_perturbations(params, perturbations)
+  subroutine fd_read_perturbations(params, strict, perturbations)
     type(json_file), intent(inout) :: params
+    logical, intent(in) :: strict
     real(kind=rp), allocatable, intent(out) :: perturbations(:)
 
     character(len=*), parameter :: env_name = 'NEKO_TOP_FD_PERTURBATIONS'
@@ -188,6 +228,10 @@ contains
        if (size(perturbations) .lt. 1) then
           call neko_error('optimization.fd_test_perturbations is empty')
        end if
+
+    else if (strict) then
+       allocate(perturbations(size(fd_strict_perturbations)))
+       perturbations = fd_strict_perturbations
 
     else
        allocate(perturbations(size(fd_default_perturbations)))
@@ -252,6 +296,69 @@ contains
     end if
 
   end subroutine fd_read_central_difference
+
+  !> Read the strict finite-difference criterion's settings for a case.
+  !!
+  !! All four keys are optional and every default reproduces today's
+  !! behaviour, `optimization.fd_test_strict` most of all: with it false the
+  !! harness keeps asserting on the error at the smallest perturbation, so
+  !! adding this criterion changes no existing case's verdict.
+  !!
+  !!  * `optimization.fd_test_strict` -- apply the strict criterion.
+  !!  * `optimization.fd_test_order` -- the truncation order to expect.
+  !!    Defaults to 1 for a one-sided difference and 2 for a central one,
+  !!    which is why `central` has to be read first.
+  !!  * `optimization.fd_test_order_tolerance` -- half-width of the accepted
+  !!    band around that order.
+  !!  * `optimization.fd_test_plateau_fraction` -- how flat, as a fraction of
+  !!    the tolerance, a window must be to bound the bias.
+  !!
+  !! The last two are the criterion's calibration constants and are exposed
+  !! as case-file keys precisely so that re-tuning them does not need a
+  !! recompile.
+  !!
+  !! @param params The case file to read the optional keys from.
+  !! @param central True if the sweep uses a central difference.
+  !! @param opts The settings to use.
+  subroutine fd_read_strict_options(params, central, opts)
+    type(json_file), intent(inout) :: params
+    logical, intent(in) :: central
+    type(fd_strict_options_t), intent(out) :: opts
+
+    type(fd_strict_options_t) :: defaults
+    real(kind=rp) :: default_order
+
+    call json_get_or_default(params, 'optimization.fd_test_strict', &
+         opts%enabled, defaults%enabled)
+
+    default_order = defaults%p_expected
+    if (central) default_order = 2.0_rp
+    call json_get_or_default(params, 'optimization.fd_test_order', &
+         opts%p_expected, default_order)
+    call json_get_or_default(params, &
+         'optimization.fd_test_order_tolerance', opts%order_tolerance, &
+         defaults%order_tolerance)
+    call json_get_or_default(params, &
+         'optimization.fd_test_plateau_fraction', opts%plateau_fraction, &
+         defaults%plateau_fraction)
+
+    ! A non-positive setting here does not merely misbehave: it makes the
+    ! criterion inert -- no ratio can match a band of zero width, and no
+    ! window can be flatter than a zero spread -- while still reporting a
+    ! verdict, so it must be refused rather than accepted.
+    if (opts%p_expected .le. 0.0_rp) then
+       call neko_error('optimization.fd_test_order must be positive')
+    end if
+    if (opts%order_tolerance .le. 0.0_rp) then
+       call neko_error('optimization.fd_test_order_tolerance must be ' // &
+            'positive')
+    end if
+    if (opts%plateau_fraction .le. 0.0_rp) then
+       call neko_error('optimization.fd_test_plateau_fraction must be ' // &
+            'positive')
+    end if
+
+  end subroutine fd_read_strict_options
 
   !> Read whether the sweep perturbs a single design degree of freedom or the
   !! whole design along the sensitivity direction.
@@ -526,6 +633,37 @@ contains
 
   end function fd_project
 
+  !> The floor below which an individual analytic sensitivity is degenerate.
+  !!
+  !! Relative to the *field*, not to itself: what makes a relative error
+  !! meaningful is that the quantity it is divided by is a real number on the
+  !! scale of the problem. The historical `max(|b|, NEKO_EPS)` guard only
+  !! rules out an exact zero, so a sensitivity of 1e-12 in a field whose
+  !! largest entry is 1 passes it and the quotient is then reported, and
+  !! asserted on, as though it were a relative error.
+  !!
+  !! Collective: every rank must call this, and every rank gets the same
+  !! answer, so nothing downstream of it needs to communicate.
+  !!
+  !! @param target_sensitivities The analytic sensitivities, already
+  !!        synchronised to the host.
+  !! @param n Number of design degrees of freedom held locally.
+  !! @return The degeneracy floor for this field.
+  function fd_sensitivity_scale(target_sensitivities, n) result(eps_sens)
+    type(vector_t), intent(in) :: target_sensitivities
+    integer, intent(in) :: n
+    real(kind=rp) :: eps_sens
+
+    real(kind=rp) :: work_arr(1)
+
+    work_arr(1) = 0.0_rp
+    if (n .gt. 0) then
+       work_arr(1) = maxval(abs(target_sensitivities%x(1:n)))
+    end if
+    eps_sens = max(NEKO_EPS, fd_sensitivity_floor * glmax(work_arr, 1))
+
+  end function fd_sensitivity_scale
+
   !> Largest step magnitudes that keep the perturbed design inside its bounds.
   !!
   !! Returns the largest \f$t\f$ for which \f$x + t\,s\f$ (and, separately,
@@ -698,9 +836,11 @@ contains
   !!        which halves the truncation order at the cost of a second forward
   !!        solve per perturbation. Defaults to the one-sided forward
   !!        difference used historically.
+  !! @param strict_options (Optional) Settings of the strict criterion.
+  !!        Defaults to disabled, i.e. the historical assertion.
   subroutine compute_sensitivity_i(problem, sim, des, target_sensitivities, i, &
        perturbations, tolerance, file_name, is_objective, gs_h, &
-       central_difference)
+       central_difference, strict_options)
     class(problem_t), intent(inout) :: problem
     type(simulation_t), intent(inout) :: sim
     class(design_t), intent(inout) :: des
@@ -712,17 +852,21 @@ contains
     logical, intent(in) :: is_objective
     type(gs_t), intent(inout) :: gs_h
     logical, intent(in), optional :: central_difference
+    type(fd_strict_options_t), intent(in), optional :: strict_options
 
     real(kind=rp), allocatable :: direction(:)
-    real(kind=rp) :: target_sensitivity_i
+    real(kind=rp) :: target_sensitivity_i, eps_sens
+    type(fd_strict_options_t) :: strict
     logical :: central
     integer :: n
 
     central = .false.
     if (present(central_difference)) central = central_difference
+    if (present(strict_options)) strict = strict_options
 
     n = des%size()
     call fd_sync_to_host(target_sensitivities)
+    eps_sens = fd_sensitivity_scale(target_sensitivities, n)
 
     ! Build the one-hot direction: set the owning entry to 1 and
     ! gather-scatter with GS_OP_ADD -- the same mechanism Neko uses to
@@ -745,7 +889,8 @@ contains
     target_sensitivity_i = fd_project(target_sensitivities%x, direction, n)
 
     call fd_run_sweep(problem, sim, des, direction, target_sensitivity_i, i, &
-         perturbations, tolerance, file_name, is_objective, central, .false.)
+         perturbations, tolerance, file_name, is_objective, central, &
+         .false., eps_sens, strict)
 
     deallocate(direction)
 
@@ -787,9 +932,11 @@ contains
   !! @param gs_h Gather-scatter handle for the design's dofmap, used both to
   !!             assemble the gradient and to count the copies of each dof.
   !! @param central_difference (Optional) True to use a central difference.
+  !! @param strict_options (Optional) Settings of the strict criterion.
+  !!        Defaults to disabled, i.e. the historical assertion.
   subroutine compute_sensitivity_directional(problem, sim, des, &
        target_sensitivities, perturbations, tolerance, file_name, &
-       is_objective, gs_h, central_difference)
+       is_objective, gs_h, central_difference, strict_options)
     class(problem_t), intent(inout) :: problem
     type(simulation_t), intent(inout) :: sim
     class(design_t), intent(inout) :: des
@@ -800,15 +947,18 @@ contains
     logical, intent(in) :: is_objective
     type(gs_t), intent(inout) :: gs_h
     logical, intent(in), optional :: central_difference
+    type(fd_strict_options_t), intent(in), optional :: strict_options
 
     real(kind=rp), allocatable :: direction(:), copies(:)
     real(kind=rp) :: work_arr(1), gradient_norm, projection, max_component
-    real(kind=rp) :: n_design
+    real(kind=rp) :: n_design, eps_sens
+    type(fd_strict_options_t) :: strict
     logical :: central
     integer :: j, n
 
     central = .false.
     if (present(central_difference)) central = central_difference
+    if (present(strict_options)) strict = strict_options
 
     n = des%size()
     if (target_sensitivities%size() .lt. n) then
@@ -816,6 +966,7 @@ contains
             'vector is shorter than the design')
     end if
     call fd_sync_to_host(target_sensitivities)
+    eps_sens = fd_sensitivity_scale(target_sensitivities, n)
 
     allocate(direction(n))
     allocate(copies(n))
@@ -882,7 +1033,8 @@ contains
     end if
 
     call fd_run_sweep(problem, sim, des, direction, projection, -1, &
-         perturbations, tolerance, file_name, is_objective, central, .true.)
+         perturbations, tolerance, file_name, is_objective, central, .true., &
+         eps_sens, strict)
 
     deallocate(direction)
     deallocate(copies)
@@ -913,9 +1065,13 @@ contains
   !! @param central True to use a central difference.
   !! @param directional True when the whole design is perturbed along
   !!        `direction`; false for the historical single-dof probe.
+  !! @param eps_sens Floor below which the analytic derivative is degenerate
+  !!        and the assertion is made on the absolute difference instead.
+  !! @param strict Settings of the strict criterion. Disabled leaves the
+  !!        historical assertion on the smallest perturbation in place.
   subroutine fd_run_sweep(problem, sim, des, direction, target_derivative, &
        probe_index, perturbations, tolerance, file_name, is_objective, &
-       central, directional)
+       central, directional, eps_sens, strict)
     class(problem_t), intent(inout) :: problem
     type(simulation_t), intent(inout) :: sim
     class(design_t), intent(inout) :: des
@@ -928,6 +1084,8 @@ contains
     logical, intent(in) :: is_objective
     logical, intent(in) :: central
     logical, intent(in) :: directional
+    real(kind=rp), intent(in) :: eps_sens
+    type(fd_strict_options_t), intent(in) :: strict
 
     character(len=*), parameter :: fmt_head = '(4X,A12,4X,A10,6X,A11,5X,A5,10X)'
     character(len=*), parameter :: fmt_data = '(4X,4E15.6E3)'
@@ -941,6 +1099,9 @@ contains
     real(kind=rp) :: min_error, min_perturb, smallest_perturb, largest_perturb
     real(kind=rp) :: floor_error, design_value, limit_plus, limit_minus
     real(kind=rp), allocatable :: sweep_perturbs(:), sweep_errors(:)
+    real(kind=rp), allocatable :: sweep_differences(:)
+    type(fd_verdict_t) :: verdict
+    logical :: degenerate
     character(len=16) :: value_str
     integer :: min_index, i_write, floor_index
     logical :: prefer_negative
@@ -1028,6 +1189,7 @@ contains
 
     allocate(sweep_perturbs(n_perturbations))
     allocate(sweep_errors(n_perturbations))
+    allocate(sweep_differences(n_perturbations))
     i_write = 0
 
     do ip = 1, n_perturbations
@@ -1150,9 +1312,13 @@ contains
           call logger%write(log_data)
        end if
 
-       ! Record the whole sweep so that `report_sweep` can describe it.
+       ! Record the whole sweep so that `report_sweep` can describe it. The
+       ! unnormalised difference is kept beside the relative error because a
+       ! degenerate analytic derivative is asserted on in absolute terms,
+       ! where the relative error means nothing.
        sweep_perturbs(ip) = perturb
        sweep_errors(ip) = fd_error
+       sweep_differences(ip) = fd_estimate - target_derivative
     end do
 
     ! Restore the unperturbed design: the loop leaves the last perturbed
@@ -1191,17 +1357,72 @@ contains
     call report_sweep(min_error, min_perturb, smallest_perturb, &
          largest_perturb, min_index, n_perturbations)
 
-    ! Assert that the finite-difference estimate has converged to the analytic
-    ! derivative at the smallest perturbation: that is the Taylor floor it
-    ! must converge to. `minloc` returns the first occurrence of the minimum,
-    ! matching the first-wins tie-break this assertion has always used.
-    ! fd_error is built from globally reduced quantities and is therefore
-    ! identical on every rank, so this branch is collective and safe under MPI.
+    ! Everything from here on is built from globally reduced quantities and
+    ! is therefore bit-identical on every rank, so every rank runs the whole
+    ! analysis -- outside any rank guard, with only the writes guarded -- and
+    ! reaches the same verdict without a single collective. `minloc` returns
+    ! the first occurrence of the minimum, matching the first-wins tie-break
+    ! the historical assertion has always used.
     floor_index = minloc(abs(sweep_perturbs), dim = 1)
     floor_error = sweep_errors(floor_index)
-    if (abs(floor_error) .gt. tolerance) then
-       call neko_error('Finite difference estimate does not match ' // &
-            'sensitivity')
+    degenerate = abs(target_derivative) .le. eps_sens
+
+    if (rp .eq. sp) then
+       ! In single precision the functional itself is only reproducible to
+       ! about 1e-7 relative, so the smallest perturbation at which a
+       ! one-sided difference resolves anything is of order sqrt(1e-7) ~ 0.34
+       ! -- larger than the whole sweep. Any verdict here would be a verdict
+       ! about round-off, so refuse to pretend otherwise.
+       if (pe_rank .eq. 0) then
+          write(*, '(A)') ' FD sweep: SKIPPED -- this is a single-precision' &
+               // ' build. The functional is reproducible to only'
+          write(*, '(A)') ' FD sweep: ~1e-7 relative, which puts the' &
+               // ' smallest usable perturbation above 0.3, beyond any'
+          write(*, '(A)') ' FD sweep: sweep. The finite-difference' &
+               // ' assertion is not enforceable and is NOT being made.'
+          write(*, '(A)') ' FD sweep: Rebuild with --enable-real=dp to' &
+               // ' gate on this test.'
+       end if
+    else
+       if (strict%enabled) then
+          call fd_evaluate(sweep_perturbs, sweep_errors, tolerance, strict, &
+               verdict, degenerate)
+          if (pe_rank .eq. 0) then
+             call fd_verdict_print(verdict, tolerance)
+             call fd_write_verdict(file_name, verdict)
+          end if
+       end if
+
+       if (degenerate) then
+          ! The relative error is normalised by a guard rather than by the
+          ! sensitivity, so it is not a relative error and must not be
+          ! asserted on as one. The absolute difference still means
+          ! something, so that is what is gated on instead.
+          if (pe_rank .eq. 0) then
+             write(*, '(A,E15.6E3,A,E15.6E3)') &
+                  ' FD sweep: DEGENERATE SENSITIVITY -- the analytic ' // &
+                  'derivative', target_derivative, ' is at or below the ' // &
+                  'field floor', eps_sens
+             write(*, '(A)') ' FD sweep: so the logged relative error is ' &
+                  // 'normalised by that floor and is not a relative'
+             write(*, '(A,E15.6E3)') ' FD sweep: error. Asserting on the ' &
+                  // 'absolute difference instead:', &
+                  sweep_differences(floor_index)
+          end if
+          if (abs(sweep_differences(floor_index)) .gt. tolerance) then
+             call neko_error('Finite difference estimate does not match ' // &
+                  'sensitivity: the analytic sensitivity is degenerate, ' // &
+                  'and the absolute difference at the smallest ' // &
+                  'perturbation exceeds the tolerance')
+          end if
+
+       else if (strict%enabled) then
+          call fd_assert_verdict(verdict)
+
+       else if (abs(floor_error) .gt. tolerance) then
+          call neko_error('Finite difference estimate does not match ' // &
+               'sensitivity')
+       end if
     end if
 
     ! Free the internal vectors
@@ -1209,9 +1430,115 @@ contains
     call design_perturbed%free()
     call log_data%free()
     call constraint_vec%free()
-    deallocate(sweep_perturbs, sweep_errors)
+    deallocate(sweep_perturbs, sweep_errors, sweep_differences)
 
   end subroutine fd_run_sweep
+
+  !> Turn a strict verdict that did not certify into a failure, with a
+  !! message that says which kind of failure it is.
+  !!
+  !! The distinction is the whole point of the strict criterion: a floor that
+  !! exceeds the tolerance is a statement about the *gradient*, while an
+  !! inadequate sweep or an unreachable tolerance are statements about the
+  !! *test*. Reporting all three as one red is how a bad sweep gets read as a
+  !! bad adjoint.
+  !!
+  !! @param verdict The verdict to act on.
+  subroutine fd_assert_verdict(verdict)
+    type(fd_verdict_t), intent(in) :: verdict
+
+    if (verdict%passed) return
+
+    select case (verdict%status)
+    case (FD_STATUS_FLOOR_EXCEEDED)
+       call neko_error('Finite difference estimate does not match ' // &
+            'sensitivity: the finite-difference floor of this sweep ' // &
+            'exceeds the tolerance. The FD strict lines above give the ' // &
+            'floor, the measured truncation order and the window it was ' // &
+            'taken over.')
+    case (FD_STATUS_UNREACHABLE)
+       call neko_error('The finite-difference tolerance asked of this ' // &
+            'case is below what the functional''s own reproducibility ' // &
+            'permits, so no sweep of any depth can decide the gradient ' // &
+            'at it. The FD strict lines above give the smallest reachable ' &
+            // 'tolerance. This is NOT evidence that the gradient is wrong.')
+    case default
+       call neko_error('The finite-difference SWEEP is inadequate to ' // &
+            'decide this gradient: it contains neither a plateau that ' // &
+            'bounds the bias nor a truncation run of the expected order. ' // &
+            'Widen or deepen the sweep ' // &
+            '(optimization.fd_test_perturbations). This is NOT evidence ' // &
+            'that the gradient is wrong.')
+    end select
+
+  end subroutine fd_assert_verdict
+
+  !> Append a strict verdict to `FD_verdict_<case>.csv`.
+  !!
+  !! Deliberately a *separate* file from `FD_check_<case>.csv`, whose schema
+  !! and contents are left exactly as they were: that file is compared
+  !! against reference data, so a column added to it is a broken comparison.
+  !!
+  !! One row per sweep, appended, matching how the sweep log itself
+  !! accumulates. Rank 0 only -- every rank holds the same verdict, and
+  !! several ranks opening one path is a genuine race.
+  !!
+  !! @param file_name The case file name, used to name the CSV.
+  !! @param verdict The verdict to record.
+  subroutine fd_write_verdict(file_name, verdict)
+    character(len=*), intent(in) :: file_name
+    type(fd_verdict_t), intent(in) :: verdict
+
+    character(len=*), parameter :: header = 'p_hat,C_hat,branch,status,' // &
+         'bracketed,min_abs_error,min_perturbation,n_truncation_points,' // &
+         'n_sign_crossings,C_hat_kind,tol_min'
+    character(len=512) :: path, row
+    character(len=32) :: p_str, c_str, min_str, pert_str, tol_str
+    character(len=32) :: trunc_str, cross_str
+    integer :: unit_id, ios, name_len, slash
+    logical :: exists
+
+    name_len = len_trim(file_name)
+    slash = index(file_name(:name_len), '/', back = .true.)
+    path = 'FD_verdict_' // trim(file_name(slash+1:name_len-5)) // '.csv'
+
+    ! A field the criterion could not measure is written as `nan` rather
+    ! than as a zero that would read as a measurement.
+    p_str = 'nan'
+    if (verdict%has_p_hat) write(p_str, '(E17.10E3)') verdict%p_hat
+    c_str = 'nan'
+    if (verdict%has_c_hat) write(c_str, '(E17.10E3)') verdict%c_hat
+    tol_str = 'nan'
+    if (verdict%has_tol_min) write(tol_str, '(E17.10E3)') verdict%tol_min
+    write(min_str, '(E17.10E3)') verdict%min_abs_error
+    write(pert_str, '(E17.10E3)') verdict%min_perturbation
+    write(trunc_str, '(I0)') verdict%n_truncation_points
+    write(cross_str, '(I0)') verdict%n_sign_crossings
+
+    row = trim(adjustl(p_str)) // ',' // trim(adjustl(c_str)) // ',' // &
+         trim(fd_branch_name(verdict%branch)) // ',' // &
+         trim(fd_status_name(verdict%status)) // ','
+    if (verdict%bracketed) then
+       row = trim(row) // 'true,'
+    else
+       row = trim(row) // 'false,'
+    end if
+    row = trim(row) // trim(adjustl(min_str)) // ',' // &
+         trim(adjustl(pert_str)) // ',' // trim(adjustl(trunc_str)) // &
+         ',' // trim(adjustl(cross_str)) // ',' // &
+         trim(fd_c_hat_kind(verdict)) // ',' // trim(adjustl(tol_str))
+
+    inquire(file = trim(path), exist = exists)
+    open(newunit = unit_id, file = trim(path), action = 'write', &
+         position = 'append', status = 'unknown', iostat = ios)
+    if (ios .ne. 0) then
+       call neko_error('Could not open ' // trim(path) // ' for writing')
+    end if
+    if (.not. exists) write(unit_id, '(A)') header
+    write(unit_id, '(A)') trim(row)
+    close(unit_id)
+
+  end subroutine fd_write_verdict
 
   !> Evaluate the objective (or constraint) at the design displaced by
   !! `step * direction`.
@@ -1376,9 +1703,10 @@ contains
   !! @param is_objective True to test an objective, false a constraint.
   !! @param gs_h Gather-scatter handle for the design's dofmap.
   !! @param central_difference (Optional) True to use a central difference.
+  !! @param strict_options (Optional) Settings of the strict criterion.
   subroutine compute_sensitivity_list(problem, sim, des, target_sensitivities, &
        list, perturbations, tolerance, file_name, is_objective, gs_h, &
-       central_difference)
+       central_difference, strict_options)
     class(problem_t), intent(inout) :: problem
     type(simulation_t), intent(inout) :: sim
     class(design_t), intent(inout) :: des
@@ -1390,6 +1718,7 @@ contains
     logical, intent(in) :: is_objective
     type(gs_t), intent(inout) :: gs_h
     logical, intent(in), optional :: central_difference
+    type(fd_strict_options_t), intent(in), optional :: strict_options
 
     integer :: i, n
 
@@ -1397,7 +1726,7 @@ contains
     do i = 1, n
        call compute_sensitivity_i(problem, sim, des, target_sensitivities, &
             list(i), perturbations, tolerance, file_name, is_objective, gs_h, &
-            central_difference)
+            central_difference, strict_options)
     end do
   end subroutine compute_sensitivity_list
 

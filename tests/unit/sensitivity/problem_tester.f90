@@ -21,7 +21,9 @@ program problem_tester
   use matrix, only: matrix_t
   use math, only: abscmp, copy
   use device_math, only: device_copy
-  use sensitivity, only: compute_sensitivity
+  use sensitivity, only: compute_sensitivity, fd_read_strict_options, &
+       fd_read_perturbations
+  use fd_criterion, only: fd_strict_options_t
   implicit none
 
   ! JSON related arguments
@@ -42,8 +44,16 @@ program problem_tester
   ! PDE-coupled objectives, whose finite-difference floor is set by the
   ! discretisation/steady-state, set a looser value in their case file.
   real(kind=rp) :: tolerance
-  real(kind=rp), parameter :: perturbations(8) = [ &
+  !> The sweep this tier has always run. Kept as the default so that the
+  !! logged CSVs stay comparable run to run; the strict criterion asks for a
+  !! geometric sweep instead, because its order estimate is a statement about
+  !! successive ratios and these alternate 5, 2, 5, 2.
+  real(kind=rp), parameter :: default_perturbations(8) = [ &
        5e-1_rp, 1e-1_rp, 5e-2_rp, 1e-2_rp, 5e-3_rp, 1e-3_rp, 5e-4_rp, 1e-4_rp]
+  real(kind=rp), allocatable :: perturbations(:)
+  !> Settings of the strict assertion criterion. Disabled unless the case
+  !! file asks for it, so the historical assertion stays the default.
+  type(fd_strict_options_t) :: strict_options
 
   type(vector_t) :: sensitivities
   type(matrix_t) :: constraint_sensitivity
@@ -72,6 +82,15 @@ program problem_tester
   call json_get(parameters, 'optimization.design', design_parameters)
   call json_get_or_default(parameters, 'optimization.fd_test_tolerance', &
        tolerance, 1e-5_rp)
+
+  ! This tier always takes a one-sided difference, hence the .false.
+  call fd_read_strict_options(parameters, .false., strict_options)
+  if (strict_options%enabled) then
+     call fd_read_perturbations(parameters, .true., perturbations)
+  else
+     allocate(perturbations(size(default_perturbations)))
+     perturbations = default_perturbations
+  end if
 
   ! -------------------------------------------------------------------------- !
   ! Initialization of the components
@@ -138,10 +157,12 @@ program problem_tester
 
   call compute_sensitivity(prob, sim, des, sensitivities, &
        i_max, perturbations, tolerance, trim(parameter_file), is_objective, &
-       sim%fluid%gs_Xh)
+       sim%fluid%gs_Xh, strict_options = strict_options)
 
   ! -------------------------------------------------------------------------- !
   ! Clean up the components
+
+  if (allocated(perturbations)) deallocate(perturbations)
 
   call sensitivities%free()
   call constraint_sensitivity%free()

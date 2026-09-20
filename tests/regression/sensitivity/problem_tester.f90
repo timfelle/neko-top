@@ -24,7 +24,8 @@ program problem_tester
   use sensitivity, only: compute_sensitivity, &
        compute_sensitivity_directional, fd_read_perturbations, &
        fd_read_central_difference, fd_read_mode, fd_read_probe_index, &
-       fd_resolve_probe_index
+       fd_resolve_probe_index, fd_read_strict_options
+  use fd_criterion, only: fd_strict_options_t
   use user, only: user_setup
   implicit none
 
@@ -54,6 +55,9 @@ program problem_tester
   real(kind=rp) :: tolerance
   real(kind=rp), allocatable :: perturbations(:)
   logical :: use_central
+  !> Settings of the strict assertion criterion. Disabled unless the case
+  !! file asks for it, so the historical assertion stays the default.
+  type(fd_strict_options_t) :: strict_options
   !> True to perturb the whole design along the normalised sensitivity
   !! direction (the Taylor test) rather than probing a single dof.
   logical :: fd_directional
@@ -94,8 +98,13 @@ program problem_tester
   call json_get(parameters, 'optimization.design', design_parameters)
   call json_get_or_default(parameters, 'optimization.fd_test_tolerance', &
        tolerance, 1e-3_rp)
-  call fd_read_perturbations(parameters, perturbations)
+  ! Order matters: the expected truncation order defaults from the
+  ! one-sided/central choice, and the default sweep from whether the strict
+  ! criterion is in use.
   call fd_read_central_difference(parameters, use_central)
+  call fd_read_strict_options(parameters, use_central, strict_options)
+  call fd_read_perturbations(parameters, strict_options%enabled, &
+       perturbations)
   call fd_read_mode(parameters, fd_directional)
   call fd_read_probe_index(probe_dof, probe_dof_set)
 
@@ -205,11 +214,11 @@ program problem_tester
      ! argmax-selected component of it.
      call compute_sensitivity_directional(prob, sim, des, sensitivities, &
           perturbations, tolerance, trim(parameter_file), is_objective, &
-          sim%fluid%gs_Xh, use_central)
+          sim%fluid%gs_Xh, use_central, strict_options)
   else
      call compute_sensitivity(prob, sim, des, sensitivities, &
           i_max, perturbations, tolerance, trim(parameter_file), &
-          is_objective, sim%fluid%gs_Xh, use_central)
+          is_objective, sim%fluid%gs_Xh, use_central, strict_options)
   end if
 
   ! -------------------------------------------------------------------------- !

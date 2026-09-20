@@ -51,6 +51,9 @@ add_dependencies(sensitivity_test_prepare sensitivity_prepare_script)
 # ============================================================================ #
 # Build the single driver executable
 add_executable(problem_tester_sensitivity_bin EXCLUDE_FROM_ALL
+    # fd_criterion is listed first: sensitivity uses it, and the Fortran
+    # module it defines has to exist by then.
+    ${SHARED_TEST_SOURCES}/fd_criterion.f90
     ${SHARED_TEST_SOURCES}/sensitivity.f90
     ${SENSITIVITY_DRIVER}
 )

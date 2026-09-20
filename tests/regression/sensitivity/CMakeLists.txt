@@ -23,7 +23,9 @@ add_executable(reg_problem_tester_sensitivity_bin
     ${CMAKE_CURRENT_SOURCE_DIR}/user.f90
     ${CMAKE_CURRENT_SOURCE_DIR}/problem_tester.f90
 
-    # Shared sensitivity module.
+    # Shared sensitivity modules. fd_criterion is listed first: sensitivity
+    # uses it, and the Fortran module it defines has to exist by then.
+    ${SHARED_TEST_SOURCES}/fd_criterion.f90
     ${SHARED_TEST_SOURCES}/sensitivity.f90
 )
 target_link_libraries(reg_problem_tester_sensitivity_bin
