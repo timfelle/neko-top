@@ -135,6 +135,16 @@ module sensitivity
   real(kind=rp), parameter :: fd_design_lower = 0.0_rp
   real(kind=rp), parameter :: fd_design_upper = 1.0_rp
 
+  !> Fraction of the largest entry of the perturbation direction below which
+  !! an entry is ignored when the step headroom is measured. A normalised
+  !! gradient can carry entries many orders below its largest, down to
+  !! denormals, and the headroom at such an entry is `(1 - x)/|s_j|`, which
+  !! overflows -- and, under the Testing build's `-ffpe-trap=overflow`,
+  !! SIGFPEs -- long before the entry constrains anything: at this floor the
+  !! entry moves the design by at most 1e-12 of the step, which is below the
+  !! round-off of the design value it is added to.
+  real(kind=rp), parameter :: fd_direction_floor = 1e-12_rp
+
   !> Sentinel step limit used where a design coordinate constrains nothing --
   !! larger than any perturbation a sweep could sensibly request, so `min`
   !! against it is a no-op.
@@ -698,8 +708,10 @@ contains
   !! \f$x - t\,s\f$) is within \f$[0,1]\f$ at *every* design coordinate. Both
   !! limits are globally reduced, so every rank agrees: a shared dof is held by
   !! several ranks and each must clamp identically or the design stops being
-  !! single-valued. Coordinates with a zero direction entry never move and so
-  !! place no limit.
+  !! single-valued. Coordinates whose direction entry is below
+  !! `fd_direction_floor` times the largest entry of the direction barely
+  !! move and place no limit; they are skipped rather than divided by, since
+  !! dividing by a denormal overflows.
   !!
   !! For the one-hot direction of the single-dof sweep this reduces to
   !! \f$x_i\f$ of headroom downwards and \f$1-x_i\f$ upwards, exactly the
@@ -718,12 +730,23 @@ contains
     real(kind=rp), intent(out) :: limit_plus, limit_minus
 
     real(kind=rp) :: local_plus(1), local_minus(1), up, down
+    real(kind=rp) :: local_scale(1), floor_value
     integer :: j
+
+    ! The floor is relative to the whole direction, so it must be measured
+    ! over the whole direction: the reduction is collective and sits outside
+    ! any ownership test, and it also makes every rank skip the same entries
+    ! of a shared dof.
+    local_scale(1) = 0.0_rp
+    do j = 1, n
+       local_scale(1) = max(local_scale(1), abs(direction(j)))
+    end do
+    floor_value = fd_direction_floor * glmax(local_scale, 1)
 
     local_plus(1) = fd_no_limit
     local_minus(1) = fd_no_limit
     do j = 1, n
-       if (abs(direction(j)) .le. 0.0_rp) cycle
+       if (abs(direction(j)) .le. floor_value) cycle
        up = (fd_design_upper - design_values(j)) / abs(direction(j))
        down = (design_values(j) - fd_design_lower) / abs(direction(j))
        if (direction(j) .gt. 0.0_rp) then
