@@ -72,7 +72,90 @@ and lets one sweep be driven across several cases without editing any of them:
 `NEKO_TOP_FD_PERTURBATIONS="1e-1,5e-2,1e-2"`, `NEKO_TOP_FD_CENTRAL=1`
 (strictly `1`/`true`/`yes`/`on` or `0`/`false`/`no`/`off` — anything else is
 an error, never a silent false) and `NEKO_TOP_FD_MODE=directional`. The unit
-driver keeps its own fixed eight-point sweep and is always in `dof` mode.
+driver is always in `dof` mode, and keeps its own fixed eight-point sweep
+unless the strict criterion below is switched on, in which case it reads the
+sweep the same way the regression driver does.
+
+## The strict criterion (`fd_test_strict`)
+
+The assertion on the smallest perturbation is a **false green whenever the
+signed error crosses zero inside the sweep**. Bug #43 is the worked example:
+its four measured rows read `2.3e-6` at the smallest perturbation, while the
+bias of that gradient is `1.46e-5` — the sweep happened to sample near the
+crossing. The error at one point of a sweep is not the bias.
+
+`"fd_test_strict": true` under `optimization` swaps that assertion for one
+that separates the bias from truncation first. It is **off by default**, so
+no existing case changes verdict. Two certificates are computed, and the
+sweep passes if either certifies that `|C| <= fd_test_tolerance`:
+
+- **BOUNDED** — a window of at least three consecutive points whose signed
+  errors span at most `fd_test_plateau_fraction * tolerance`. Truncation is
+  negligible across such a window, so it *bounds* the bias by
+  `|mean| + 2*spread`. This is what certifies `volume` and
+  `volume_filtered`: both are exactly linear in the design variable, have no
+  truncation branch, and find no order run at any order tolerance up to 2.0.
+- **FIT** — the differences `d_k = e_k - e_{k+1}` cancel the bias exactly, so
+  the truncation order can be measured without knowing it. Over the longest
+  single-signed run of the expected order the bias is *estimated* by
+  Richardson extrapolation and cross-checked against a three-term fit (a
+  disagreement warns, it does not fail).
+
+Anything else is `INCONCLUSIVE`, which is a **loud failure saying the sweep is
+inadequate** — deliberately a different statement from the gradient being
+wrong, because conflating the two is how a bad sweep gets read as a bad
+adjoint. The same applies to `TOLERANCE_UNREACHABLE`: the harness measures
+the smallest tolerance the functional's own reproducibility permits,
+`sqrt(40*N*|A|)`, and a tolerance below it cannot be decided by any sweep of
+any depth. Measured: `#43` 9.9e-6, `brinkman_dissipation` 1.1e-4,
+`viscous_dissipation` 1.4e-4, `volume` 4.2e-9, `volume_filtered` 1.8e-7 —
+note that the unit tier's default `fd_test_tolerance` of 1e-5 is unreachable
+for any case with a real truncation slope, which is why the two dissipation
+cases already override it.
+
+Whether the sweep brackets the round-off upturn is **reported and never gated
+on**. Requiring an upturn rejects bug #43's own sweep and lifts the false-red
+rate from 0.012 to 0.73, with no value of the bracketing factor recovering
+it. Sign crossings are counted for the same reason and never used to exclude
+points.
+
+Three further optional keys, all under `optimization`:
+
+- `fd_test_order`: the truncation order to expect. Defaults to `1.0`, or
+  `2.0` when `fd_test_central_difference` is on.
+- `fd_test_order_tolerance`: half-width of the accepted band around that
+  order. Defaults to `0.10`. Tightening it from 0.25 to 0.10 trims the
+  largest-perturbation points, where the functional is strongly nonlinear,
+  out of the fit window — measured false-red 0.0023 against 0.0123.
+- `fd_test_plateau_fraction`: how flat, as a fraction of the tolerance, a
+  window must be to bound the bias. Defaults to `0.25`.
+
+With the criterion on, the sweep defaults to nine geometric points from 1e-1
+to 1e-5 (ratio `sqrt(10)`) instead of the historical four. An explicit
+`fd_test_perturbations` still wins. The order estimate is a statement about
+successive *ratios*, so a geometric sweep is what it is calibrated on; a
+non-geometric one (the unit tier's `[5e-1, 1e-1, 5e-2, ...]` alternates 5, 2,
+5, 2) is still handled correctly, because the order is recovered by bisection
+on `R(p) = (m0^p - m1^p)/(m1^p - m2^p)` rather than read off a single ratio.
+
+Each strict run appends one row to **`FD_verdict_<case>.csv`**:
+`p_hat, C_hat, branch, status, bracketed, min_abs_error, min_perturbation,
+n_truncation_points, n_sign_crossings, C_hat_kind, tol_min`. `C_hat_kind`
+distinguishes a FIT *estimate* from a BOUNDED *bound* — they are different
+claims and must not be read as the same number. `FD_check_<case>.csv` is
+untouched by all of this, schema and contents both.
+
+## Two guards that apply whether or not the criterion is on
+
+- **Degenerate sensitivities.** An analytic sensitivity below `1e-10` of the
+  largest in the field is treated as degenerate and asserted on as an
+  **absolute** difference. `max(|b|, NEKO_EPS)` only rules out an exact zero,
+  so a sensitivity of 1e-12 in an O(1) field passed it and the quotient was
+  then reported, and gated on, as though it were a relative error.
+- **Single precision.** A `--enable-real=sp` build skips the assertion,
+  loudly. There the functional is reproducible to only ~1e-7 relative, which
+  puts the smallest perturbation that resolves anything above 0.3 — larger
+  than any sweep — so the assertion was gating on round-off.
 
 ## Which direction the sweep differentiates along
 

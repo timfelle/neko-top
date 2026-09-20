@@ -1380,8 +1380,8 @@ contains
                // ' smallest usable perturbation above 0.3, beyond any'
           write(*, '(A)') ' FD sweep: sweep. The finite-difference' &
                // ' assertion is not enforceable and is NOT being made.'
-          write(*, '(A)') ' FD sweep: Rebuild with --enable-real=dp to' &
-               // ' gate on this test.'
+          write(*, '(A)') ' FD sweep: Configure Neko with --enable-real' &
+               // ' set to dp and rebuild to gate on this test.'
        end if
     else
        if (strict%enabled) then
@@ -1489,9 +1489,14 @@ contains
     character(len=*), intent(in) :: file_name
     type(fd_verdict_t), intent(in) :: verdict
 
-    character(len=*), parameter :: header = 'p_hat,C_hat,branch,status,' // &
-         'bracketed,min_abs_error,min_perturbation,n_truncation_points,' // &
-         'n_sign_crossings,C_hat_kind,tol_min'
+    !> Field separator, written as a named constant rather than inline so
+    !! that the row and its header cannot disagree about it.
+    character(len=1), parameter :: sep = ','
+    character(len=*), parameter :: header = &
+         'p_hat' // sep // 'C_hat' // sep // 'branch' // sep // &
+         'status' // sep // 'bracketed' // sep // 'min_abs_error' // sep // &
+         'min_perturbation' // sep // 'n_truncation_points' // sep // &
+         'n_sign_crossings' // sep // 'C_hat_kind' // sep // 'tol_min'
     character(len=512) :: path, row
     character(len=32) :: p_str, c_str, min_str, pert_str, tol_str
     character(len=32) :: trunc_str, cross_str
@@ -1515,18 +1520,18 @@ contains
     write(trunc_str, '(I0)') verdict%n_truncation_points
     write(cross_str, '(I0)') verdict%n_sign_crossings
 
-    row = trim(adjustl(p_str)) // ',' // trim(adjustl(c_str)) // ',' // &
-         trim(fd_branch_name(verdict%branch)) // ',' // &
-         trim(fd_status_name(verdict%status)) // ','
+    row = trim(adjustl(p_str)) // sep // trim(adjustl(c_str)) // sep // &
+         trim(fd_branch_name(verdict%branch)) // sep // &
+         trim(fd_status_name(verdict%status)) // sep
     if (verdict%bracketed) then
-       row = trim(row) // 'true,'
+       row = trim(row) // 'true' // sep
     else
-       row = trim(row) // 'false,'
+       row = trim(row) // 'false' // sep
     end if
-    row = trim(row) // trim(adjustl(min_str)) // ',' // &
-         trim(adjustl(pert_str)) // ',' // trim(adjustl(trunc_str)) // &
-         ',' // trim(adjustl(cross_str)) // ',' // &
-         trim(fd_c_hat_kind(verdict)) // ',' // trim(adjustl(tol_str))
+    row = trim(row) // trim(adjustl(min_str)) // sep // &
+         trim(adjustl(pert_str)) // sep // trim(adjustl(trunc_str)) // &
+         sep // trim(adjustl(cross_str)) // sep // &
+         trim(fd_c_hat_kind(verdict)) // sep // trim(adjustl(tol_str))
 
     inquire(file = trim(path), exist = exists)
     open(newunit = unit_id, file = trim(path), action = 'write', &
