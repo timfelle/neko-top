@@ -16,13 +16,15 @@ program problem_tester
   use device, only: device_memcpy, DEVICE_TO_HOST
 
   ! Modules specific to this test
-  use num_types, only: rp
+  use num_types, only: rp, i8
   use vector, only: vector_t
   use matrix, only: matrix_t
   use math, only: abscmp, copy, glmax
   use comm, only: pe_rank
-  use sensitivity, only: compute_sensitivity, fd_read_perturbations, &
-       fd_read_central_difference
+  use sensitivity, only: compute_sensitivity, &
+       compute_sensitivity_directional, fd_read_perturbations, &
+       fd_read_central_difference, fd_read_mode, fd_read_probe_index, &
+       fd_resolve_probe_index
   use user, only: user_setup
   implicit none
 
@@ -42,15 +44,25 @@ program problem_tester
   ! optional JSON key `optimization.fd_test_tolerance`; it defaults to a value
   ! appropriate for the fully steady-state-converged regression cases.
   !
-  ! The perturbation sweep and the one-sided/central choice are likewise
-  ! optional per case (`optimization.fd_test_perturbations` and
-  ! `optimization.fd_test_central_difference`, each also overridable from the
-  ! environment for a sweep driven across several cases at once), and default
-  ! to the historical four-point one-sided sweep. See `fd_read_perturbations`
-  ! and `fd_read_central_difference` in tests/shared/sensitivity.f90.
+  ! The perturbation sweep, the one-sided/central choice and the dof/directional
+  ! mode are likewise optional per case (`optimization.fd_test_perturbations`,
+  ! `optimization.fd_test_central_difference` and `optimization.fd_test_mode`,
+  ! each also overridable from the environment for a sweep driven across
+  ! several cases at once), and default to the historical four-point one-sided
+  ! single-dof sweep. See `fd_read_perturbations`, `fd_read_central_difference`
+  ! and `fd_read_mode` in tests/shared/sensitivity.f90.
   real(kind=rp) :: tolerance
   real(kind=rp), allocatable :: perturbations(:)
   logical :: use_central
+  !> True to perturb the whole design along the normalised sensitivity
+  !! direction (the Taylor test) rather than probing a single dof.
+  logical :: fd_directional
+  !> A fixed global design index to probe, from NEKO_TOP_FD_PROBE_INDEX. The
+  !! default probe is the argmax of |sensitivity|, which *moves* whenever the
+  !! sensitivity field moves, so two runs of the same case can otherwise
+  !! silently differentiate with respect to two different design variables.
+  integer(kind=i8) :: probe_dof
+  logical :: probe_dof_set
 
   type(vector_t) :: sensitivities
   type(matrix_t) :: constraint_sensitivity
@@ -84,6 +96,8 @@ program problem_tester
        tolerance, 1e-3_rp)
   call fd_read_perturbations(parameters, perturbations)
   call fd_read_central_difference(parameters, use_central)
+  call fd_read_mode(parameters, fd_directional)
+  call fd_read_probe_index(probe_dof, probe_dof_set)
 
   ! -------------------------------------------------------------------------- !
   ! Initialization of the components
@@ -166,9 +180,37 @@ program problem_tester
   ! Loop over the perturbations and compare the finite difference estimate with
   ! the sensitivity computed by our method.
 
-  call compute_sensitivity(prob, sim, des, sensitivities, &
-       i_max, perturbations, tolerance, trim(parameter_file), is_objective, &
-       sim%fluid%gs_Xh, use_central)
+  ! Override the argmax probe with an explicitly named design dof, if one was
+  ! requested. This is what makes two runs comparable: the argmax above moves
+  ! whenever the sensitivity field moves, so two runs of the same case can
+  ! otherwise silently differentiate with respect to two different design
+  ! variables. The global design index to use is printed by every run (the
+  ! 'FD probe' line), so pinning one run to another is a copy-paste.
+  if (probe_dof_set) then
+     if (fd_directional) then
+        if (pe_rank .eq. 0) then
+           write(*, '(A)') ' FD probe: WARNING -- NEKO_TOP_FD_PROBE_INDEX ' // &
+                'is set but the mode is directional, which perturbs'
+           write(*, '(A)') ' FD probe: WARNING -- every design dof at once. ' &
+                // 'The requested dof is ignored.'
+        end if
+     else
+        call fd_resolve_probe_index(des%size(), probe_dof, i_max)
+     end if
+  end if
+
+  if (fd_directional) then
+     ! Perturb the whole design along s = g/||g|| and compare against <g, s>.
+     ! Validates the entire gradient field in one sweep rather than one
+     ! argmax-selected component of it.
+     call compute_sensitivity_directional(prob, sim, des, sensitivities, &
+          perturbations, tolerance, trim(parameter_file), is_objective, &
+          sim%fluid%gs_Xh, use_central)
+  else
+     call compute_sensitivity(prob, sim, des, sensitivities, &
+          i_max, perturbations, tolerance, trim(parameter_file), &
+          is_objective, sim%fluid%gs_Xh, use_central)
+  end if
 
   ! -------------------------------------------------------------------------- !
   ! Clean up the components
