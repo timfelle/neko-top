@@ -86,7 +86,7 @@ module sensitivity
   use mpi_f08, only: MPI_Allreduce, MPI_Exscan, MPI_SUM, MPI_INTEGER8
   use gather_scatter, only : gs_t, GS_OP_ADD
   use json_module, only: json_file
-  use json_utils, only: json_get, json_get_or_default
+  use json_utils, only: json_get, json_get_or_default, json_extract_item
   use fd_criterion, only: fd_strict_options_t, fd_verdict_t, fd_evaluate, &
        fd_verdict_print, fd_branch_name, fd_status_name, fd_c_hat_kind, &
        FD_STATUS_OK, FD_STATUS_FLOOR_EXCEEDED, FD_STATUS_INCONCLUSIVE, &
@@ -101,8 +101,29 @@ module sensitivity
        fd_step_headroom, fd_report_probe, fd_run_sweep, fd_global_offset, &
        fd_write_verdict, fd_sensitivity_floor, fd_sensitivity_scale, &
        fd_assert_verdict, fd_skipped_assertion, fd_env_truncated, &
+       fd_name_targets, &
        fd_default_perturbations, fd_strict_perturbations, fd_design_lower, &
        fd_design_upper, fd_no_limit, fd_direction_floor
+
+  !> One thing a finite-difference driver checks: either the weighted total
+  !! of every objective, or one individual constraint.
+  !!
+  !! A run checks a *list* of these, so that a case can gate on its objective
+  !! and its constraints in the same invocation rather than being restricted
+  !! to one or the other.
+  type, public :: fd_target_t
+     !> True when the target is the weighted total of all objectives, false
+     !! when it is the constraint at `constraint_index`.
+     logical :: is_objective = .true.
+     !> 1-based index of the constraint to check. Meaningless, and ignored,
+     !! when `is_objective` is true.
+     integer :: constraint_index = 1
+     !> Suffix appended to this target's CSV file names. Deliberately empty
+     !! whenever the run has a single target, so that a one-target run keeps
+     !! writing exactly `FD_check_<case>.csv` and the reference data it is
+     !! compared against keeps matching.
+     character(len=32) :: suffix = ''
+  end type fd_target_t
 
   !> Status returned by `get_environment_variable` when the value did not fit
   !! in the buffer supplied. Silently accepting a truncated list would run a
@@ -520,6 +541,204 @@ contains
 
   end subroutine fd_read_probe_index
 
+  !> Read the list of finite-difference targets to check for a case.
+  !!
+  !! Optional case-file key `optimization.fd_test_targets`, an array of
+  !! objects:
+  !!
+  !! ```json
+  !! "fd_test_targets": [
+  !!     { "kind": "objective" },
+  !!     { "kind": "constraint", "index": 1 },
+  !!     { "kind": "constraint", "name": "volume" }
+  !! ]
+  !! ```
+  !!
+  !! A constraint is named by `index` (1-based, in case-file order) or by
+  !! `name` (the constraint's own name), exactly one of the two.
+  !!
+  !! `kind: "objective"` means the **weighted total of every objective**, and
+  !! only that; supplying an `index` beside it is an error rather than a
+  !! per-objective check. See the error text raised below for why that is a
+  !! structural property of the adjoint rather than a missing feature.
+  !!
+  !! **When the key is absent the historical dispatch is reproduced exactly**:
+  !! the objective total if the case has no constraints, and constraint 1
+  !! otherwise. Every existing case file therefore behaves as before.
+  !!
+  !! @param params The case file to read the optional key from.
+  !! @param problem The problem, used to bound the constraint indices and to
+  !!        resolve constraint names.
+  !! @param targets The targets to check, in the order they were listed.
+  subroutine fd_read_targets(params, problem, targets)
+    type(json_file), intent(inout) :: params
+    class(problem_t), intent(in) :: problem
+    type(fd_target_t), allocatable, intent(out) :: targets(:)
+
+    character(len=*), parameter :: path = 'optimization.fd_test_targets'
+    type(json_file) :: target_json
+    character(len=:), allocatable :: kind, name
+    character(len=32) :: index_str, count_str
+    integer :: n_targets, n_constraints, i, j, constraint_index
+    logical :: has_index, has_name, found
+
+    n_constraints = problem%get_n_constraints()
+
+    if (.not. params%valid_path(path)) then
+       allocate(targets(1))
+       if (n_constraints .eq. 0) then
+          targets(1)%is_objective = .true.
+       else
+          targets(1)%is_objective = .false.
+          targets(1)%constraint_index = 1
+
+          ! Not an error, because the historical dispatch is what is being
+          ! reproduced here, but not silent either: a case with several
+          ! constraints and no target list gets exactly one of them checked,
+          ! and that is worth saying out loud.
+          if (n_constraints .gt. 1 .and. pe_rank .eq. 0) then
+             write(*, '(A,I0,A)') ' FD targets: WARNING -- this case has ', &
+                  n_constraints, ' constraints but no'
+             write(*, '(A)') ' FD targets: WARNING -- ' // path // &
+                  ', so only constraint 1 is checked. List the others'
+             write(*, '(A)') ' FD targets: WARNING -- explicitly to check' &
+                  // ' them too.'
+          end if
+       end if
+       call fd_name_targets(targets)
+       return
+    end if
+
+    call params%info(path, n_children = n_targets)
+    if (n_targets .lt. 1) then
+       call neko_error(path // ' is present but lists no targets. Remove ' &
+            // 'the key to take the default target, or list at least one.')
+    end if
+
+    allocate(targets(n_targets))
+    do i = 1, n_targets
+       call json_extract_item(params, path, i, target_json)
+       call json_get(target_json, 'kind', kind)
+       call fd_lowercase(kind)
+
+       has_index = target_json%valid_path('index')
+       has_name = target_json%valid_path('name')
+
+       select case (trim(kind))
+       case ('objective')
+
+          ! The one place this restriction is stated. An objective gradient
+          ! does not decompose per objective, so an index here would assert
+          ! something meaningless rather than something narrower.
+          if (has_index .or. has_name) then
+             call neko_error('fd_test_targets: an "objective" target ' // &
+                  'takes neither "index" nor "name" -- it is always the ' // &
+                  'weighted total of every objective. The objective ' // &
+                  'gradient does not decompose per objective: ' // &
+                  'problem_read_objectives injects an augmented ' // &
+                  'Lagrangian objective into every case, and that single ' // &
+                  'object carries all of the PDE-mediated d/dchi, ' // &
+                  'computed from one adjoint solve forced by the sum of ' // &
+                  'every objective''s forcing. The individual objectives ' // &
+                  '(viscous_dissipation, scalar_mixing) have empty ' // &
+                  'update_sensitivity bodies and contribute only that ' // &
+                  'forcing. Objective values decompose per objective; ' // &
+                  'objective gradients do not, so there is no "objective ' // &
+                  'i''s share of u_adj" to check against.')
+          end if
+
+          targets(i)%is_objective = .true.
+
+       case ('constraint')
+
+          if (has_index .and. has_name) then
+             call neko_error('fd_test_targets: a "constraint" target ' // &
+                  'takes either "index" or "name", not both.')
+          else if (.not. (has_index .or. has_name)) then
+             call neko_error('fd_test_targets: a "constraint" target ' // &
+                  'needs an "index" (1-based, in case-file order) or a ' // &
+                  '"name".')
+          end if
+
+          if (has_index) then
+             call json_get(target_json, 'index', constraint_index)
+          else
+             call json_get(target_json, 'name', name)
+             found = .false.
+             constraint_index = 0
+             do j = 1, n_constraints
+                if (trim(problem%get_constraint_name(j)) .eq. trim(name)) &
+                     then
+                   if (found) then
+                      call neko_error('fd_test_targets: the constraint ' // &
+                           'name "' // trim(name) // '" is carried by ' // &
+                           'more than one constraint in this case; ' // &
+                           'select it by "index" instead.')
+                   end if
+                   found = .true.
+                   constraint_index = j
+                end if
+             end do
+             if (.not. found) then
+                call neko_error('fd_test_targets: no constraint in this ' // &
+                     'case is named "' // trim(name) // '".')
+             end if
+          end if
+
+          if (constraint_index .lt. 1 .or. &
+               constraint_index .gt. n_constraints) then
+             write(index_str, '(I0)') constraint_index
+             write(count_str, '(I0)') n_constraints
+             call neko_error('fd_test_targets: constraint index ' // &
+                  trim(index_str) // ' is out of range; this case has ' // &
+                  trim(count_str) // ' constraints.')
+          end if
+
+          targets(i)%is_objective = .false.
+          targets(i)%constraint_index = constraint_index
+
+       case default
+          call neko_error('fd_test_targets: unknown target kind "' // &
+               trim(kind) // '". The kinds are "objective" and ' // &
+               '"constraint".')
+       end select
+    end do
+
+    call fd_name_targets(targets)
+
+  end subroutine fd_read_targets
+
+  !> Give each target the suffix its CSV files carry.
+  !!
+  !! A single-target run gets an **empty** suffix, so that it keeps writing
+  !! `FD_check_<case>.csv` and `FD_verdict_<case>.csv` under exactly the
+  !! names it has always used -- the reference data those are compared
+  !! against is matched by name. Only a multi-target run, which would
+  !! otherwise interleave several sweeps into one file, suffixes them.
+  !!
+  !! @param targets The targets to name, updated in place.
+  subroutine fd_name_targets(targets)
+    type(fd_target_t), intent(inout) :: targets(:)
+
+    character(len=16) :: index_str
+    integer :: i
+
+    if (size(targets) .eq. 1) then
+       targets(1)%suffix = ''
+       return
+    end if
+
+    do i = 1, size(targets)
+       if (targets(i)%is_objective) then
+          targets(i)%suffix = '__objective'
+       else
+          write(index_str, '(I0)') targets(i)%constraint_index
+          targets(i)%suffix = '__constraint_' // trim(index_str)
+       end if
+    end do
+
+  end subroutine fd_name_targets
+
   !> Offset of this rank's design degrees of freedom within the globally
   !! concatenated design vector.
   !!
@@ -895,9 +1114,14 @@ contains
   !!        difference used historically.
   !! @param strict_options (Optional) Settings of the strict criterion.
   !!        Defaults to disabled, i.e. the historical assertion.
+  !! @param constraint_index (Optional) 1-based index of the constraint to
+  !!        read when `is_objective` is false. Defaults to 1.
+  !! @param name_suffix (Optional) Suffix for the CSV file names, so that
+  !!        several targets checked in one run do not share a file. Defaults
+  !!        to none, which keeps the historical `FD_check_<case>.csv`.
   subroutine compute_sensitivity_i(problem, sim, des, target_sensitivities, i, &
        perturbations, tolerance, file_name, is_objective, gs_h, &
-       central_difference, strict_options)
+       central_difference, strict_options, constraint_index, name_suffix)
     class(problem_t), intent(inout) :: problem
     type(simulation_t), intent(inout) :: sim
     class(design_t), intent(inout) :: des
@@ -910,16 +1134,23 @@ contains
     type(gs_t), intent(inout) :: gs_h
     logical, intent(in), optional :: central_difference
     type(fd_strict_options_t), intent(in), optional :: strict_options
+    integer, intent(in), optional :: constraint_index
+    character(len=*), intent(in), optional :: name_suffix
 
     real(kind=rp), allocatable :: direction(:)
     real(kind=rp) :: target_sensitivity_i, eps_sens
     type(fd_strict_options_t) :: strict
+    character(len=64) :: suffix
     logical :: central
-    integer :: n
+    integer :: n, i_constraint
 
     central = .false.
     if (present(central_difference)) central = central_difference
     if (present(strict_options)) strict = strict_options
+    i_constraint = 1
+    if (present(constraint_index)) i_constraint = constraint_index
+    suffix = ''
+    if (present(name_suffix)) suffix = name_suffix
 
     n = des%size()
     call fd_sync_to_host(target_sensitivities)
@@ -950,7 +1181,7 @@ contains
 
     call fd_run_sweep(problem, sim, des, direction, target_sensitivity_i, i, &
          perturbations, tolerance, file_name, is_objective, central, &
-         .false., eps_sens, strict)
+         .false., eps_sens, strict, i_constraint, trim(suffix))
 
     deallocate(direction)
 
@@ -994,9 +1225,14 @@ contains
   !! @param central_difference (Optional) True to use a central difference.
   !! @param strict_options (Optional) Settings of the strict criterion.
   !!        Defaults to disabled, i.e. the historical assertion.
+  !! @param constraint_index (Optional) 1-based index of the constraint to
+  !!        read when `is_objective` is false. Defaults to 1.
+  !! @param name_suffix (Optional) Suffix for the CSV file names. Defaults to
+  !!        none, which keeps the historical `FD_check_<case>.csv`.
   subroutine compute_sensitivity_directional(problem, sim, des, &
        target_sensitivities, perturbations, tolerance, file_name, &
-       is_objective, gs_h, central_difference, strict_options)
+       is_objective, gs_h, central_difference, strict_options, &
+       constraint_index, name_suffix)
     class(problem_t), intent(inout) :: problem
     type(simulation_t), intent(inout) :: sim
     class(design_t), intent(inout) :: des
@@ -1008,17 +1244,24 @@ contains
     type(gs_t), intent(inout) :: gs_h
     logical, intent(in), optional :: central_difference
     type(fd_strict_options_t), intent(in), optional :: strict_options
+    integer, intent(in), optional :: constraint_index
+    character(len=*), intent(in), optional :: name_suffix
 
     real(kind=rp), allocatable :: direction(:), copies(:)
     real(kind=rp) :: work_arr(1), gradient_norm, projection, max_component
     real(kind=rp) :: n_design, eps_sens
     type(fd_strict_options_t) :: strict
+    character(len=64) :: suffix
     logical :: central
-    integer :: j, n
+    integer :: j, n, i_constraint
 
     central = .false.
     if (present(central_difference)) central = central_difference
     if (present(strict_options)) strict = strict_options
+    i_constraint = 1
+    if (present(constraint_index)) i_constraint = constraint_index
+    suffix = ''
+    if (present(name_suffix)) suffix = name_suffix
 
     n = des%size()
     if (target_sensitivities%size() .lt. n) then
@@ -1094,7 +1337,7 @@ contains
 
     call fd_run_sweep(problem, sim, des, direction, projection, -1, &
          perturbations, tolerance, file_name, is_objective, central, .true., &
-         eps_sens, strict)
+         eps_sens, strict, i_constraint, trim(suffix))
 
     deallocate(direction)
     deallocate(copies)
@@ -1129,9 +1372,14 @@ contains
   !!        and the assertion is made on the absolute difference instead.
   !! @param strict Settings of the strict criterion. Disabled leaves the
   !!        historical assertion on the smallest perturbation in place.
+  !! @param constraint_index 1-based index of the constraint to read when
+  !!        `is_objective` is false.
+  !! @param suffix Suffix inserted before `.csv` in both the sweep log and
+  !!        the verdict log. Empty for a single-target run, which therefore
+  !!        keeps the historical file names.
   subroutine fd_run_sweep(problem, sim, des, direction, target_derivative, &
        probe_index, perturbations, tolerance, file_name, is_objective, &
-       central, directional, eps_sens, strict)
+       central, directional, eps_sens, strict, constraint_index, suffix)
     class(problem_t), intent(inout) :: problem
     type(simulation_t), intent(inout) :: sim
     class(design_t), intent(inout) :: des
@@ -1146,6 +1394,8 @@ contains
     logical, intent(in) :: directional
     real(kind=rp), intent(in) :: eps_sens
     type(fd_strict_options_t), intent(in) :: strict
+    integer, intent(in) :: constraint_index
+    character(len=*), intent(in) :: suffix
 
     character(len=*), parameter :: fmt_head = '(4X,A12,4X,A10,6X,A11,5X,A5,10X)'
     character(len=*), parameter :: fmt_data = '(4X,4E15.6E3)'
@@ -1187,7 +1437,7 @@ contains
        call problem%get_objective_value(constraint)
     else
        call problem%get_constraint_values(constraint_vec)
-       constraint = constraint_vec%x(1)
+       constraint = constraint_vec%x(constraint_index)
     end if
 
     if (NEKO_BCKND_DEVICE .eq. 1) then
@@ -1240,7 +1490,7 @@ contains
        name_len = len_trim(file_name)
        slash = index(file_name(:name_len), '/', back = .true.)
        call logger%init('FD_check_' // &
-            trim(file_name(slash+1:name_len-5)) // '.csv')
+            trim(file_name(slash+1:name_len-5)) // trim(suffix) // '.csv')
        call logger%set_header('perturbation,F,dFdx,error')
     end if
 
@@ -1336,12 +1586,13 @@ contains
           i_write = i_write + 1
           call evaluate_perturbed(problem, sim, des, design_vector, &
                design_perturbed, direction, perturb, is_objective, &
-               i_write, constraint_vec, perturbed_constraint)
+               constraint_index, i_write, constraint_vec, &
+               perturbed_constraint)
 
           i_write = i_write + 1
           call evaluate_perturbed(problem, sim, des, design_vector, &
                design_perturbed, direction, -perturb, is_objective, &
-               i_write, constraint_vec, minus_constraint)
+               constraint_index, i_write, constraint_vec, minus_constraint)
 
           fd_estimate = perturbed_constraint - minus_constraint
           if (.not. abscmp(fd_estimate, 0.0_rp)) then
@@ -1351,7 +1602,8 @@ contains
           i_write = i_write + 1
           call evaluate_perturbed(problem, sim, des, design_vector, &
                design_perturbed, direction, perturb, is_objective, &
-               i_write, constraint_vec, perturbed_constraint)
+               constraint_index, i_write, constraint_vec, &
+               perturbed_constraint)
 
           fd_estimate = perturbed_constraint - constraint
           if (.not. abscmp(fd_estimate, 0.0_rp)) then
@@ -1393,7 +1645,7 @@ contains
     i_write = i_write + 1
     call evaluate_perturbed(problem, sim, des, design_vector, &
          design_perturbed, direction, 0.0_rp, is_objective, &
-         i_write, constraint_vec, restored_constraint)
+         constraint_index, i_write, constraint_vec, restored_constraint)
     if (pe_rank .eq. 0) then
        write(*, '(A,E15.6E3)') ' FD sweep: baseline restored; ' // &
             're-evaluated functional minus stored baseline =', &
@@ -1459,7 +1711,8 @@ contains
           write_status(1) = 0
           if (pe_rank .eq. 0) then
              call fd_verdict_print(verdict, tolerance)
-             call fd_write_verdict(file_name, verdict, write_status(1))
+             call fd_write_verdict(file_name, suffix, verdict, &
+                  write_status(1))
           end if
 
           ! Raised outside the rank guard, on a globally reduced status:
@@ -1568,11 +1821,14 @@ contains
   !! The caller reduces the status and raises the error on every rank.
   !!
   !! @param file_name The case file name, used to name the CSV.
+  !! @param suffix Suffix inserted before `.csv`, empty for a single-target
+  !!        run so that the historical name is kept.
   !! @param verdict The verdict to record.
   !! @param write_status Zero on success, the `iostat` of the failed open
   !!        otherwise.
-  subroutine fd_write_verdict(file_name, verdict, write_status)
+  subroutine fd_write_verdict(file_name, suffix, verdict, write_status)
     character(len=*), intent(in) :: file_name
+    character(len=*), intent(in) :: suffix
     type(fd_verdict_t), intent(in) :: verdict
     integer, intent(out) :: write_status
 
@@ -1592,7 +1848,8 @@ contains
 
     name_len = len_trim(file_name)
     slash = index(file_name(:name_len), '/', back = .true.)
-    path = 'FD_verdict_' // trim(file_name(slash+1:name_len-5)) // '.csv'
+    path = 'FD_verdict_' // trim(file_name(slash+1:name_len-5)) // &
+         trim(suffix) // '.csv'
 
     ! A field the criterion could not measure is written as `nan` rather
     ! than as a zero that would read as a measurement.
@@ -1659,12 +1916,14 @@ contains
   !!        left untouched.
   !! @param step The signed step scaling `direction`.
   !! @param is_objective True to read the objective, false the constraint.
+  !! @param constraint_index 1-based index of the constraint to read when
+  !!        `is_objective` is false.
   !! @param write_index Output index handed to `sim%write`.
   !! @param constraint_vec Work vector for the constraint values.
   !! @param functional The resulting objective or constraint value.
   subroutine evaluate_perturbed(problem, sim, des, design_vector, &
-       design_perturbed, direction, step, is_objective, write_index, &
-       constraint_vec, functional)
+       design_perturbed, direction, step, is_objective, constraint_index, &
+       write_index, constraint_vec, functional)
     class(problem_t), intent(inout) :: problem
     type(simulation_t), intent(inout) :: sim
     class(design_t), intent(inout) :: des
@@ -1673,6 +1932,7 @@ contains
     real(kind=rp), intent(in) :: direction(:)
     real(kind=rp), intent(in) :: step
     logical, intent(in) :: is_objective
+    integer, intent(in) :: constraint_index
     integer, intent(in) :: write_index
     type(vector_t), intent(inout) :: constraint_vec
     real(kind=rp), intent(out) :: functional
@@ -1703,7 +1963,7 @@ contains
        call problem%get_objective_value(functional)
     else
        call problem%get_constraint_values(constraint_vec)
-       functional = constraint_vec%x(1)
+       functional = constraint_vec%x(constraint_index)
     end if
     call sim%write(write_index)
     call sim%reset()
@@ -1795,9 +2055,12 @@ contains
   !! @param gs_h Gather-scatter handle for the design's dofmap.
   !! @param central_difference (Optional) True to use a central difference.
   !! @param strict_options (Optional) Settings of the strict criterion.
+  !! @param constraint_index (Optional) 1-based index of the constraint to
+  !!        read when `is_objective` is false. Defaults to 1.
+  !! @param name_suffix (Optional) Suffix for the CSV file names.
   subroutine compute_sensitivity_list(problem, sim, des, target_sensitivities, &
        list, perturbations, tolerance, file_name, is_objective, gs_h, &
-       central_difference, strict_options)
+       central_difference, strict_options, constraint_index, name_suffix)
     class(problem_t), intent(inout) :: problem
     type(simulation_t), intent(inout) :: sim
     class(design_t), intent(inout) :: des
@@ -1810,6 +2073,8 @@ contains
     type(gs_t), intent(inout) :: gs_h
     logical, intent(in), optional :: central_difference
     type(fd_strict_options_t), intent(in), optional :: strict_options
+    integer, intent(in), optional :: constraint_index
+    character(len=*), intent(in), optional :: name_suffix
 
     integer :: i, n
 
@@ -1817,7 +2082,7 @@ contains
     do i = 1, n
        call compute_sensitivity_i(problem, sim, des, target_sensitivities, &
             list(i), perturbations, tolerance, file_name, is_objective, gs_h, &
-            central_difference, strict_options)
+            central_difference, strict_options, constraint_index, name_suffix)
     end do
   end subroutine compute_sensitivity_list
 
