@@ -77,6 +77,14 @@ set_tests_properties(sensitivity_regression_build PROPERTIES
 # passive_scalar's case runs 10x longer than the others (end_time 10.0 vs
 # 1.0 at the same timestep) — give it a much larger TIMEOUT rather than a
 # shared one sized for the cheaper cases.
+#
+# two_volume_constraints and objective_and_constraint are the multi-target
+# cases: the first checks two constraints in one run, which is what the
+# (n_constraints, n_design) sensitivity layout has to be right for, and the
+# second checks an objective and a constraint together, which the old
+# single-target dispatch refused outright. Both are copies of the cheap
+# unsteady case (five timesteps), so they cost seconds rather than the
+# minutes the steady cases take.
 set(sensitivity_regression_cases
     "viscous_dissipation"
     "brinkman_dissipation"
@@ -85,6 +93,8 @@ set(sensitivity_regression_cases
     "passive_scalar"
     "unsteady_viscous_dissipation"
     "unsteady_brinkman_dissipation"
+    "two_volume_constraints"
+    "objective_and_constraint"
 )
 
 foreach(case_name ${sensitivity_regression_cases})
