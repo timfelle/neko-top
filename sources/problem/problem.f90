@@ -897,8 +897,8 @@ contains
     if (sensitivity%get_nrows() .ne. this%n_constraints .or. &
          sensitivity%get_ncols() .ne. this%n_design) then
        write(shape_str, '(A,I0,A,I0,A,I0,A,I0,A)') &
-            ' expected (', this%n_constraints, ',', this%n_design, &
-            '), got (', sensitivity%get_nrows(), ',', &
+            ' expected (', this%n_constraints, ', ', this%n_design, &
+            '), got (', sensitivity%get_nrows(), ', ', &
             sensitivity%get_ncols(), ')'
        call neko_error('get_constraint_sensitivities: the destination ' // &
             'matrix must be (n_constraints, n_design);' // trim(shape_str))
