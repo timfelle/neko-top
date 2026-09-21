@@ -16,10 +16,11 @@ The test is done through a few common files:
   (MPI-safe reduction handling + the tolerance assertion). This same file is
   also used by `tests/regression/sensitivity/` — it is the single source of
   truth for both, see that directory's `CMakeLists.txt`.
-- `problem_tester.f90`: The generic driver. It auto-detects whether the case
-  under test defines an objective or a constraint and drives
-  `compute_sensitivity` accordingly — it does not need to change when a new
-  case is added.
+- `problem_tester.f90`: The generic driver. It checks whichever functionals
+  the case names under `fd_test_targets` — the weighted objective total,
+  individual constraints, or any mixture — and falls back to the historical
+  single target when the case names none. It does not need to change when a
+  new case is added.
 - `*.case`: One Neko case file per test, each exercising a single
   objective/constraint type. The `fd_test_tolerance` key under
   `optimization` (optional, JSON) overrides the default assertion tolerance
@@ -76,6 +77,54 @@ an error, never a silent false) and `NEKO_TOP_FD_MODE=directional`. The unit
 driver is always in `dof` mode, and keeps its own fixed eight-point sweep
 unless the strict criterion below is switched on, in which case it reads the
 sweep the same way the regression driver does.
+
+## Choosing what to check (`fd_test_targets`)
+
+By default a case checks exactly one functional, chosen the way this harness
+has always chosen it: the **weighted objective total** if the case declares
+no constraints, and **constraint 1** otherwise. Every case file that does not
+mention `fd_test_targets` behaves exactly as it did before the key existed.
+
+A case that wants more lists its targets explicitly, under `optimization`:
+
+```json
+"fd_test_targets": [
+    { "kind": "objective" },
+    { "kind": "constraint", "index": 1 },
+    { "kind": "constraint", "name": "volume_loose" }
+]
+```
+
+A constraint is selected by `index` (1-based, in case-file order) or by
+`name` (the constraint's own `name` key), exactly one of the two.
+
+`kind: "objective"` is always the **weighted total of every objective**, and
+takes neither `index` nor `name`; supplying one is an error rather than a
+narrower check. The reason is structural rather than a missing feature.
+`problem_read_objectives` injects an `augmented_lagrangian_objective_t` into
+every case, and that single object carries all of the PDE-mediated
+`d/dchi` — it computes `-(u.u_adj + v.v_adj + w.w_adj)` from **one** adjoint
+solve, forced by the sum of **every** objective's forcing. The individual
+objectives (`viscous_dissipation`, `scalar_mixing`) have empty
+`update_sensitivity` bodies and contribute only that forcing. Objective
+*values* therefore decompose per objective; objective *gradients* do not,
+and there is no "objective i's share of `u_adj`" to assert against.
+
+### CSV names with several targets
+
+A run with a single target keeps writing `FD_check_<case>.csv` and
+`FD_verdict_<case>.csv` under exactly those names — the `reference_data/`
+comparison matches by name, so this must not change. Only a multi-target run
+suffixes them, which it must, or several sweeps would interleave into one
+file:
+
+```
+FD_check_<case>__objective.csv
+FD_check_<case>__constraint_1.csv
+```
+
+Both files are **appended** to, not truncated, so delete them before a run
+whose output you intend to compare.
 
 ## The strict criterion (`fd_test_strict`)
 
@@ -315,4 +364,5 @@ Reuse the existing generic driver — you almost never need new Fortran code:
    ```
 3. Only write new Fortran (in `problem_tester.f90`/`sensitivity.f90`) if the
    generic driver genuinely can't express what you need — it currently
-   handles any single objective or single constraint automatically.
+   handles the weighted objective total and any set of constraints
+   automatically, see `fd_test_targets` above.
