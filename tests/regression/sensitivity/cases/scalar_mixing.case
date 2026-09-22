@@ -106,16 +106,23 @@
     //
     // COST: this combination (fine mesh, P=5, a CFL-limited dt an order of
     // magnitude below the unit-tier case, and a long end_time) makes this
-    // by far the most expensive case in the suite -- run at 8 MPI ranks
-    // (NEKO_TOP_SENSITIVITY_RANKS=8, set for this case only in
-    // CMakeLists.txt; RECORD THE RANK COUNT alongside any measurement here,
-    // since dFdx has been observed to differ by ~5.6e-7 between rank
-    // counts in this suite) an end_time=20 run with N perturbations costs
-    // roughly N+1 times a single ~80000-step, ~2.5-3 hour solve -- multiple
-    // hours total even at the minimal 4-perturbation sweep this case uses
-    // (see fd_test_perturbations below). This is the direct, measured cost
-    // of not trading resolution for speed on an advection-dominated,
-    // weakly-diffusive (Pe=200) problem, not a padding choice.
+    // by far the most expensive case in the suite. Run at the suite
+    // default of 2 MPI ranks (RECORD THE RANK COUNT alongside any
+    // measurement here, since dFdx has been observed to differ by
+    // ~5.6e-7 between rank counts in this suite) -- a higher rank count
+    // was tried and rejected for a measured reason: this container's
+    // /dev/shm is capped at 64 MiB, and OpenMPI's vader BTL requests a
+    // 16 MiB sm_segment per rank, so 8 ranks (128 MiB) cannot fit
+    // regardless of stale-segment cleanup. Measured directly: an 8-rank
+    // run of this exact case failed after 123.6s with repeated "not
+    // enough space" warnings, not a clean FD-tolerance verdict -- see
+    // CMakeLists.txt. At 2 ranks, an end_time=20 run with N
+    // perturbations costs roughly N+1 times a single ~80000-step solve
+    // -- multiple hours total even at the minimal 4-perturbation sweep
+    // this case uses (see fd_test_perturbations below). This is the
+    // direct, measured cost of not trading resolution for speed on an
+    // advection-dominated, weakly-diffusive (Pe=200) problem, not a
+    // padding choice.
     "version": 1.0,
     "case": {
         "mesh_file": "scalar_mixing_mesh/box.nmsh",

@@ -111,24 +111,22 @@ foreach(case_name ${sensitivity_regression_cases})
     # run_sensitivity_regression_check.sh) is far more expensive than the
     # 16x8 shared box the other cases use, and it also needs a much smaller
     # fixed dt for CFL stability (see the case file's own header comment) --
-    # by far the most expensive case in this suite. Give it more MPI ranks
-    # than the suite default (2) to keep its wall time tractable; this box
-    # has 16 cores, and 338 elements decomposes across 8 ranks without
-    # difficulty.
-    # Build the -E env argument list as a proper CMake list, rather than an
-    # optionally-empty single variable, so a case that doesn't need the
-    # override doesn't pass -E env a stray empty argument.
-    set(case_env_args
-        PATH=${neko_PATH}
-        LD_LIBRARY_PATH=${neko_LD_LIBRARY_PATH}
-        NEKO_DIR=${neko_PREFIX}
-    )
-    if(case_name STREQUAL "scalar_mixing")
-        list(APPEND case_env_args NEKO_TOP_SENSITIVITY_RANKS=8)
-    endif()
+    # by far the most expensive case in this suite. A higher MPI rank count
+    # was tried here to keep its wall time tractable (8 measured ~2.75x
+    # faster than 2 on an isolated benchmark) and REJECTED for a measured
+    # reason: this container's /dev/shm is capped at 64 MiB (see the
+    # neko-container-environment skill), and OpenMPI's vader BTL requests a
+    # 16 MiB sm_segment per rank -- 8 ranks demands 128 MiB, which cannot
+    # fit regardless of stale-segment cleanup. Measured directly: an 8-rank
+    # run of this exact case failed after 123.6s with repeated "not enough
+    # space for .../sm_segment..." warnings and OSC UCX errors, not a clean
+    # FD-tolerance verdict. Stays at the suite default (2 ranks, 32 MiB,
+    # comfortable headroom) rather than any rank count above 4.
     add_test(NAME ${case_name}_sensitivity_regression
         COMMAND ${CMAKE_COMMAND} -E env
-            ${case_env_args}
+            PATH=${neko_PATH}
+            LD_LIBRARY_PATH=${neko_LD_LIBRARY_PATH}
+            NEKO_DIR=${neko_PREFIX}
             bash ${CMAKE_CURRENT_SOURCE_DIR}/run_sensitivity_regression_check.sh
             $<TARGET_FILE:reg_problem_tester_sensitivity_bin>
             ${CMAKE_CURRENT_SOURCE_DIR}/cases/${case_name}.case
