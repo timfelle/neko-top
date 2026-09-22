@@ -86,8 +86,9 @@ set_tests_properties(sensitivity_regression_build PROPERTIES
 # unsteady case (five timesteps), so they cost seconds rather than the
 # minutes the steady cases take.
 #
-# scalar_mixing needs its own resolution (see run_sensitivity_regression_check.sh)
-# to keep the cell Peclet number below ~2 at Pe=200, plus a much smaller dt
+# scalar_mixing needs its own resolution (see
+# run_sensitivity_regression_check.sh) to keep the cell Peclet number
+# below ~2 at Pe=200, plus a much smaller dt
 # than the other cases (fixed timestep, CFL-limited by that same fine mesh)
 # and a longer end_time to let the scalar equilibrate — see the case file's
 # own header comment for the full derivation. All three make it by far the
