@@ -31,10 +31,91 @@
     // making objectives 1 and 2 identical to 3. This case is the only
     // committed regression test for that fix.
     //
-    // Mesh: non-periodic in y (unlike the other four cases in this
+    // Mesh: non-periodic in y (unlike the other nine cases in this
     // directory, which share a periodic-y box) so the outlet actually has
-    // a y in [0,1] extent to split into quarters -- see
-    // sensitivity_scalar_mixing_mesh in CMakeLists.txt.
+    // a y in [0,1] extent to split into quarters -- generated as its own
+    // 26x13-element box by run_sensitivity_regression_check.sh, since it
+    // cannot share the shared periodic-y box (geometry differs) or that
+    // box's coarser resolution (see below).
+    //
+    // RESOLUTION (moved here from the unit tier, which could not certify
+    // this case at all -- TOLERANCE_UNREACHABLE, tol_min = 0.902, the FD
+    // estimate not converging with eps across nearly a decade):
+    //
+    // polynomial_order was raised to 5 first, matching every sibling case
+    // in this directory (dissipation.case, passive_scalar.case, ...) --
+    // per this session's brief, a spectral-element code gets far better
+    // dispersion behaviour per degree of freedom from order than from `h`
+    // for advection-dominated transport, so order was the first lever, not
+    // the last resort. At the *shared* mesh resolution the other cases use
+    // (16x8 elements, h=0.125), P=5's minimum GLL spacing is
+    // 0.234944676/2 * 0.125 = 0.01468 (ratio for the N=5 GLL nodes, see
+    // below), giving a cell Peclet of 200*0.01468 = 2.94 -- close to the
+    // ~2 target but not under it. A *modest* additional mesh bump (16x8 ->
+    // 26x13, i.e. ~1.6x linear, ~2.7x elements -- not the large jump that
+    // would be needed from `h` alone without the order increase) closes
+    // the gap: minimum GLL spacing at P=5 is 0.234944676070535/2 * h
+    // (0.234944676070535 is the smallest of the 6 GLL node spacings on
+    // [-1,1] for a 6-point/order-5 element; halved because it maps a
+    // length-2 reference interval), and at h = 2/26 = 0.076923 that is
+    // 0.0090363, for a cell Peclet of 200*0.0090363 = 1.807 -- comfortably
+    // under 2. Kept at P=5 rather than pushed further, and at this modest
+    // an N, because the *time step* is bottlenecked by this same minimum
+    // spacing regardless of how it is reached (see next paragraph), so a
+    // finer mesh or a higher order buys accuracy per DOF but does not
+    // relax that bottleneck.
+    //
+    // dt: raising the resolution (whether by order or by `h`) shrinks the
+    // minimum grid spacing and therefore the CFL-limited time step, and
+    // this case's original dt = 1e-3 (nominal CFL ~0.11, vs ~0.016 at the
+    // unit tier's P=2/h=0.125) is NOT stable at this resolution -- measured
+    // directly: CFL grows from an initial ~0.11 (matching the coarser
+    // case's benign value) through >1 by t~0.21 and diverges to NaN by
+    // t~0.274, well before any FD sweep or the scalar's own equilibration
+    // could complete. A JSON-only fix (case.time.variable_timestep) was
+    // tried and rejected for a measured reason: Neko-TOP's own simulation
+    // driver (sources/simulation/simulation.f90) passes the *whole* case
+    // params object to time_step_controller%init instead of the
+    // case.time subtree Neko's own neko.f90 extracts first, so every
+    // variable-timestep key is looked up at the wrong JSON scope and
+    // silently falls back to its Fortran default (huge()) -- confirmed by
+    // the printed dt jumping to a nonsensical 1.0 rather than honouring
+    // max_timestep. This is a Neko-TOP bug worth its own backlog entry,
+    // not something to work around inside this case file. Instead, a
+    // FIXED dt = 2.5e-4 (nominal CFL ~0.037, matching a stable settle
+    // observed directly: fluid residuals collapse to ~1e-7 by t~0.3 and
+    // CFL then holds flat at 0.0371 for as long as tested) is used, and a
+    // dt = 5.0e-4 (~2x looser) was directly measured to still diverge
+    // (p-residual reaching ~4.5e6 by t=0.225), so 2.5e-4 carries real, not
+    // excessive, margin.
+    //
+    // end_time: backlog #24 found the scalar residual (steady_state_data.
+    // csv) nowhere near 1e-6 at end_time=6 (0.012, decaying roughly by
+    // half per time unit) and extrapolated end_time ~16+. Measured
+    // directly at THIS resolution/dt: after the fluid settles (~t=0.3),
+    // the scalar decay rate itself keeps slowing as t grows (apparent
+    // half-life climbing from ~0.17 to ~1.0 time units through t=1.0),
+    // consistent with a multi-eigenmode relaxation whose asymptotic
+    // (slowest-mode) half-life converges to ~1.0 time unit -- matching
+    // backlog #24's own coarser-resolution estimate closely. end_time=20
+    // targets the literal 1e-6 tolerance from that measured asymptotic
+    // rate (residual 0.167 at t=1.0, needing ~17.7 more time units to
+    // cross 1e-6 at half-life~1.0); VERIFY the actually-reached residual
+    // in this run's steady_state_data.csv rather than trusting this
+    // extrapolation.
+    //
+    // COST: this combination (fine mesh, P=5, a CFL-limited dt an order of
+    // magnitude below the unit-tier case, and a long end_time) makes this
+    // by far the most expensive case in the suite -- run at 8 MPI ranks
+    // (NEKO_TOP_SENSITIVITY_RANKS=8, set for this case only in
+    // CMakeLists.txt; RECORD THE RANK COUNT alongside any measurement here,
+    // since dFdx has been observed to differ by ~5.6e-7 between rank
+    // counts in this suite) an end_time=20 run with N perturbations costs
+    // roughly N+1 times a single ~80000-step, ~2.5-3 hour solve -- multiple
+    // hours total even at the minimal 4-perturbation sweep this case uses
+    // (see fd_test_perturbations below). This is the direct, measured cost
+    // of not trading resolution for speed on an advection-dominated,
+    // weakly-diffusive (Pe=200) problem, not a padding choice.
     "version": 1.0,
     "case": {
         "mesh_file": "scalar_mixing_mesh/box.nmsh",
@@ -42,12 +123,12 @@
         "output_at_end": false,
         "output_boundary": false,
         "time": {
-            "end_time": 6.0,
-            "timestep": 1.0e-3
+            "end_time": 20.0,
+            "timestep": 2.5e-4
         },
         "numerics": {
             "time_order": 3,
-            "polynomial_order": 2,
+            "polynomial_order": 5,
             "dealias": true
         },
         "fluid": {
@@ -198,37 +279,32 @@
     },
     "optimization": {
         "fd_test_strict": true,
-        // NOT re-derived to "2x C_hat" and left deliberately tight
-        // (matching the sibling cases' convention) rather than loosened
-        // to force a pass. Diagnosed this session: at this dof the FD
-        // estimate does not converge to a floor with eps at all across
-        // almost a full decade (0.5 down to 0.03) -- a qualitatively
-        // different signature from bug #6's clean first-order
-        // convergence (p_hat ~0.99 in the existing cases). Cell Peclet
-        // number here is Pe=200 * (nodal spacing ~0.0625) ~ 12.5 --
-        // deep in the oscillatory regime for polynomial_order=2 --
-        // and this session could not separate that from a genuine
-        // gradient defect within its time budget (see agent report:
-        // "Noise-floor diagnosis"). A loose tolerance here would accept
-        // a wrong-signed gradient, which is the exact inert-check
-        // failure mode this test programme exists to remove. Left
-        // RED on purpose: TOLERANCE_UNREACHABLE, not a false pass.
-        // RESOLVE BEFORE RELYING ON THIS CASE -- see known-bugs #6 and
-        // this session's report for the follow-up options (resolution
-        // bump at regression-tier cost, or further isolation of the
-        // cell-Peclet vs adjoint-defect question).
-        "fd_test_tolerance": 5.0e-3,
-        // Deliberately NOT the historical [5e-1 ... 1e-4] list the other
-        // four unit cases pin (see readme.md): measured directly on this
-        // case, the FD estimate is closest to stable from eps=0.5 down
-        // to eps=0.05, then grows monotonically and without bound below
-        // eps=0.01 -- consistent with (but not conclusively identified
-        // as) round-off in F divided by a shrinking eps. Every point
-        // below eps=0.03 is unusable for THIS case, so the sweep stays
-        // inside the better-behaved decade instead; even so it does not
-        // certify (see fd_test_tolerance comment above).
+        // PROVISIONAL -- deliberately far tighter than any plausible bias,
+        // so that this run's own FD_verdict_scalar_mixing.csv row measures
+        // C_hat honestly (as a RED TOLERANCE_UNREACHABLE/FLOOR_EXCEEDED
+        // result) rather than happening to pass at an unexamined value.
+        // Once this run completes, re-derive the real tolerance as ~2x the
+        // measured C_hat (see readme.md's "Tolerances of the four unit
+        // cases" for the convention) and re-run for the green half of
+        // red-then-green -- both require re-running the sweep, since the
+        // strict verdict is computed live inside this same driver
+        // invocation rather than as a post-process of the CSV. DO NOT ship
+        // this value as the final tolerance.
+        "fd_test_tolerance": 1.0e-6,
+        // Minimal viable sweep for the strict criterion at this case's
+        // cost: 4 points is the floor for the order check ("needs at
+        // least 4 sweep points"), spanning 0.3 down to 0.01 (geometric-ish,
+        // ratio ~3) to bracket a plateau or a truncation run without
+        // committing to the historical eight-point sweep, which at this
+        // case's per-perturbation cost (a full ~80000-step forward solve
+        // each) would roughly double an already multi-hour run. Re-examine
+        // once C_hat is known: if the sweep at this resolution behaves
+        // like the FIT-branch siblings (viscous/brinkman_dissipation) a
+        // 4-point sweep should be enough to measure p_hat and C_hat
+        // cleanly; if it reproduces the old unit-tier's non-convergent
+        // signature, widen it (accepting the added cost).
         "fd_test_perturbations": [
-            5.0e-1, 3.0e-1, 2.0e-1, 1.5e-1, 1.0e-1, 7.0e-2, 5.0e-2, 3.0e-2
+            3.0e-1, 1.0e-1, 3.0e-2, 1.0e-2
         ],
         "domain": {
             "type": "point_zone",
