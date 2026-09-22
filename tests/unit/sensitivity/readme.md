@@ -385,10 +385,17 @@ Currently, we have added tests for the following components:
 - `brinkman_dissipation_objective_t` (`brinkman_dissipation.case`) — isolates
   the direct-partial-derivative sensitivity path.
 
-`scalar_mixing_objective_t` is not yet covered here (its only existing case,
-`tests/regression/sensitivity/cases/passive_scalar.case`, needed a Neko-core
-scalar-scheme fix first — see `known-bugs-backlog.md` #9). The heavier,
-realistic (~1000-timestep) versions of these and other cases
+`scalar_mixing_objective_t` is not covered here: a dedicated case
+(`scalar_mixing.case`) was tried at unit-tier resolution but could not
+certify its gradient there (`TOLERANCE_UNREACHABLE` — the cell Peclet
+number at that resolution was ~12.5-25, well into the oscillatory regime
+for its Pe=200 advection-dominated transport, and its end_time left the
+scalar nowhere near equilibrated). It now lives in the regression tier
+instead, at a resolution that can actually certify it — see
+`tests/regression/sensitivity/cases/scalar_mixing.case`, alongside
+`tests/regression/sensitivity/cases/passive_scalar.case` (which needed a
+Neko-core scalar-scheme fix first — see `known-bugs-backlog.md` #9). The
+heavier, realistic (~1000-timestep) versions of these and other cases
 (`dissipation`, `dissipation_weights`, unsteady variants) live in
 `tests/regression/sensitivity/` instead — that suite is opt-in
 (`NEKO_TOP_RUN_SENSITIVITY_REGRESSION=1`) and not part of the

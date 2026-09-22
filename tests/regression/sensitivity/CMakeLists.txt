@@ -85,6 +85,13 @@ set_tests_properties(sensitivity_regression_build PROPERTIES
 # single-target dispatch refused outright. Both are copies of the cheap
 # unsteady case (five timesteps), so they cost seconds rather than the
 # minutes the steady cases take.
+#
+# scalar_mixing needs its own resolution (see run_sensitivity_regression_check.sh)
+# to keep the cell Peclet number below ~2 at Pe=200, plus a much smaller dt
+# than the other cases (fixed timestep, CFL-limited by that same fine mesh)
+# and a longer end_time to let the scalar equilibrate — see the case file's
+# own header comment for the full derivation. All three make it by far the
+# most expensive case in this suite.
 set(sensitivity_regression_cases
     "viscous_dissipation"
     "brinkman_dissipation"
@@ -95,6 +102,7 @@ set(sensitivity_regression_cases
     "unsteady_brinkman_dissipation"
     "two_volume_constraints"
     "objective_and_constraint"
+    "scalar_mixing"
 )
 
 foreach(case_name ${sensitivity_regression_cases})
@@ -110,6 +118,8 @@ foreach(case_name ${sensitivity_regression_cases})
     )
     if(case_name STREQUAL "passive_scalar")
         set(case_timeout 5400)
+    elseif(case_name STREQUAL "scalar_mixing")
+        set(case_timeout 10800)
     else()
         set(case_timeout 1800)
     endif()
