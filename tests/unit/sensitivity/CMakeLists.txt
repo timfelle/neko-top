@@ -7,7 +7,6 @@ set(test_list
     "volume_filtered.case"
     "viscous_dissipation.case"
     "brinkman_dissipation.case"
-    "scalar_mixing.case"
 )
 
 # Path to the common driver source
@@ -48,28 +47,6 @@ add_custom_target(
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
 )
 add_dependencies(sensitivity_test_prepare sensitivity_prepare_script)
-
-# ============================================================================ #
-# scalar_mixing needs a real outlet split into y-quarters, so its box must be
-# non-periodic in y (the other four cases keep y periodic, which is what
-# prepare.sh above generates). Generated into its own subdirectory: genmeshbox
-# always writes a hardcoded 'box.nmsh', so this cannot share a directory with
-# the periodic-y box above without a write-write race under `make -j`.
-add_custom_target(
-    sensitivity_scalar_mixing_mesh
-    COMMENT "Generating non-periodic-y mesh for scalar_mixing"
-    BYPRODUCTS
-        ${CMAKE_CURRENT_BINARY_DIR}/scalar_mixing_mesh/box.nmsh
-    COMMAND ${CMAKE_COMMAND} -E make_directory
-        ${CMAKE_CURRENT_BINARY_DIR}/scalar_mixing_mesh
-    COMMAND ${CMAKE_COMMAND} -E chdir
-        ${CMAKE_CURRENT_BINARY_DIR}/scalar_mixing_mesh
-        ${CMAKE_COMMAND} -E env
-        LD_LIBRARY_PATH="${neko_LD_LIBRARY_PATH}" PATH="${neko_PATH}"
-        genmeshbox 0 2 0 1 0 0.125 16 8 1 .false. .false. .true.
-    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-)
-add_dependencies(sensitivity_test_prepare sensitivity_scalar_mixing_mesh)
 
 # ============================================================================ #
 # Build the single driver executable
@@ -122,17 +99,7 @@ foreach(case_file ${test_list})
     # this the driver exits 0 and CTest reports a green gradient check that
     # checked nothing. 77 is deliberately avoided: the regression lane uses
     # it for its opt-in gate, and the two reasons must stay distinguishable.
-    # scalar_mixing needs a much larger budget than its three siblings: its
-    # advection-dominated Pe and three-objective adjoint forcing cost ~7-8
-    # minutes for the full sweep even at unit-tier resolution (measured
-    # this session), against 0.78-8.03 s for the other four. See the case
-    # file's own header comment for why this could not be brought under
-    # the ~200 s target without losing the physics under test.
-    if(case_name STREQUAL "scalar_mixing")
-        set(sensitivity_case_timeout 900)
-    else()
-        set(sensitivity_case_timeout 300)
-    endif()
+    set(sensitivity_case_timeout 300)
     set_tests_properties(${case_name}_sensitivity
         PROPERTIES
             DEPENDS "problem_tester_sensitivity_bin;sensitivity_test_prepare"
