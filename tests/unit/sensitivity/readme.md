@@ -22,21 +22,24 @@ The test is done through a few common files:
   single target when the case names none. It does not need to change when a
   new case is added.
 - `*.case`: One Neko case file per test, each exercising a single
-  objective/constraint type. The `fd_test_tolerance` key under
-  `optimization` (optional, JSON) overrides the default assertion tolerance
-  — linear/state-independent functionals (e.g. the volume constraint) can use
-  a tight round-off tolerance; PDE-coupled objectives need a looser one
-  matched to their discretisation/steady-state floor (determine this
-  empirically per case, don't guess).
+  objective/constraint type. **All four run the strict criterion**
+  (`"fd_test_strict": true`), so `fd_test_tolerance` means "the largest
+  acceptable extrapolated eps->0 bias", not "the relative error at the
+  smallest perturbation" — the two are different quantities and a value
+  derived for one must never be carried over to the other. Each case's
+  tolerance is derived from its *measured* bias, see "Tolerances of the four
+  unit cases" below.
 - `CMakeLists.txt`: Defines the build process and, via the `test_list`
   variable, registers one CTest per case file.
 
 ## Configuring the sweep
 
-The assertion is made on the error at the **smallest** perturbation of the
-sweep, which is the rule this harness has always used: for a one-sided
-forward difference the error at large perturbations is dominated by
-truncation and must not be asserted against.
+The historical assertion is made on the error at the **smallest**
+perturbation of the sweep: for a one-sided forward difference the error at
+large perturbations is dominated by truncation and must not be asserted
+against. It is still the default for a case that does not ask for the strict
+criterion, but **none of the four cases in this directory use it any more** —
+they all set `fd_test_strict`, described below.
 
 Separately, and for information only, the harness *reports* the minimum
 `|error|` over the sweep and whether that minimum is interior to it
@@ -159,9 +162,50 @@ the smallest tolerance the functional's own reproducibility permits,
 `sqrt(40*N*|A|)`, and a tolerance below it cannot be decided by any sweep of
 any depth. Measured: `#43` 9.9e-6, `brinkman_dissipation` 1.1e-4,
 `viscous_dissipation` 1.4e-4, `volume` 4.2e-9, `volume_filtered` 1.8e-7 —
-note that the unit tier's default `fd_test_tolerance` of 1e-5 is unreachable
-for any case with a real truncation slope, which is why the two dissipation
-cases already override it.
+note that the unit driver's default `fd_test_tolerance` of 1e-5 is
+unreachable for any case with a real truncation slope, which is why every
+case here sets its own. Measured on the two dissipation cases: 1e-5 gives
+`status = TOLERANCE_UNREACHABLE` and exit 1, saying explicitly that this is
+not evidence of a wrong gradient. **Never fall back on that default.**
+
+### Tolerances of the four unit cases
+
+Each tolerance below was derived from the case's own measured bias, not
+carried over from the pre-strict assertion. The margin is deliberately
+small: the bias is resolved to only ~10-20%, so a verdict within +-20% of
+the tolerance is a coin flip, and a tolerance far looser than the bias is
+the failure mode this whole criterion exists to remove.
+
+| case | branch | `C_hat` | `tol_min` | tol. | margin |
+| --- | --- | --- | --- | --- | --- |
+| `volume` | BOUNDED | +1.627e-10 | 4.192e-9 | 1.0e-8 | 2.4x `tol_min` |
+| `volume_filtered` | BOUNDED | +8.732e-9 | 1.848e-7 | 5.0e-7 | 2.7x `tol_min` |
+| `viscous_dissipation` | FIT | -2.603e-3 | 1.439e-4 | 5.0e-3 | 1.9x `C_hat` |
+| `brinkman_dissipation` | FIT | +2.204e-3 | 1.144e-4 | 4.5e-3 | 2.0x `C_hat` |
+
+`C_hat` is a *bound* on the BOUNDED branch and an *estimate* on the FIT one
+— see `C_hat_kind` in the verdict CSV, which carries the full-precision
+numbers these are rounded from.
+
+The two branches are priced differently on purpose:
+
+- the **BOUNDED** cases are exactly linear in the design variable, so their
+  bias bound sits two orders of magnitude *below* `tol_min`. A 2x margin over
+  the bound would therefore be an unreachable tolerance, and the binding
+  constraint is `tol_min` instead. The margin over `tol_min` is not slack
+  either: `tol_min` is itself a measured `sqrt(40*N*|A|)` estimate, and the
+  BOUNDED branch additionally needs the plateau spread to fit inside
+  `fd_test_plateau_fraction * tolerance`.
+- the **FIT** cases carry a genuine, reproducible bias of ~2.2-2.6e-3 — a
+  real property of these two gradients, not a sweep artefact, and 1-2 orders
+  of magnitude above their `tol_min`. Their tolerances look loose in absolute
+  terms *because the bias is that large*; they are ~2x it, which is as tight
+  as this criterion can be set. Tightening either to 1e-3 fails with
+  `FLOOR_EXCEEDED`, which is the correct reading of the measurement and is
+  what these tolerances would have to be reduced to once that bias is fixed
+  (it is adjacent to known-bugs #6). Do not read `5e-3` as "this gradient is
+  accurate to 0.5%" — read it as "this gradient has a measured 0.26% bias
+  that nobody has explained yet".
 
 Whether the sweep brackets the round-off upturn is **reported and never gated
 on**. Requiring an upturn rejects bug #43's own sweep and lifts the false-red
@@ -189,6 +233,14 @@ successive *ratios*, so a geometric sweep is what it is calibrated on; a
 non-geometric one (the unit tier's `[5e-1, 1e-1, 5e-2, ...]` alternates 5, 2,
 5, 2) is still handled correctly, because the order is recovered by bisection
 on `R(p) = (m0^p - m1^p)/(m1^p - m2^p)` rather than read off a single ratio.
+
+All four cases here therefore **pin the historical eight-point sweep
+explicitly** in `fd_test_perturbations` rather than inheriting the strict
+nine-point default. It certifies every one of them as it stands, and keeping
+it means the `FD_check_<case>.csv` rows stay byte-identical to the pre-strict
+ones, so switching the criterion on changed no measurement — only the
+verdict drawn from it. Change a sweep only if its case actually fails to
+certify.
 
 Each strict run appends one row to **`FD_verdict_<case>.csv`**:
 `p_hat, C_hat, branch, status, bracketed, min_abs_error, min_perturbation,
