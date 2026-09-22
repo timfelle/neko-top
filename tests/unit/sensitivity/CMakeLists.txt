@@ -122,13 +122,24 @@ foreach(case_file ${test_list})
     # this the driver exits 0 and CTest reports a green gradient check that
     # checked nothing. 77 is deliberately avoided: the regression lane uses
     # it for its opt-in gate, and the two reasons must stay distinguishable.
+    # scalar_mixing needs a much larger budget than its three siblings: its
+    # advection-dominated Pe and three-objective adjoint forcing cost ~7-8
+    # minutes for the full sweep even at unit-tier resolution (measured
+    # this session), against 0.78-8.03 s for the other four. See the case
+    # file's own header comment for why this could not be brought under
+    # the ~200 s target without losing the physics under test.
+    if(case_name STREQUAL "scalar_mixing")
+        set(sensitivity_case_timeout 900)
+    else()
+        set(sensitivity_case_timeout 300)
+    endif()
     set_tests_properties(${case_name}_sensitivity
         PROPERTIES
             DEPENDS "problem_tester_sensitivity_bin;sensitivity_test_prepare"
             LABELS "sensitivity;unit"
             ENVIRONMENT "NEKO_LOG_FILE=neko.log"
             SKIP_RETURN_CODE 78
-            TIMEOUT 300
+            TIMEOUT ${sensitivity_case_timeout}
     )
 endforeach()
 

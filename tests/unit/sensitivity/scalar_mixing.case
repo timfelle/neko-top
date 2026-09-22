@@ -198,27 +198,35 @@
     },
     "optimization": {
         "fd_test_strict": true,
-        // See this session's agent report: the strict criterion's own
-        // measured "smallest reachable tolerance" (tol_min) for THIS
-        // probed dof/sweep is ~0.90 (relative-error units, like the
-        // Error column) -- an order of magnitude looser than the other
-        // four cases' 0.26%-0.5% biases, because this dof's relative
-        // error does not decay with eps at all across almost a full
-        // decade (0.5 down to 0.03): the mismatch here is a large,
-        // roughly eps-independent bias, not a small one hiding under
-        // truncation. tol_min is a property of the sweep, not a knob;
-        // 1.8 is ~2x it. TIGHTEN WHEN BUG #6 LANDS -- see known-bugs #6.
-        "fd_test_tolerance": 1.8,
+        // NOT re-derived to "2x C_hat" and left deliberately tight
+        // (matching the sibling cases' convention) rather than loosened
+        // to force a pass. Diagnosed this session: at this dof the FD
+        // estimate does not converge to a floor with eps at all across
+        // almost a full decade (0.5 down to 0.03) -- a qualitatively
+        // different signature from bug #6's clean first-order
+        // convergence (p_hat ~0.99 in the existing cases). Cell Peclet
+        // number here is Pe=200 * (nodal spacing ~0.0625) ~ 12.5 --
+        // deep in the oscillatory regime for polynomial_order=2 --
+        // and this session could not separate that from a genuine
+        // gradient defect within its time budget (see agent report:
+        // "Noise-floor diagnosis"). A loose tolerance here would accept
+        // a wrong-signed gradient, which is the exact inert-check
+        // failure mode this test programme exists to remove. Left
+        // RED on purpose: TOLERANCE_UNREACHABLE, not a false pass.
+        // RESOLVE BEFORE RELYING ON THIS CASE -- see known-bugs #6 and
+        // this session's report for the follow-up options (resolution
+        // bump at regression-tier cost, or further isolation of the
+        // cell-Peclet vs adjoint-defect question).
+        "fd_test_tolerance": 5.0e-3,
         // Deliberately NOT the historical [5e-1 ... 1e-4] list the other
         // four unit cases pin (see readme.md): measured directly on this
-        // case, the functional's own reproducibility floor sits around
-        // eps~1e-2 (the FD estimate is stable from eps=0.5 down to
-        // eps=0.05, then grows monotonically and without bound below
-        // eps=0.01, the signature of the finite-difference formula
-        // dividing an ~1e-5-absolute noise floor in F by a shrinking eps
-        // -- see this session's agent report). Every point below eps=0.03
-        // is therefore noise, not signal, for THIS case specifically, so
-        // the sweep stays inside the well-behaved decade instead.
+        // case, the FD estimate is closest to stable from eps=0.5 down
+        // to eps=0.05, then grows monotonically and without bound below
+        // eps=0.01 -- consistent with (but not conclusively identified
+        // as) round-off in F divided by a shrinking eps. Every point
+        // below eps=0.03 is unusable for THIS case, so the sweep stays
+        // inside the better-behaved decade instead; even so it does not
+        // certify (see fd_test_tolerance comment above).
         "fd_test_perturbations": [
             5.0e-1, 3.0e-1, 2.0e-1, 1.5e-1, 1.0e-1, 7.0e-2, 5.0e-2, 3.0e-2
         ],
