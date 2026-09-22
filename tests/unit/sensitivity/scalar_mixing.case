@@ -1,0 +1,270 @@
+{
+    // Split-inlet scalar-mixing sensitivity case.
+    //
+    // Binary scalar (0 on the lower half of the inlet, 1 on the upper half,
+    // expressed via the built-in `step()` expression function -- no
+    // user.f90 needed) advects through a Brinkman design region and is read
+    // out at the outlet by THREE scalar_mixing objectives:
+    //   1. the lower-outlet quarter (y in [0, 0.25]), phi_ref = 0
+    //   2. the upper-outlet quarter (y in [0.75, 1]), phi_ref = 1
+    //   3. the whole outlet,                          phi_ref = 0.5
+    // Advection-dominated transport keeps 1 and 2 near zero (the outer
+    // quarters retain their inlet values) while 3 is large; a diffusive
+    // regime drives everything toward 0.5.
+    //
+    // Pe was gated on the measured outflow distribution, not assumed: a
+    // 4-point Pe study at this mesh/end_time (2, 20, 200, 2000) showed
+    // Pe=2 and Pe=20 both already diffusively saturated (objectives 1/2
+    // ~0.10-0.14, objective 3 ~2e-4-8e-4: the outlet is nearly fully
+    // mixed to 0.5 regardless of the split), Pe=200 clearly
+    // advection-dominated (objectives 1/2 ~1e-3, objective 3 ~0.074: the
+    // quarters retain their inlet extremes), and Pe=2000 numerically
+    // unstable at this dt (scalar residual diverged to ~1e6). Pe=200 is
+    // therefore the lowest tested value that is both physically in the
+    // intended regime and numerically stable -- see this session's agent
+    // report for the full table and the recommendation reasoning.
+    //
+    // phi_ref of 0 and 1 are maximally off-centre, so this case leans hard
+    // on the backlog-#40 fix (b37ec1e on this branch) that made "phi_ref"
+    // readable at all -- on any commit before that fix every one of these
+    // three objectives would have silently run at the phi_ref=0.5 default,
+    // making objectives 1 and 2 identical to 3. This case is the only
+    // committed regression test for that fix.
+    //
+    // Mesh: non-periodic in y (unlike the other four cases in this
+    // directory, which share a periodic-y box) so the outlet actually has
+    // a y in [0,1] extent to split into quarters -- see
+    // sensitivity_scalar_mixing_mesh in CMakeLists.txt.
+    "version": 1.0,
+    "case": {
+        "mesh_file": "scalar_mixing_mesh/box.nmsh",
+        "output_checkpoints": false,
+        "output_at_end": false,
+        "output_boundary": false,
+        "time": {
+            "end_time": 6.0,
+            "timestep": 1.0e-3
+        },
+        "numerics": {
+            "time_order": 3,
+            "polynomial_order": 2,
+            "dealias": true
+        },
+        "fluid": {
+            "scheme": "pnpn",
+            "Re": 1.0,
+            "initial_condition": {
+                "type": "uniform",
+                "value": [ 1.0, 0.0, 0.0 ]
+            },
+            "velocity_solver": {
+                "type": "cg",
+                "preconditioner": {
+                    "type": "jacobi"
+                },
+                "absolute_tolerance": 1e-10,
+                "max_iterations": 100
+            },
+            "pressure_solver": {
+                "type": "gmres",
+                "preconditioner": {
+                    "type": "hsmg"
+                },
+                "absolute_tolerance": 1e-9,
+                "max_iterations": 100
+            },
+            "boundary_conditions": [
+                {
+                    "type": "velocity_value",
+                    "value": [ 1.0, 0.0, 0.0 ],
+                    "zone_indices": [ 1, 3, 4 ]
+                },
+                {
+                    "type": "outflow",
+                    "zone_indices": [ 2 ]
+                }
+            ],
+            "output_control": "never"
+        },
+        "scalar": {
+            "enabled": true,
+            "Pe": 200.0,
+            "solver": {
+                "type": "cg",
+                "preconditioner": {
+                    "type": "jacobi"
+                },
+                "absolute_tolerance": 1e-10,
+                "max_iterations": 100
+            },
+            "initial_condition": {
+                "type": "expression",
+                "value": "step(y - 0.5)"
+            },
+            "boundary_conditions": [
+                {
+                    "type": "expression_dirichlet",
+                    "value": "step(y - 0.5)",
+                    "zone_indices": [ 1 ]
+                },
+                {
+                    "type": "neumann",
+                    "flux": 0.0,
+                    "zone_indices": [ 2, 3, 4 ]
+                }
+            ]
+        },
+        "adjoint_scalar": {
+            "enabled": true,
+            "boundary_conditions": [
+                {
+                    "type": "dirichlet",
+                    "value": 0.0,
+                    "zone_indices": [ 1 ]
+                },
+                {
+                    "type": "neumann",
+                    "flux": 0.0,
+                    "zone_indices": [ 2, 3, 4 ]
+                }
+            ],
+            "initial_condition": {
+                "type": "uniform",
+                "value": 0.0
+            }
+        },
+        "adjoint_fluid": {
+            "initial_condition": {
+                "type": "uniform",
+                "value": [ 0.0, 0.0, 0.0 ]
+            },
+            "boundary_conditions": [
+                {
+                    "type": "no_slip",
+                    "zone_indices": [ 1, 3, 4 ]
+                },
+                {
+                    "type": "outflow",
+                    "zone_indices": [ 2 ]
+                }
+            ]
+        },
+        "simulation_components": [
+            {
+                "type": "steady",
+                "tol": 1e-6,
+                "compute_control": "tsteps",
+                "compute_value": 1,
+                "scalar_coupled": true
+            }
+        ],
+        "point_zones": [
+            {
+                "name": "optimization_domain",
+                "geometry": "box",
+                "x_bounds": [ 0.2, 0.8 ],
+                "y_bounds": [ 0.2, 0.8 ],
+                "z_bounds": [ -1.0, 1.0 ]
+            },
+            {
+                "name": "initial_ball",
+                "geometry": "cylinder",
+                "start": [ 0.5, 0.5, -0.5 ],
+                "end": [ 0.5, 0.5, 1.5 ],
+                "radius": 0.25
+            },
+            {
+                "name": "outlet_low",
+                "geometry": "box",
+                "x_bounds": [ 1.8, 2.0 ],
+                "y_bounds": [ 0.0, 0.25 ],
+                "z_bounds": [ -1.0, 1.0 ]
+            },
+            {
+                "name": "outlet_high",
+                "geometry": "box",
+                "x_bounds": [ 1.8, 2.0 ],
+                "y_bounds": [ 0.75, 1.0 ],
+                "z_bounds": [ -1.0, 1.0 ]
+            },
+            {
+                "name": "outlet_full",
+                "geometry": "box",
+                "x_bounds": [ 1.8, 2.0 ],
+                "y_bounds": [ 0.0, 1.0 ],
+                "z_bounds": [ -1.0, 1.0 ]
+            }
+        ]
+    },
+    "optimization": {
+        "fd_test_strict": true,
+        "fd_test_tolerance": 5.0e-3,
+        "fd_test_perturbations": [
+            5.0e-1, 1.0e-1, 5.0e-2, 1.0e-2, 5.0e-3, 1.0e-3, 5.0e-4, 1.0e-4
+        ],
+        "domain": {
+            "type": "point_zone",
+            "zone_name": "optimization_domain"
+        },
+        "design": {
+            "type": "brinkman",
+            "mapping": [
+                {
+                    "type": "PDE_filter",
+                    "r": 0.05,
+                    "tol": 1.0e-20,
+                    "max_iter": 600
+                },
+                {
+                    "type": "RAMP",
+                    "f_max": 100.0
+                }
+            ],
+            "initial_distribution": {
+                "type": "point_zone",
+                "base_value": 0.0,
+                "zone_value": 1.0,
+                "zone_name": "initial_ball"
+            }
+        },
+        "solver": {
+            "type": "mma",
+            "max_iterations": 0,
+            "tolerance": 1.0e-3,
+            "mma": {
+                "max_iter": 100,
+                "asyinit": 0.5,
+                "asyincr": 1.2,
+                "asydecr": 0.7,
+                "scale": 1.0,
+                "auto_scale": false,
+                "xmin": 0.0,
+                "xmax": 1.0,
+                "a0": 1.0,
+                "a": 0.0,
+                "c": 1000.0,
+                "d": 0.0
+            }
+        },
+        "objectives": [
+            {
+                "type": "scalar_mixing",
+                "mask_name": "outlet_low",
+                "phi_ref": 0.0,
+                "weight": 1.0
+            },
+            {
+                "type": "scalar_mixing",
+                "mask_name": "outlet_high",
+                "phi_ref": 1.0,
+                "weight": 1.0
+            },
+            {
+                "type": "scalar_mixing",
+                "mask_name": "outlet_full",
+                "phi_ref": 0.5,
+                "weight": 1.0
+            }
+        ]
+    }
+}

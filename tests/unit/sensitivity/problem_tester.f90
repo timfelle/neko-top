@@ -24,6 +24,7 @@ program problem_tester
        fd_read_perturbations, fd_assertion_skipped, FD_SKIP_EXIT_CODE, &
        fd_read_targets, fd_target_t
   use fd_criterion, only: fd_strict_options_t
+  use logger, only: neko_log, LOG_SIZE
   implicit none
 
   ! JSON related arguments
@@ -118,6 +119,28 @@ program problem_tester
   ! Compute the sensitivity with our method
 
   call prob%compute(des, sim)
+
+  ! Diagnostic only: print each individual objective's own value (the
+  ! weighted-sum total the FD check gates on hides this). Cheap and
+  ! harmless for every existing single-objective case; exists so a
+  ! multi-objective case (e.g. a Pe study) can be inspected from the log
+  ! alone instead of new throwaway Fortran per investigation.
+  block
+    type(vector_t) :: obj_values
+    character(len=LOG_SIZE) :: log_buf
+    integer :: obj_i
+    if (prob%get_n_objectives() .gt. 1) then
+       call obj_values%init(prob%get_n_objectives())
+       call prob%get_all_objective_values(obj_values)
+       do obj_i = 1, prob%get_n_objectives()
+          write(log_buf, '(A,I0,A,ES16.9)') ' Objective ', obj_i, &
+               ' value = ', obj_values%x(obj_i)
+          call neko_log%message(log_buf)
+       end do
+       call obj_values%free()
+    end if
+  end block
+
   call prob%compute_sensitivity(des, sim)
 
   ! Read every target's analytic sensitivity out *before* running any sweep:

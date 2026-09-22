@@ -7,6 +7,7 @@ set(test_list
     "volume_filtered.case"
     "viscous_dissipation.case"
     "brinkman_dissipation.case"
+    "scalar_mixing.case"
 )
 
 # Path to the common driver source
@@ -47,6 +48,28 @@ add_custom_target(
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
 )
 add_dependencies(sensitivity_test_prepare sensitivity_prepare_script)
+
+# ============================================================================ #
+# scalar_mixing needs a real outlet split into y-quarters, so its box must be
+# non-periodic in y (the other four cases keep y periodic, which is what
+# prepare.sh above generates). Generated into its own subdirectory: genmeshbox
+# always writes a hardcoded 'box.nmsh', so this cannot share a directory with
+# the periodic-y box above without a write-write race under `make -j`.
+add_custom_target(
+    sensitivity_scalar_mixing_mesh
+    COMMENT "Generating non-periodic-y mesh for scalar_mixing"
+    BYPRODUCTS
+        ${CMAKE_CURRENT_BINARY_DIR}/scalar_mixing_mesh/box.nmsh
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+        ${CMAKE_CURRENT_BINARY_DIR}/scalar_mixing_mesh
+    COMMAND ${CMAKE_COMMAND} -E chdir
+        ${CMAKE_CURRENT_BINARY_DIR}/scalar_mixing_mesh
+        ${CMAKE_COMMAND} -E env
+        LD_LIBRARY_PATH="${neko_LD_LIBRARY_PATH}" PATH="${neko_PATH}"
+        genmeshbox 0 2 0 1 0 0.125 16 8 1 .false. .false. .true.
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+)
+add_dependencies(sensitivity_test_prepare sensitivity_scalar_mixing_mesh)
 
 # ============================================================================ #
 # Build the single driver executable
