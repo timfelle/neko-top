@@ -60,34 +60,77 @@
     // length-2 reference interval), and at h = 2/26 = 0.076923 that is
     // 0.0090363, for a cell Peclet of 200*0.0090363 = 1.807 -- comfortably
     // under 2. Kept at P=5 rather than pushed further, and at this modest
-    // an N, because the *time step* is bottlenecked by this same minimum
-    // spacing regardless of how it is reached (see next paragraph), so a
-    // finer mesh or a higher order buys accuracy per DOF but does not
-    // relax that bottleneck.
+    // an N, because the explicit viscous term that actually limits the
+    // time step scales as nu*dt/dx_min^2 (see next paragraph), so a finer
+    // mesh or a higher order tightens that limit quadratically while
+    // buying only accuracy per DOF.
     //
-    // dt: raising the resolution (whether by order or by `h`) shrinks the
-    // minimum grid spacing and therefore the CFL-limited time step, and
-    // this case's original dt = 1e-3 (nominal CFL ~0.11, vs ~0.016 at the
-    // unit tier's P=2/h=0.125) is NOT stable at this resolution -- measured
-    // directly: CFL grows from an initial ~0.11 (matching the coarser
-    // case's benign value) through >1 by t~0.21 and diverges to NaN by
-    // t~0.274, well before any FD sweep or the scalar's own equilibration
-    // could complete. A JSON-only fix (case.time.variable_timestep) was
-    // tried and rejected for a measured reason: Neko-TOP's own simulation
-    // driver (sources/simulation/simulation.f90) passes the *whole* case
-    // params object to time_step_controller%init instead of the
-    // case.time subtree Neko's own neko.f90 extracts first, so every
-    // variable-timestep key is looked up at the wrong JSON scope and
-    // silently falls back to its Fortran default (huge()) -- confirmed by
-    // the printed dt jumping to a nonsensical 1.0 rather than honouring
-    // max_timestep. This is a Neko-TOP bug worth its own backlog entry,
-    // not something to work around inside this case file. Instead, a
-    // FIXED dt = 2.5e-4 (nominal CFL ~0.037, matching a stable settle
-    // observed directly: fluid residuals collapse to ~1e-7 by t~0.3 and
-    // CFL then holds flat at 0.0371 for as long as tested) is used, and a
-    // dt = 5.0e-4 (~2x looser) was directly measured to still diverge
-    // (p-residual reaching ~4.5e6 by t=0.225), so 2.5e-4 carries real, not
-    // excessive, margin.
+    // dt and time_order: the derivation that used to sit here reasoned
+    // from an advective CFL of ~0.11 and concluded that the fine mesh
+    // forced dt = 2.5e-4. That was the wrong constraint. A root-cause
+    // investigation -- reproduced in PURE NEKO, with no Neko-TOP in the
+    // loop -- found the blowup is not advective at all, but comes from the
+    // one explicitly-treated viscous term in pnpn:
+    //
+    //   fluid_pnpn.f90:701 builds the extrapolated velocity u_e by EXT
+    //   extrapolation at order case.numerics.time_order, and
+    //   pnpn_res_cpu.f90:80-96 takes its double curl and scales it by
+    //   mu/rho into the pressure Poisson right-hand side. That
+    //   nu*curl(curl(u_e)) term is the Karniadakis-Israeli-Orszag
+    //   high-order pressure boundary condition, and it is the ONLY place
+    //   nu appears explicitly -- everywhere else in pnpn the viscosity is
+    //   implicit, inside the Helmholtz solve, and so unconditionally
+    //   stable.
+    //
+    // The binding number is therefore viscous, and it lives at the
+    // boundary: nu*dt/dx_min^2 = 12.2 here (Re = 1, so nu = 1, against the
+    // minimum GLL spacing derived above), not the advective CFL of 0.11.
+    // An explicit term sitting at 12.2 survives at all only because the
+    // EXT extrapolation feeding it is damped at low order; the EXT gain is
+    // 1, 3, 7 at time_order 1, 2, 3, so stability degrades sharply with
+    // extrapolation order rather than with dt alone.
+    //
+    // Four measurements pin the mechanism, all at the resolution above:
+    //   * time_order 3 diverges at step 271;
+    //   * time_order 2 and time_order 1 both run clean;
+    //   * time_order 3 at Re = 10 (nu 10x smaller) runs clean;
+    //   * time_order 3 on a periodic-y box runs clean -- no y wall, hence
+    //     no boundary for the KIO term to act on.
+    // Lowering Re, or removing the wall, fixes it; lowering dt alone only
+    // postpones it. Hence time_order = 2 here, and dt back at the ordinary
+    // 1.0e-3 the rest of the suite uses.
+    //
+    // Margin at time_order 2 was measured, not assumed: stable at
+    // dt = 1e-3, 2e-3 AND 4e-3, i.e. 4x headroom, where time_order 3 has
+    // none whatsoever at 1e-3. Dropping the extrapolation order costs this
+    // case nothing: it is a steady-state case driven to convergence by the
+    // `steady` simcomp, so the temporal order affects only the path to the
+    // converged state, not the converged answer the objectives read.
+    //
+    // Why this case alone: the five sibling cases registered in this suite
+    // that carry an identical Re = 1 / time_order = 3 /
+    // polynomial_order = 5 / timestep = 1e-3 combination
+    // (viscous_dissipation, brinkman_dissipation, dissipation,
+    // dissipation_weights and passive_scalar) are not stable by virtue of
+    // any better-chosen number -- they survive because they all sit on the
+    // shared periodic-y box, where y has no wall and the KIO term never
+    // bites. scalar_mixing is the suite's only non-periodic-y case (it
+    // needs a real y in [0,1] outlet to split into quarters), and is
+    // therefore the only one exposed to this. Do not "fix" the siblings by
+    // copying time_order 2 across; equally, any future non-periodic-y case
+    // added to this directory inherits this constraint.
+    //
+    // Retained from the superseded derivation, because it is an
+    // independent measured finding and still true: a JSON-only fix
+    // (case.time.variable_timestep) was tried and rejected because
+    // Neko-TOP's own simulation driver (sources/simulation/simulation.f90)
+    // passes the *whole* case params object to time_step_controller%init
+    // instead of the case.time subtree Neko's own neko.f90 extracts first,
+    // so every variable-timestep key is looked up at the wrong JSON scope
+    // and silently falls back to its Fortran default (huge()) -- confirmed
+    // by the printed dt jumping to a nonsensical 1.0 rather than honouring
+    // max_timestep. That is a Neko-TOP bug worth its own backlog entry,
+    // not something to work around inside this case file.
     //
     // end_time: backlog #24 found the scalar residual (steady_state_data.
     // csv) nowhere near 1e-6 at end_time=6 (0.012, decaying roughly by
@@ -131,10 +174,10 @@
         "output_boundary": false,
         "time": {
             "end_time": 20.0,
-            "timestep": 2.5e-4
+            "timestep": 1.0e-3
         },
         "numerics": {
-            "time_order": 3,
+            "time_order": 2,
             "polynomial_order": 5,
             "dealias": true
         },
