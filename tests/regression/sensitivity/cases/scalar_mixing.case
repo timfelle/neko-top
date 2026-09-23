@@ -132,40 +132,69 @@
     // max_timestep. That is a Neko-TOP bug worth its own backlog entry,
     // not something to work around inside this case file.
     //
-    // end_time: backlog #24 found the scalar residual (steady_state_data.
-    // csv) nowhere near 1e-6 at end_time=6 (0.012, decaying roughly by
-    // half per time unit) and extrapolated end_time ~16+. Measured
-    // directly at THIS resolution/dt: after the fluid settles (~t=0.3),
-    // the scalar decay rate itself keeps slowing as t grows (apparent
-    // half-life climbing from ~0.17 to ~1.0 time units through t=1.0),
-    // consistent with a multi-eigenmode relaxation whose asymptotic
-    // (slowest-mode) half-life converges to ~1.0 time unit -- matching
-    // backlog #24's own coarser-resolution estimate closely. end_time=20
-    // targets the literal 1e-6 tolerance from that measured asymptotic
-    // rate (residual 0.167 at t=1.0, needing ~17.7 more time units to
-    // cross 1e-6 at half-life~1.0); VERIFY the actually-reached residual
-    // in this run's steady_state_data.csv rather than trusting this
-    // extrapolation.
+    // end_time: MEASURED, not extrapolated. A single forward solve was
+    // run out to t = 200 at exactly this resolution/dt/time_order and the
+    // scalar residual column of steady_state_data.csv was read directly.
+    // The result: after the fluid settles (fluid residuals below 5.1e-13
+    // for all t > 1, i.e. six orders under the 1e-6 tolerance), the
+    // scalar relaxes as a single clean exponential with a half-life of
+    // 11.343 time units -- constant to four significant figures over
+    // t = 20->100, 100->180 and 150->182.75, so this is one eigenmode,
+    // not the "multi-eigenmode relaxation with a half-life converging to
+    // ~1.0" the superseded note here claimed. That old figure was fitted
+    // at t ~ 1.0, still deep in the pre-asymptotic transient, which is
+    // why it was out by an order of magnitude.
     //
-    // COST: this combination (fine mesh, P=5, a CFL-limited dt an order of
-    // magnitude below the unit-tier case, and a long end_time) makes this
-    // by far the most expensive case in the suite. Run at the suite
-    // default of 2 MPI ranks (RECORD THE RANK COUNT alongside any
-    // measurement here, since dFdx has been observed to differ by
-    // ~5.6e-7 between rank counts in this suite) -- a higher rank count
-    // was tried and rejected for a measured reason: this container's
-    // /dev/shm is capped at 64 MiB, and OpenMPI's vader BTL requests a
-    // 16 MiB sm_segment per rank, so 8 ranks (128 MiB) cannot fit
-    // regardless of stale-segment cleanup. Measured directly: an 8-rank
-    // run of this exact case failed after 123.6s with repeated "not
-    // enough space" warnings, not a clean FD-tolerance verdict -- see
-    // CMakeLists.txt. At 2 ranks, an end_time=20 run with N
-    // perturbations costs roughly N+1 times a single ~80000-step solve
-    // -- multiple hours total even at the minimal 4-perturbation sweep
-    // this case uses (see fd_test_perturbations below). This is the
-    // direct, measured cost of not trading resolution for speed on an
-    // advection-dominated, weakly-diffusive (Pe=200) problem, not a
-    // padding choice.
+    // The slow mode is physical and identifiable: transverse diffusion
+    // across the y extent, which is walled (Neumann) on both sides, decays
+    // at alpha*pi^2 = (1/Pe)*pi^2 = (1/200)*pi^2 = 0.0493, i.e. a
+    // half-life of 14.1 -- the same order as the measured 11.343, the
+    // difference being advective washout through the outlet. It is not an
+    // artefact of dt, the mesh or the Brinkman ball.
+    //
+    // The residual crosses 1e-6 at t = 182.773 (step 182773): the run
+    // reached 1.0014e-6 at t = 182.750 and the remaining 0.14% is 23
+    // further steps at the measured local rate. So the previous
+    // end_time = 20 was four orders of magnitude short -- it stopped at a
+    // scalar residual of 2.09e-2 -- and the objectives were being read off
+    // a scalar field still in full relaxation. That is exactly the trap
+    // backlog #24 describes, and it was live in this case.
+    //
+    // end_time is set to 185.0 rather than 182.8: the FD sweep evaluates
+    // the case once per perturbation with a perturbed design, and those
+    // trajectories need to converge too, not just the baseline's. 2.2 time
+    // units is ~0.2 of a half-life of margin and costs ~2200 steps a
+    // solve.
+    //
+    // COST: MEASURED at 2 MPI ranks (RECORD THE RANK COUNT alongside any
+    // measurement here, since dFdx has been observed to differ by ~5.6e-7
+    // between rank counts in this suite). One forward solve to t = 183
+    // took 18447 s (5.1 h) for 182750 steps, i.e. 0.101 s/step under
+    // shared load; an uncontended earlier measurement of the same solve
+    // gave 0.072 s/step. A full FD run is 6 forward solves (baseline, 4
+    // perturbations, 1 baseline-restore) plus one adjoint, so roughly 26
+    // to 36 h. Note what this means: dropping dt from 2.5e-4 to 1.0e-3
+    // removed 4x the steps, but the honest end_time went UP by 9x, so the
+    // case did NOT get cheaper -- it got CORRECT. The old ~30-33 h run
+    // never converged the scalar at all.
+    //
+    // The one large lever not pulled here, recorded because it is
+    // measured: `scalar_coupled: true` on the steady simcomp means the
+    // fluid is only frozen once BOTH fields converge, so the fluid keeps
+    // being solved for all 183000 steps despite sitting at 5e-13 from
+    // t ~ 0.35. The per-step split is 0.0470 s fluid against 0.0180 s
+    // scalar, so `scalar_coupled: false` would freeze the fluid at
+    // t ~ 0.35 and cut a solve to roughly 1.5 h and the sweep to ~10 h.
+    // That is a change to what this case asserts about coupling, so it is
+    // flagged rather than applied.
+    //
+    // A higher MPI rank count was tried and rejected for a measured
+    // reason: this container's /dev/shm is capped at 64 MiB, and OpenMPI's
+    // vader BTL requests a 16 MiB sm_segment per rank, so 8 ranks (128
+    // MiB) cannot fit regardless of stale-segment cleanup. Measured
+    // directly: an 8-rank run of this exact case failed after 123.6s with
+    // repeated "not enough space" warnings, not a clean FD-tolerance
+    // verdict -- see CMakeLists.txt.
     "version": 1.0,
     "case": {
         "mesh_file": "scalar_mixing_mesh/box.nmsh",
@@ -173,7 +202,7 @@
         "output_at_end": false,
         "output_boundary": false,
         "time": {
-            "end_time": 20.0,
+            "end_time": 185.0,
             "timestep": 1.0e-3
         },
         "numerics": {

@@ -87,12 +87,15 @@ set_tests_properties(sensitivity_regression_build PROPERTIES
 # minutes the steady cases take.
 #
 # scalar_mixing needs its own resolution (see
-# run_sensitivity_regression_check.sh) to keep the cell Peclet number
-# below ~2 at Pe=200, plus a much smaller dt
-# than the other cases (fixed timestep, CFL-limited by that same fine mesh)
-# and a longer end_time to let the scalar equilibrate — see the case file's
-# own header comment for the full derivation. All three make it by far the
-# most expensive case in this suite.
+# run_sensitivity_regression_check.sh) to keep the cell Peclet number below
+# ~2 at Pe=200, and a far longer end_time than any other case here: its
+# scalar relaxes with a MEASURED half-life of 11.343 time units and only
+# reaches the steady simcomp's 1e-6 tolerance at t = 182.8. Its dt is now
+# the same 1.0e-3 the rest of the suite uses -- the smaller dt this comment
+# used to describe was suppressing an instability whose real cause was the
+# extrapolation order, not the time step; see the case file's own header
+# comment for both derivations. The end_time alone makes it by far the most
+# expensive case in this suite.
 set(sensitivity_regression_cases
     "viscous_dissipation"
     "brinkman_dissipation"
@@ -135,7 +138,12 @@ foreach(case_name ${sensitivity_regression_cases})
     if(case_name STREQUAL "passive_scalar")
         set(case_timeout 5400)
     elseif(case_name STREQUAL "scalar_mixing")
-        set(case_timeout 10800)
+        # MEASURED, not guessed: one forward solve to t = 183 took 18447 s
+        # (5.1 h) at 2 ranks, and a full sweep is 6 forward solves plus an
+        # adjoint, i.e. 26-36 h depending on machine load. 48 h of headroom
+        # over the upper end of that. The 3 h that used to sit here was
+        # sized for an end_time of 20, which never converged the scalar.
+        set(case_timeout 172800)
     else()
         set(case_timeout 1800)
     endif()
