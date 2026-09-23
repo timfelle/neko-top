@@ -86,16 +86,19 @@ set_tests_properties(sensitivity_regression_build PROPERTIES
 # unsteady case (five timesteps), so they cost seconds rather than the
 # minutes the steady cases take.
 #
-# scalar_mixing needs its own resolution (see
-# run_sensitivity_regression_check.sh) to keep the cell Peclet number below
-# ~2 at Pe=200, and a far longer end_time than any other case here: its
-# scalar relaxes with a MEASURED half-life of 11.343 time units and only
-# reaches the steady simcomp's 1e-6 tolerance at t = 182.8. Its dt is now
-# the same 1.0e-3 the rest of the suite uses -- the smaller dt this comment
-# used to describe was suppressing an instability whose real cause was the
-# extrapolation order, not the time step; see the case file's own header
-# comment for both derivations. The end_time alone makes it by far the most
-# expensive case in this suite.
+# scalar_mixing needs its own mesh and its own resolution (see
+# run_sensitivity_regression_check.sh): it is the only non-periodic-y case
+# here, since it splits a real y in [0,1] outlet into quarters. Its
+# end_time (5.0) and Pe (1000) were re-measured from scratch after the Neko
+# inlet fix c528651e9 -- before it, `expression_dirichlet` never set
+# bc_type and this case had no scalar inflow at all, so every parameter
+# derived against it, including the 185.0 end_time this comment used to
+# justify, was void. Its dt is the same 1.0e-3 the rest of the suite uses;
+# the smaller dt an older comment described was suppressing an instability
+# whose real cause was the extrapolation order. See the case file's own
+# header comment for all of those derivations. It remains the most
+# expensive case in this suite, but by a factor of a few rather than of
+# hundreds.
 set(sensitivity_regression_cases
     "viscous_dissipation"
     "brinkman_dissipation"
@@ -111,10 +114,10 @@ set(sensitivity_regression_cases
 
 foreach(case_name ${sensitivity_regression_cases})
     # scalar_mixing's mesh (26x13 elements, see
-    # run_sensitivity_regression_check.sh) is far more expensive than the
-    # 16x8 shared box the other cases use, and it also needs a much smaller
-    # fixed dt for CFL stability (see the case file's own header comment) --
-    # by far the most expensive case in this suite. A higher MPI rank count
+    # run_sensitivity_regression_check.sh) is ~2.7x the element count of the
+    # 16x8 shared box the other cases use, and its end_time is 5x the
+    # steady siblings' -- the most expensive case in this suite. A higher
+    # MPI rank count
     # was tried here to keep its wall time tractable (8 measured ~2.75x
     # faster than 2 on an isolated benchmark) and REJECTED for a measured
     # reason: this container's /dev/shm is capped at 64 MiB (see the
@@ -138,12 +141,13 @@ foreach(case_name ${sensitivity_regression_cases})
     if(case_name STREQUAL "passive_scalar")
         set(case_timeout 5400)
     elseif(case_name STREQUAL "scalar_mixing")
-        # MEASURED, not guessed: one forward solve to t = 183 took 18447 s
-        # (5.1 h) at 2 ranks, and a full sweep is 6 forward solves plus an
-        # adjoint, i.e. 26-36 h depending on machine load. 48 h of headroom
-        # over the upper end of that. The 3 h that used to sit here was
-        # sized for an end_time of 20, which never converged the scalar.
-        set(case_timeout 172800)
+        # MEASURED, not guessed: at 2 ranks one forward solve to t = 5.0
+        # is ~260 s, and a full sweep is 6 forward solves (baseline, 4
+        # perturbations, 1 restore) plus one adjoint, i.e. ~30 min. 7200 s
+        # is ~4x that, leaving room for machine load without letting a hung
+        # run sit for hours. The 48 h that used to sit here was sized for
+        # the pre-inlet-fix end_time of 185, which is gone.
+        set(case_timeout 7200)
     else()
         set(case_timeout 1800)
     endif()
