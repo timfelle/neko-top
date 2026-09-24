@@ -209,15 +209,15 @@ index 7df7b65..4f7dbf5 100644
  #endif
        end if
 _ACEOF
-        git apply pfunit_error_stop.patch
+        if git apply --check pfunit_error_stop.patch 2>/dev/null; then
+            git apply pfunit_error_stop.patch
+        fi
         cd $CURRENT_DIR
     fi
 
     if [[ -z "$(find $PFUNIT_DIR -name libpfunit.a)" ]]; then
-        cmake -B $PFUNIT_DIR/build -S $PFUNIT_DIR -G "Unix Makefiles" \
-            -DCMAKE_INSTALL_PREFIX=$PFUNIT_DIR \
-            -DCMAKE_C_COMPILER=$CC \
-            -DCMAKE_Fortran_COMPILER=$FC
+        cmake -B $PFUNIT_DIR/build -S $PFUNIT_DIR -G "Ninja" -Wno-dev \
+            --install-prefix=$PFUNIT_DIR -DCMAKE_BUILD_TYPE=Release -DMPI=YES
         cmake --build $PFUNIT_DIR/build
         cmake --install $PFUNIT_DIR/build
     fi
