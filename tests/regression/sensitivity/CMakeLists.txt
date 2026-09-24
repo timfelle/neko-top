@@ -141,12 +141,13 @@ foreach(case_name ${sensitivity_regression_cases})
     if(case_name STREQUAL "passive_scalar")
         set(case_timeout 5400)
     elseif(case_name STREQUAL "scalar_mixing")
-        # MEASURED, not guessed: at 2 ranks one forward solve to t = 5.0
-        # is ~260 s, and a full sweep is 6 forward solves (baseline, 4
-        # perturbations, 1 restore) plus one adjoint, i.e. ~30 min. 7200 s
-        # is ~4x that, leaving room for machine load without letting a hung
-        # run sit for hours. The 48 h that used to sit here was sized for
-        # the pre-inlet-fix end_time of 185, which is gone.
+        # MEASURED, not guessed: CTest timed the complete four-point sweep
+        # -- baseline, adjoint, 4 perturbed solves, 1 restore -- at 2336 s
+        # and 2372 s on two consecutive runs at 2 ranks on an otherwise
+        # idle box, i.e. ~40 min. 7200 s is ~3x that, leaving room for
+        # machine load without letting a hung run sit for hours. The 48 h
+        # that used to sit here was sized for the pre-inlet-fix end_time
+        # of 185, which is gone.
         set(case_timeout 7200)
     else()
         set(case_timeout 1800)
