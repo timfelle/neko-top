@@ -1,0 +1,288 @@
+// Bug #6, E0b (#57, strict convergence). Parent: ../../scalar_mixing.case
+// (the full physics/mesh/end_time derivation lives in that file's own long
+// header comment -- not repeated here). Never edit the parent.
+//
+// Placed in its own subdirectory (bug6/sc/) SO THAT THE BASENAME CAN STAY
+// "scalar_mixing.case" -- run_sensitivity_regression_check.sh keys its mesh
+// generation on `basename "$case_file"` (see that script: the
+// scalar_mixing.case branch generates its own non-periodic-y 26x13 mesh
+// into ./scalar_mixing_mesh/box.nmsh; every OTHER case name falls into the
+// shared periodic-y box branch instead, which is the WRONG mesh for this
+// case's mesh_file, "scalar_mixing_mesh/box.nmsh"). Any other name, in any
+// directory, would silently get the wrong mesh generated for it.
+//
+// Changed vs the parent, exactly:
+//   case.fluid.strict_convergence          (new)       true
+//   case.fluid.velocity_solver.max_iterations   50  -> 800
+//   case.fluid.pressure_solver.max_iterations   50  -> 800
+//   case.scalar.solver.max_iterations           50  -> 800
+//   optimization.fd_test_tolerance          4.0e-3 -> 1.0e6
+// optimization.fd_test_strict is already true and fd_test_perturbations
+// already pinned to [3.0e-1, 1.0e-1, 3.0e-2, 1.0e-2] in the parent -- both
+// kept exactly as-is, per "keep each parent's perturbation sweep".
+//
+// Source citations for the strict_convergence key are the same as
+// bug6/passive_scalar__strictconv.case's header: case.fluid.
+// strict_convergence gates both the primal
+// (fluid_scheme_incompressible.f90:312-313) and the adjoint fluid
+// (adjoint_fluid_scheme_incompressible.f90:364-365, same key); the scalar
+// path has no such key at all (scalars.f90:227, adjoint_scalars.f90:287
+// both call scalar_step_info() without it). allow_stabilization left at
+// its default (false); see that file's header for when to reach for it.
+//
+// fd_test_tolerance loosened to a non-binding 1.0e6, UNLIKE the two
+// unit-tier E0b siblings which keep their tight parent tolerances
+// unchanged: this case's parent max_iterations (50) is far below the
+// unit tier's already-800, so raising it here is far more likely to
+// actually change the converged solution (and hence C_hat) than it is for
+// the two unit cases, which changes nothing about their solver caps at
+// all. A tight, precisely-tuned tolerance (the parent's 4.0e-3, itself set
+// at ~2.07x a measured C_hat of +1.93e-3) would risk FLOOR_EXCEEDED on a
+// result this dispatch cannot predict.
+//
+// Cost note: the parent's own header records ~2336-2372 s (~39-40 min) at
+// 2 ranks for its full four-point sweep at max_iterations 50. Raising the
+// cap to 800 can only add iterations to individual KSP solves that were
+// hitting the old cap: budget somewhat more than 40 minutes, and possibly
+// much more if strict_convergence itself does not abort but many solves
+// were previously silently returning at 50 iterations far from converged.
+{
+    "version": 1.0,
+    "case": {
+        "mesh_file": "scalar_mixing_mesh/box.nmsh",
+        "output_checkpoints": false,
+        "output_at_end": false,
+        "output_boundary": false,
+        "time": {
+            "end_time": 5.0,
+            "timestep": 1.0e-3
+        },
+        "numerics": {
+            "time_order": 2,
+            "polynomial_order": 5,
+            "dealias": true
+        },
+        "fluid": {
+            "scheme": "pnpn",
+            "Re": 1.0,
+            // --- changed vs ../../scalar_mixing.case ---
+            "strict_convergence": true,
+            "initial_condition": {
+                "type": "uniform",
+                "value": [ 1.0, 0.0, 0.0 ]
+            },
+            "velocity_solver": {
+                "type": "cg",
+                "preconditioner": {
+                    "type": "jacobi"
+                },
+                "absolute_tolerance": 1e-16,
+                // --- changed vs ../../scalar_mixing.case: 50 -> 800 ---
+                "max_iterations": 800
+            },
+            "pressure_solver": {
+                "type": "gmres",
+                "preconditioner": {
+                    "type": "hsmg"
+                },
+                "absolute_tolerance": 1e-12,
+                // --- changed vs ../../scalar_mixing.case: 50 -> 800 ---
+                "max_iterations": 800
+            },
+            "boundary_conditions": [
+                {
+                    "type": "velocity_value",
+                    "value": [ 1.0, 0.0, 0.0 ],
+                    "zone_indices": [ 1, 3, 4 ]
+                },
+                {
+                    "type": "outflow",
+                    "zone_indices": [ 2 ]
+                }
+            ],
+            "output_control": "never"
+        },
+        "scalar": {
+            "enabled": true,
+            "Pe": 1000.0,
+            "solver": {
+                "type": "cg",
+                "preconditioner": {
+                    "type": "jacobi"
+                },
+                "absolute_tolerance": 1e-18,
+                // --- changed vs ../../scalar_mixing.case: 50 -> 800 ---
+                "max_iterations": 800
+            },
+            "initial_condition": {
+                "type": "expression",
+                "value": "step(y - 0.5)"
+            },
+            "boundary_conditions": [
+                {
+                    "type": "expression_dirichlet",
+                    "value": "step(y - 0.5)",
+                    "zone_indices": [ 1 ]
+                },
+                {
+                    "type": "neumann",
+                    "flux": 0.0,
+                    "zone_indices": [ 2, 3, 4 ]
+                }
+            ]
+        },
+        "adjoint_scalar": {
+            "enabled": true,
+            "boundary_conditions": [
+                {
+                    "type": "dirichlet",
+                    "value": 0.0,
+                    "zone_indices": [ 1 ]
+                },
+                {
+                    "type": "neumann",
+                    "flux": 0.0,
+                    "zone_indices": [ 2, 3, 4 ]
+                }
+            ],
+            "initial_condition": {
+                "type": "uniform",
+                "value": 0.0
+            }
+        },
+        "adjoint_fluid": {
+            "initial_condition": {
+                "type": "uniform",
+                "value": [ 0.0, 0.0, 0.0 ]
+            },
+            "boundary_conditions": [
+                {
+                    "type": "no_slip",
+                    "zone_indices": [ 1, 3, 4 ]
+                },
+                {
+                    "type": "outflow",
+                    "zone_indices": [ 2 ]
+                }
+            ]
+        },
+        "simulation_components": [
+            {
+                "type": "steady",
+                "tol": 1e-6,
+                "compute_control": "tsteps",
+                "compute_value": 1,
+                "scalar_coupled": true
+            }
+        ],
+        "point_zones": [
+            {
+                "name": "optimization_domain",
+                "geometry": "box",
+                "x_bounds": [ 0.2, 0.8 ],
+                "y_bounds": [ 0.2, 0.8 ],
+                "z_bounds": [ -1.0, 1.0 ]
+            },
+            {
+                "name": "initial_ball",
+                "geometry": "cylinder",
+                "start": [ 0.5, 0.5, -0.5 ],
+                "end": [ 0.5, 0.5, 1.5 ],
+                "radius": 0.25
+            },
+            {
+                "name": "outlet_low",
+                "geometry": "box",
+                "x_bounds": [ 1.8, 2.0 ],
+                "y_bounds": [ 0.0, 0.25 ],
+                "z_bounds": [ -1.0, 1.0 ]
+            },
+            {
+                "name": "outlet_high",
+                "geometry": "box",
+                "x_bounds": [ 1.8, 2.0 ],
+                "y_bounds": [ 0.75, 1.0 ],
+                "z_bounds": [ -1.0, 1.0 ]
+            },
+            {
+                "name": "outlet_full",
+                "geometry": "box",
+                "x_bounds": [ 1.8, 2.0 ],
+                "y_bounds": [ 0.0, 1.0 ],
+                "z_bounds": [ -1.0, 1.0 ]
+            }
+        ]
+    },
+    "optimization": {
+        "fd_test_strict": true,
+        // --- changed vs ../../scalar_mixing.case: 4.0e-3 -> 1.0e6 ---
+        "fd_test_tolerance": 1.0e6,
+        "fd_test_perturbations": [
+            3.0e-1, 1.0e-1, 3.0e-2, 1.0e-2
+        ],
+        "domain": {
+            "type": "point_zone",
+            "zone_name": "optimization_domain"
+        },
+        "design": {
+            "type": "brinkman",
+            "mapping": [
+                {
+                    "type": "PDE_filter",
+                    "r": 0.05,
+                    "tol": 1.0e-20,
+                    "max_iter": 600
+                },
+                {
+                    "type": "RAMP",
+                    "f_max": 100.0
+                }
+            ],
+            "initial_distribution": {
+                "type": "point_zone",
+                "base_value": 0.0,
+                "zone_value": 1.0,
+                "zone_name": "initial_ball"
+            }
+        },
+        "solver": {
+            "type": "mma",
+            "max_iterations": 0,
+            "tolerance": 1.0e-3,
+            "mma": {
+                "max_iter": 100,
+                "asyinit": 0.5,
+                "asyincr": 1.2,
+                "asydecr": 0.7,
+                "scale": 1.0,
+                "auto_scale": false,
+                "xmin": 0.0,
+                "xmax": 1.0,
+                "a0": 1.0,
+                "a": 0.0,
+                "c": 1000.0,
+                "d": 0.0
+            }
+        },
+        "objectives": [
+            {
+                "type": "scalar_mixing",
+                "mask_name": "outlet_low",
+                "phi_ref": 0.0,
+                "weight": 1.0
+            },
+            {
+                "type": "scalar_mixing",
+                "mask_name": "outlet_high",
+                "phi_ref": 1.0,
+                "weight": 1.0
+            },
+            {
+                "type": "scalar_mixing",
+                "mask_name": "outlet_full",
+                "phi_ref": 0.5,
+                "weight": 1.0
+            }
+        ]
+    }
+}

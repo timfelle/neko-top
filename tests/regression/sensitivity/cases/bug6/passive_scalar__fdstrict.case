@@ -1,0 +1,232 @@
+// Bug #6, E1 control. Parent: ../passive_scalar.case, byte-for-byte except
+// the three "optimization" keys below. Never edit the parent -- see
+// known-bugs #6, "2026-09-23/24 -- STATE OF PLAY", step 1.
+//
+// Purpose: turn on the strict FD criterion (optimization.fd_test_strict,
+// tests/shared/fd_criterion.f90) so the driver prints p_hat/C_hat instead of
+// only the historical smallest-perturbation pass/fail. Nothing about the
+// simulation itself changes.
+//
+// fd_test_perturbations is PINNED to the parent's implicit sweep
+// ([1e-1, 1e-2, 1e-3, 1e-4], the historical `fd_default_perturbations` the
+// parent runs today with no explicit key) rather than left to default,
+// because turning fd_test_strict on with no explicit sweep switches the
+// default to the *strict* 9-point geometric sweep
+// (tests/shared/sensitivity.f90 fd_read_perturbations) -- a different
+// measurement. Pinning keeps this variant a pure fd_test_strict toggle.
+//
+// Verified OFFLINE (fd_criterion.f90's order-run + Richardson logic
+// reimplemented in Python and run on the case's own recorded 4-point sweep,
+// 2.0583e-2 / 4.2597e-3 / 2.5687e-3 / 2.3992e-3 -- see the plan file's
+// "2026-09-21" section): reaches the FIT branch, p_median 0.99182,
+// Richardson C_hat +2.3800e-3, matching the plan's recorded
+// "p_hat = 0.995208  C_hat = +2.380e-3  branch = FIT" to 4 significant
+// figures on C_hat (the small p_hat discrepancy is expected -- the plan's
+// number came from the live driver's internal verdict, this is a
+// hand-reimplementation of the same published algorithm on rounded
+// 5-sig-fig inputs, not a bit-for-bit rerun). fd_test_tolerance is KEPT at
+// the parent's 5.0e-3: C_hat +2.380e-3 is already ~2.1x inside it, so the
+// existing tolerance already accepts this measurement (per the plan file,
+// "It passes the case's loosened fd_test_tolerance: 5.0e-3").
+//
+// NOT run as part of this dispatch (case-authoring only, per task scope);
+// a later measurement dispatch reproduces this on the live binary.
+{
+    "version": 1.0,
+    "case": {
+        "mesh_file": "box.nmsh",
+        "output_checkpoints": false,
+        "output_at_end": false,
+        "output_boundary": false,
+        "time": {
+            "end_time": 10.0,
+            "timestep": 1.0e-3
+        },
+        "numerics": {
+            "time_order": 3,
+            "polynomial_order": 5,
+            "dealias": true
+        },
+        "fluid": {
+            "scheme": "pnpn",
+            "Re": 1.0,
+            "initial_condition": {
+                "type": "uniform",
+                "value": [ 0.0, 0.0, 0.0 ]
+            },
+            "velocity_solver": {
+                "type": "cg",
+                "preconditioner": {
+                    "type": "jacobi"
+                },
+                "absolute_tolerance": 1e-16,
+                "max_iterations": 50
+            },
+            "pressure_solver": {
+                "type": "gmres",
+                "preconditioner": {
+                    "type": "hsmg"
+                },
+                "absolute_tolerance": 1e-12,
+                "max_iterations": 50
+            },
+            "boundary_conditions": [
+                {
+                    "type": "user_velocity",
+                    "zone_indices": [ 1 ]
+                },
+                {
+                    "type": "outflow",
+                    "zone_indices": [ 2 ]
+                }
+            ],
+            "output_control": "never"
+        },
+        "scalar": {
+            "enabled": true,
+            "Pe": 20.0,
+            "solver": {
+                "type": "cg",
+                "preconditioner": {
+                    "type": "jacobi"
+                },
+                "absolute_tolerance": 1e-18,
+                "max_iterations": 50
+            },
+            "initial_condition": {
+                "type": "user"
+            },
+            "boundary_conditions": [
+                {
+                    "type": "user_dirichlet",
+                    "zone_indices": [ 1 ]
+                },
+                {
+                    "type": "neumann",
+                    "flux": 0.0,
+                    "zone_indices": [ 2 ]
+                }
+            ]
+        },
+        "adjoint_scalar": {
+            "enabled": true,
+            "boundary_conditions": [
+                {
+                    "type": "dirichlet",
+                    "value": 0.0,
+                    "zone_indices": [ 1 ]
+                },
+                {
+                    "type": "neumann",
+                    "flux": 0.0,
+                    "zone_indices": [ 2 ]
+                }
+            ],
+            "initial_condition": {
+                "type": "uniform",
+                "value": 0.0
+            }
+        },
+        "adjoint_fluid": {
+            "initial_condition": {
+                "type": "uniform",
+                "value": [ 0.0, 0.0, 0.0 ]
+            },
+            "boundary_conditions": [
+                {
+                    "type": "no_slip",
+                    "zone_indices": [ 1 ]
+                },
+                {
+                    "type": "outflow",
+                    "zone_indices": [ 2 ]
+                }
+            ]
+        },
+        "simulation_components": [
+            {
+                "type": "steady",
+                "tol": 1e-9,
+                "compute_control": "tsteps",
+                "compute_value": 1,
+                "scalar_coupled": true
+            }
+        ],
+        "point_zones": [
+            {
+                "name": "optimization_domain",
+                "geometry": "box",
+                "x_bounds": [ 0.2, 0.8 ],
+                "y_bounds": [ 0.2, 0.8 ],
+                "z_bounds": [ -1.0, 1.0 ]
+            },
+            {
+                "name": "objective_domain",
+                "geometry": "box",
+                "x_bounds": [ 0.8, 1.0 ],
+                "y_bounds": [ -1.0, 3.0 ],
+                "z_bounds": [ -1.0, 3.0 ]
+            },
+            {
+                "name": "initial_ball",
+                "geometry": "cylinder",
+                "start": [ 0.5, 0.5, -0.5 ],
+                "end": [ 0.5, 0.5, 1.5 ],
+                "radius": 0.25
+            }
+        ]
+    },
+    "optimization": {
+        // --- changed vs ../passive_scalar.case: begin ---
+        "fd_test_strict": true,
+        "fd_test_perturbations": [
+            1.0e-1, 1.0e-2, 1.0e-3, 1.0e-4
+        ],
+        // --- changed vs ../passive_scalar.case: end ---
+        "fd_test_tolerance": 5.0e-3,
+        "domain": {
+            "type": "point_zone",
+            "zone_name": "optimization_domain"
+        },
+        "design": {
+            "type": "brinkman",
+            "mapping": [
+                {
+                    "type": "PDE_filter",
+                    "r": 0.05,
+                    "tol": 1.0e-20,
+                    "max_iter": 600
+                },
+                {
+                    "type": "RAMP",
+                    "f_max": 100.0
+                }
+            ],
+            "initial_distribution": {
+                "type": "point_zone",
+                "base_value": 0.0,
+                "zone_value": 1.0,
+                "zone_name": "initial_ball"
+            }
+        },
+        "solver": {
+            "type": "mma",
+            "max_iterations": 100,
+            "tolerance": 1.0e-3,
+            "subsolve": "dip",
+            "mma": {
+                "scale": 1000.0,
+                "xmin": 0.0,
+                "xmax": 1.0
+            }
+        },
+        "objectives": [
+            {
+                "type": "scalar_mixing",
+                "mask_name": "objective_domain",
+                "phi_ref": 0.5,
+                "weight": 1.0
+            }
+        ]
+    }
+}

@@ -1,0 +1,280 @@
+// Bug #6, E3 (advection-dominated Pe). Parent:
+// bug6/passive_scalar__fdstrict.case, changed only case.scalar.Pe
+// (20 -> 1000) and optimization.fd_test_tolerance. Never edit the parent.
+//
+// Pe RAISED, never lowered, per the project's own "advection-dominated is
+// the target regime" convention and the plan file's explicit instruction.
+// 1000 is scalar_mixing's OWN shipped Pe -- its header measured the outflow
+// distribution across a Pe ladder and found 1000 "advection-dominated,
+// strongly" (obj1 7.5e-13, obj3 1.088e-1) and 200 merely "advection-
+// dominated" (obj1 4.0e-5) -- so 1000, not 200, is this suite's actual
+// advection-dominated calibration point; 200 is the intermediate rung
+// covered by the __fdstrict_pe200.case sibling.
+//
+// RESOLUTION -- CHANGED, unlike the Pe=200 sibling, because the parent's
+// mesh cannot hold cell Pe <= ~10 at this Pe:
+//   * cell Pe = Pe * min GLL nodal spacing (P=5: 0.117472338 * h, h being
+//     the element size -- see scalar_mixing.case's header for the
+//     0.234944676070535 GLL-spacing derivation, independently recomputed
+//     this session from the GLL nodes of order 5 to the same value).
+//   * At the parent's mesh (NEKO_TOP_SENSITIVITY_MESH_N default 8, so
+//     nx=16, ny=8, h = 1/8 = 0.125 in BOTH x and y -- the box is
+//     [0,2]x[0,1] with nx=2*mesh_n, ny=mesh_n, so h is always 1/mesh_n
+//     regardless of mesh_n), min GLL spacing = 0.117472338*0.125 =
+//     0.0146840, giving cell Pe = 1000*0.0146840 = 14.68 -- over the ~10
+//     target.
+//   * NEKO_TOP_SENSITIVITY_MESH_N is raised 8 -> 13 (via the environment,
+//     the only lever run_sensitivity_regression_check.sh exposes for this
+//     mesh -- no case-file key controls it). At mesh_n=13, h = 1/13 =
+//     0.076923, min GLL spacing = 0.117472338*0.076923 = 0.0090363, so
+//     cell Pe = 1000*0.0090363 = 9.0363 -- under the target, and not a
+//     guess: h = 0.076923 is EXACTLY scalar_mixing's own mesh spacing
+//     (its 26x13 box over [0,2]x[0,1] has the same h in both directions),
+//     so this reuses scalar_mixing's own already-certified cell Pe of 9.04
+//     at Pe=1000, rather than an unmeasured resolution.
+//   * polynomial_order is UNCHANGED (5, same as the parent): bumping
+//     mesh_n alone already reaches the target, and mesh_n is the lever
+//     scalar_mixing itself used (P=5 was fixed there as "matching every
+//     sibling case in this directory" before its own mesh bump).
+//
+// dt UNCHANGED (1.0e-3, the parent's value) -- CFL does not force a change:
+//   * advective CFL = U*dt/dx_min with the inlet speed U=1 (tests/
+//     regression/sensitivity/user.f90:71, "u%x(...) = 1.0_rp" at the inlet
+//     -- verified from source, not assumed). At mesh_n=13,
+//     dx_min = 0.0090363, so CFL = 1e-3/0.0090363 = 0.1107 -- this is
+//     EXACTLY the "~0.11" advective CFL scalar_mixing's own header reports
+//     at its identical h, corroborating the number rather than merely
+//     computing it independently.
+//   * the explicit KIO viscous number nu*dt/dx_min^2 (Re=1, so nu=1) is
+//     1e-3/0.0090363^2 = 12.25 -- the SAME magnitude that made scalar_mixing
+//     diverge at time_order 3, but ONLY because that case has a real y-wall
+//     (non-periodic y). scalar_mixing's own header records this was tested
+//     directly, not inferred: its "four measurements", ALL AT THAT SAME
+//     RESOLUTION (hence the same viscous number, 12.2), include
+//     "time_order 3 on a periodic-y box runs clean -- no y wall, hence no
+//     boundary for the KIO term to act on". passive_scalar's box IS
+//     periodic in y (run_sensitivity_regression_check.sh's genmeshbox call
+//     for the non-scalar_mixing branch passes periodicity flags
+//     ".false. .true. .true." = non-periodic x, periodic y, periodic z),
+//     so this is the direct precedent for time_order 3 staying stable here
+//     at the finer mesh, not an extrapolation across an untested variable.
+//   * time_order therefore stays 3 (the parent's value, and every other
+//     key besides Pe/mesh resolution is untouched).
+//
+// COST ESTIMATE (not measured -- flagged for the measurement dispatch):
+// the base passive_scalar P=5/mesh_n=8 sweep is 2474 s at 2 ranks (plan
+// file, 2026-09-21). mesh_n 8 -> 13 raises the in-plane element count from
+// 16*8=128 to 26*13=338, a 2.64x factor; z stays 1 element either way.
+// Assuming cost scales roughly with element/DOF count for this elliptic-
+// solver-dominated case (a lower bound -- iterative solver iteration counts
+// typically also rise with problem size, so this is optimistic, not a
+// ceiling), that projects to roughly 2474*2.64 ~ 6531 s (~1.8 h) for the
+// whole 4-point sweep (baseline, adjoint, 4 perturbed, 1 restore) -- inside
+// the task's ~3 h affordability bound, but budget toward 3 h rather than
+// 1.8 h until actually measured.
+//
+// fd_test_tolerance -> 1.0e6: unmeasured outcome at this Pe, non-binding
+// ceiling, same convention as the other novel variants in this dispatch.
+// fd_test_perturbations kept identical to the parent for the same reason as
+// the __fdstrict_pe200.case sibling (comparability; NOT independently
+// verified to reach FIT at this Pe/mesh -- deferred to the measurement
+// dispatch).
+{
+    "version": 1.0,
+    "case": {
+        "mesh_file": "box.nmsh",
+        "output_checkpoints": false,
+        "output_at_end": false,
+        "output_boundary": false,
+        "time": {
+            "end_time": 10.0,
+            "timestep": 1.0e-3
+        },
+        "numerics": {
+            "time_order": 3,
+            "polynomial_order": 5,
+            "dealias": true
+        },
+        "fluid": {
+            "scheme": "pnpn",
+            "Re": 1.0,
+            "initial_condition": {
+                "type": "uniform",
+                "value": [ 0.0, 0.0, 0.0 ]
+            },
+            "velocity_solver": {
+                "type": "cg",
+                "preconditioner": {
+                    "type": "jacobi"
+                },
+                "absolute_tolerance": 1e-16,
+                "max_iterations": 50
+            },
+            "pressure_solver": {
+                "type": "gmres",
+                "preconditioner": {
+                    "type": "hsmg"
+                },
+                "absolute_tolerance": 1e-12,
+                "max_iterations": 50
+            },
+            "boundary_conditions": [
+                {
+                    "type": "user_velocity",
+                    "zone_indices": [ 1 ]
+                },
+                {
+                    "type": "outflow",
+                    "zone_indices": [ 2 ]
+                }
+            ],
+            "output_control": "never"
+        },
+        "scalar": {
+            "enabled": true,
+            // --- changed vs bug6/passive_scalar__fdstrict.case: 20 -> 1000 ---
+            "Pe": 1000.0,
+            "solver": {
+                "type": "cg",
+                "preconditioner": {
+                    "type": "jacobi"
+                },
+                "absolute_tolerance": 1e-18,
+                "max_iterations": 50
+            },
+            "initial_condition": {
+                "type": "user"
+            },
+            "boundary_conditions": [
+                {
+                    "type": "user_dirichlet",
+                    "zone_indices": [ 1 ]
+                },
+                {
+                    "type": "neumann",
+                    "flux": 0.0,
+                    "zone_indices": [ 2 ]
+                }
+            ]
+        },
+        "adjoint_scalar": {
+            "enabled": true,
+            "boundary_conditions": [
+                {
+                    "type": "dirichlet",
+                    "value": 0.0,
+                    "zone_indices": [ 1 ]
+                },
+                {
+                    "type": "neumann",
+                    "flux": 0.0,
+                    "zone_indices": [ 2 ]
+                }
+            ],
+            "initial_condition": {
+                "type": "uniform",
+                "value": 0.0
+            }
+        },
+        "adjoint_fluid": {
+            "initial_condition": {
+                "type": "uniform",
+                "value": [ 0.0, 0.0, 0.0 ]
+            },
+            "boundary_conditions": [
+                {
+                    "type": "no_slip",
+                    "zone_indices": [ 1 ]
+                },
+                {
+                    "type": "outflow",
+                    "zone_indices": [ 2 ]
+                }
+            ]
+        },
+        "simulation_components": [
+            {
+                "type": "steady",
+                "tol": 1e-9,
+                "compute_control": "tsteps",
+                "compute_value": 1,
+                "scalar_coupled": true
+            }
+        ],
+        "point_zones": [
+            {
+                "name": "optimization_domain",
+                "geometry": "box",
+                "x_bounds": [ 0.2, 0.8 ],
+                "y_bounds": [ 0.2, 0.8 ],
+                "z_bounds": [ -1.0, 1.0 ]
+            },
+            {
+                "name": "objective_domain",
+                "geometry": "box",
+                "x_bounds": [ 0.8, 1.0 ],
+                "y_bounds": [ -1.0, 3.0 ],
+                "z_bounds": [ -1.0, 3.0 ]
+            },
+            {
+                "name": "initial_ball",
+                "geometry": "cylinder",
+                "start": [ 0.5, 0.5, -0.5 ],
+                "end": [ 0.5, 0.5, 1.5 ],
+                "radius": 0.25
+            }
+        ]
+    },
+    "optimization": {
+        "fd_test_strict": true,
+        "fd_test_perturbations": [
+            1.0e-1, 1.0e-2, 1.0e-3, 1.0e-4
+        ],
+        // --- changed vs passive_scalar__fdstrict.case: 5.0e-3 -> 1.0e6 ---
+        "fd_test_tolerance": 1.0e6,
+        "domain": {
+            "type": "point_zone",
+            "zone_name": "optimization_domain"
+        },
+        "design": {
+            "type": "brinkman",
+            "mapping": [
+                {
+                    "type": "PDE_filter",
+                    "r": 0.05,
+                    "tol": 1.0e-20,
+                    "max_iter": 600
+                },
+                {
+                    "type": "RAMP",
+                    "f_max": 100.0
+                }
+            ],
+            "initial_distribution": {
+                "type": "point_zone",
+                "base_value": 0.0,
+                "zone_value": 1.0,
+                "zone_name": "initial_ball"
+            }
+        },
+        "solver": {
+            "type": "mma",
+            "max_iterations": 100,
+            "tolerance": 1.0e-3,
+            "subsolve": "dip",
+            "mma": {
+                "scale": 1000.0,
+                "xmin": 0.0,
+                "xmax": 1.0
+            }
+        },
+        "objectives": [
+            {
+                "type": "scalar_mixing",
+                "mask_name": "objective_domain",
+                "phi_ref": 0.5,
+                "weight": 1.0
+            }
+        ]
+    }
+}

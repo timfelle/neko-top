@@ -1,0 +1,177 @@
+// Bug #6, E0b (#57, strict convergence). Parent:
+// ../viscous_dissipation.case. Never edit the parent.
+//
+// Verified from source this session (both repos):
+//   * case.fluid.strict_convergence is read at
+//     src/fluid/fluid_scheme_incompressible.f90:312-313 (default false) and
+//     honoured in src/fluid/fluid_aux.f90's fluid_step_info: when true, a
+//     non-converged KSP result calls neko_error (hard abort) instead of
+//     only logging a message.
+//   * The Neko-TOP adjoint fluid HONOURS THE SAME KEY:
+//     sources/adjoint/adjoint_fluid_scheme_incompressible.f90:364-365 reads
+//     'case.fluid.strict_convergence' too (not a separate
+//     'case.adjoint_fluid.*' key) -- so ONE key in the "fluid" block gates
+//     both the primal and the adjoint fluid solve.
+//   * This case has no "case.scalar"/"case.adjoint_scalar" block at all, so
+//     the scalar-side non-honouring finding (scalars.f90:227,
+//     adjoint_scalars.f90:287 call scalar_step_info() without
+//     strict_convergence) is not reachable here and is not repeated.
+//
+// max_iterations: per the task's #57 order-0 step, every max_iterations
+// below 800 should be raised to 800. Both solver blocks in the parent are
+// ALREADY 800 (this is the unit tier's own value -- see
+// tests/unit/sensitivity/readme.md), so no change was needed there; this is
+// noted rather than silently doing nothing.
+//
+// allow_stabilization (case.fluid.allow_stabilization, same file/lines) is
+// NOT set here -- left at its default (false). The #57 census taken this
+// session (BUILD FACTS: "ZERO 'not converge' lines in viscous_dissipation
+// ... logs" at max_iterations 800, strict_convergence unset) is evidence
+// this run does not sit near its iteration cap, so an abort on enabling
+// strict_convergence is not expected; if one occurs anyway (e.g. an
+// impulsive start before the flow develops), allow_stabilization: true is
+// the documented escape hatch to try before concluding the key itself is
+// unworkable for this case.
+//
+// fd_test_strict/perturbations/tolerance are UNCHANGED from the parent --
+// already true/set there, so the diagnostic run's p_hat/C_hat print
+// unconditionally. Nothing else changed.
+{
+    "version": 1.0,
+    "case": {
+        "mesh_file": "box.nmsh",
+        "output_checkpoints": false,
+        "output_at_end": false,
+        "output_boundary": true,
+        "time": {
+            "end_time": 0.1,
+            "timestep": 5.0e-3
+        },
+        "numerics": {
+            "time_order": 3,
+            "polynomial_order": 3,
+            "dealias": false
+        },
+        "adjoint_fluid": {
+            "initial_condition": {
+                "type": "uniform",
+                "value": [ 0.0, 0.0, 0.0 ]
+            },
+            "boundary_conditions": [
+                {
+                    "type": "no_slip",
+                    "zone_indices": [ 1, 2 ]
+                }
+            ]
+        },
+        "fluid": {
+            "scheme": "pnpn",
+            "Re": 0.1,
+            // --- changed vs ../viscous_dissipation.case (new key) ---
+            "strict_convergence": true,
+            "initial_condition": {
+                "type": "uniform",
+                "value": [ 0.0, 0.0, 0.0 ]
+            },
+            "velocity_solver": {
+                "type": "cg",
+                "preconditioner": {
+                    "type": "jacobi"
+                },
+                "absolute_tolerance": 1e-9,
+                "max_iterations": 800
+            },
+            "pressure_solver": {
+                "type": "gmres",
+                "preconditioner": {
+                    "type": "hsmg"
+                },
+                "absolute_tolerance": 1e-8,
+                "max_iterations": 800
+            },
+            "boundary_conditions": [
+                {
+                    "type": "velocity_value",
+                    "value": [ 1.0, 0.0, 0.0 ],
+                    "zone_indices": [ 1, 2 ]
+                }
+            ],
+            "output_control": "never"
+        },
+        "simulation_components": [
+            {
+                "type": "steady",
+                "tol": 1e-8,
+                "compute_control": "tsteps",
+                "compute_value": 1
+            }
+        ],
+        "point_zones": [
+            {
+                "name": "optimization_domain",
+                "geometry": "box",
+                "x_bounds": [ 0.2, 0.8 ],
+                "y_bounds": [ 0.2, 0.8 ],
+                "z_bounds": [ -1.0, 1.0 ]
+            },
+            {
+                "name": "initial_ball",
+                "geometry": "cylinder",
+                "start": [ 0.5, 0.5, -0.5 ],
+                "end": [ 0.5, 0.5, 1.5 ],
+                "radius": 0.25
+            }
+        ]
+    },
+    "optimization": {
+        "fd_test_strict": true,
+        "fd_test_tolerance": 5.0e-3,
+        "fd_test_perturbations": [
+            5.0e-1, 1.0e-1, 5.0e-2, 1.0e-2, 5.0e-3, 1.0e-3, 5.0e-4, 1.0e-4
+        ],
+        "domain": {
+            "type": "point_zone",
+            "zone_name": "optimization_domain"
+        },
+        "design": {
+            "type": "brinkman",
+            "mapping": [
+                {
+                    "type": "RAMP",
+                    "f_max": 100.0
+                }
+            ],
+            "initial_distribution": {
+                "type": "point_zone",
+                "base_value": 0.0,
+                "zone_value": 1.0,
+                "zone_name": "initial_ball"
+            }
+        },
+        "solver": {
+            "type": "mma",
+            "max_iterations": 0,
+            "tolerance": 1.0e-3,
+            "mma": {
+                "max_iter": 100,
+                "asyinit": 0.5,
+                "asyincr": 1.2,
+                "asydecr": 0.7,
+                "scale": 1.0,
+                "auto_scale": false,
+                "xmin": 0.0,
+                "xmax": 1.0,
+                "a0": 1.0,
+                "a": 0.0,
+                "c": 1000.0,
+                "d": 0.0
+            }
+        },
+        "objectives": [
+            {
+                "type": "viscous_dissipation",
+                "weight": 1.0
+            }
+        ]
+    }
+}

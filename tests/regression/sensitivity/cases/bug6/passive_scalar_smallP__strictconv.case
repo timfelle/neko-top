@@ -1,0 +1,254 @@
+// Bug #6, E0b (#57, strict convergence). Parent: ../passive_scalar_smallP.
+// case (the UN-instrumented original, not the E1 __fdstrict variant --
+// this experiment is orthogonal to E1 and changes convergence behaviour
+// only). Never edit the parent.
+//
+// Verified from source this session (both repos):
+//   * case.fluid.strict_convergence is read at
+//     src/fluid/fluid_scheme_incompressible.f90:312-313 (default false) and
+//     honoured in src/fluid/fluid_aux.f90's fluid_step_info: when true, a
+//     non-converged KSP result calls neko_error (hard abort) instead of
+//     only logging a message.
+//   * The Neko-TOP adjoint fluid HONOURS THE SAME KEY:
+//     sources/adjoint/adjoint_fluid_scheme_incompressible.f90:364-365 reads
+//     'case.fluid.strict_convergence' too (not a separate
+//     'case.adjoint_fluid.*' key) -- so ONE key in the "fluid" block gates
+//     both the primal and the adjoint fluid solve.
+//   * The scalar path (both primal, src/scalar/scalars.f90:227, and
+//     adjoint, sources/adjoint/adjoint_scalars.f90:287) calls
+//     scalar_step_info() WITHOUT passing strict_convergence or
+//     allow_stabilization at all -- there is no 'case.scalar.
+//     strict_convergence' json_get anywhere in src/scalar/. A key placed
+//     there would be silently ignored; none is set here for that reason.
+// So the only key that does anything is case.fluid.strict_convergence.
+//
+// max_iterations: raised every solver block below 800 (the unit tier's
+// value) to 800, per the task's #57 order-0 step, INCLUDING the scalar's
+// CG solver -- even though scalar_step_info() never reads
+// strict_convergence, RAISING the iteration cap still lets the scalar
+// solve converge further within a step, which is the actual quantity of
+// interest here (whether under-convergence at the regression tier's
+// max_iterations: 50 default is contaminating the measured bias).
+//   velocity_solver.max_iterations 50 -> 800
+//   pressure_solver.max_iterations  50 -> 800
+//   scalar.solver.max_iterations    50 -> 800
+//
+// allow_stabilization (case.fluid.allow_stabilization, same file/lines) is
+// NOT set here -- left at its default (false). Noting it per the task: if
+// this run aborts on the very first step or two (an impulsive start from
+// the uniform zero initial condition, before the flow has developed),
+// allow_stabilization: true is the documented escape hatch
+// (fluid_aux.f90's "do not warn about non-convergence" grace period) and
+// should be tried before concluding strict_convergence itself is
+// unworkable for this case.
+//
+// optimization.fd_test_strict/fd_test_perturbations/fd_test_tolerance are
+// added because every variant in this dispatch must print p_hat/C_hat (the
+// task's own top-level instrumentation requirement) -- NOT part of the #57
+// experiment itself. fd_test_tolerance is a non-binding 1.0e6 ceiling:
+// raising the iteration cap by 16x is exactly the kind of change that could
+// move C_hat by an unknown amount in either direction, so nothing here
+// should be read as a prediction of the answer.
+{
+    "version": 1.0,
+    "case": {
+        "mesh_file": "box.nmsh",
+        "output_checkpoints": false,
+        "output_at_end": false,
+        "output_boundary": false,
+        "time": {
+            "end_time": 10.0,
+            "timestep": 1.0e-3
+        },
+        "numerics": {
+            "time_order": 3,
+            "polynomial_order": 2,
+            "dealias": true
+        },
+        "fluid": {
+            "scheme": "pnpn",
+            "Re": 1.0,
+            // --- changed vs ../passive_scalar_smallP.case ---
+            "strict_convergence": true,
+            "initial_condition": {
+                "type": "uniform",
+                "value": [ 0.0, 0.0, 0.0 ]
+            },
+            "velocity_solver": {
+                "type": "cg",
+                "preconditioner": {
+                    "type": "jacobi"
+                },
+                "absolute_tolerance": 1e-16,
+                // --- changed vs ../passive_scalar_smallP.case: 50 -> 800 ---
+                "max_iterations": 800
+            },
+            "pressure_solver": {
+                "type": "gmres",
+                "preconditioner": {
+                    "type": "hsmg"
+                },
+                "absolute_tolerance": 1e-12,
+                // --- changed vs ../passive_scalar_smallP.case: 50 -> 800 ---
+                "max_iterations": 800
+            },
+            "boundary_conditions": [
+                {
+                    "type": "user_velocity",
+                    "zone_indices": [ 1 ]
+                },
+                {
+                    "type": "outflow",
+                    "zone_indices": [ 2 ]
+                }
+            ],
+            "output_control": "never"
+        },
+        "scalar": {
+            "enabled": true,
+            "Pe": 20.0,
+            "solver": {
+                "type": "cg",
+                "preconditioner": {
+                    "type": "jacobi"
+                },
+                "absolute_tolerance": 1e-18,
+                // --- changed vs ../passive_scalar_smallP.case: 50 -> 800 ---
+                "max_iterations": 800
+            },
+            "initial_condition": {
+                "type": "user"
+            },
+            "boundary_conditions": [
+                {
+                    "type": "user_dirichlet",
+                    "zone_indices": [ 1 ]
+                },
+                {
+                    "type": "neumann",
+                    "flux": 0.0,
+                    "zone_indices": [ 2 ]
+                }
+            ]
+        },
+        "adjoint_scalar": {
+            "enabled": true,
+            "boundary_conditions": [
+                {
+                    "type": "dirichlet",
+                    "value": 0.0,
+                    "zone_indices": [ 1 ]
+                },
+                {
+                    "type": "neumann",
+                    "flux": 0.0,
+                    "zone_indices": [ 2 ]
+                }
+            ],
+            "initial_condition": {
+                "type": "uniform",
+                "value": 0.0
+            }
+        },
+        "adjoint_fluid": {
+            "initial_condition": {
+                "type": "uniform",
+                "value": [ 0.0, 0.0, 0.0 ]
+            },
+            "boundary_conditions": [
+                {
+                    "type": "no_slip",
+                    "zone_indices": [ 1 ]
+                },
+                {
+                    "type": "outflow",
+                    "zone_indices": [ 2 ]
+                }
+            ]
+        },
+        "simulation_components": [
+            {
+                "type": "steady",
+                "tol": 1e-9,
+                "compute_control": "tsteps",
+                "compute_value": 1,
+                "scalar_coupled": true
+            }
+        ],
+        "point_zones": [
+            {
+                "name": "optimization_domain",
+                "geometry": "box",
+                "x_bounds": [ 0.2, 0.8 ],
+                "y_bounds": [ 0.2, 0.8 ],
+                "z_bounds": [ -1.0, 1.0 ]
+            },
+            {
+                "name": "objective_domain",
+                "geometry": "box",
+                "x_bounds": [ 0.8, 1.0 ],
+                "y_bounds": [ -1.0, 3.0 ],
+                "z_bounds": [ -1.0, 3.0 ]
+            },
+            {
+                "name": "initial_ball",
+                "geometry": "cylinder",
+                "start": [ 0.5, 0.5, -0.5 ],
+                "end": [ 0.5, 0.5, 1.5 ],
+                "radius": 0.25
+            }
+        ]
+    },
+    "optimization": {
+        // --- added: instrumentation only, not part of the #57 experiment ---
+        "fd_test_strict": true,
+        "fd_test_perturbations": [
+            1.0e-1, 1.0e-2, 1.0e-3, 1.0e-4
+        ],
+        "fd_test_tolerance": 1.0e6,
+        "domain": {
+            "type": "point_zone",
+            "zone_name": "optimization_domain"
+        },
+        "design": {
+            "type": "brinkman",
+            "mapping": [
+                {
+                    "type": "PDE_filter",
+                    "r": 0.05,
+                    "tol": 1.0e-20,
+                    "max_iter": 600
+                },
+                {
+                    "type": "RAMP",
+                    "f_max": 100.0
+                }
+            ],
+            "initial_distribution": {
+                "type": "point_zone",
+                "base_value": 0.0,
+                "zone_value": 1.0,
+                "zone_name": "initial_ball"
+            }
+        },
+        "solver": {
+            "type": "mma",
+            "max_iterations": 100,
+            "tolerance": 1.0e-3,
+            "subsolve": "dip",
+            "mma": {
+                "scale": 1000.0,
+                "xmin": 0.0,
+                "xmax": 1.0
+            }
+        },
+        "objectives": [
+            {
+                "type": "scalar_mixing",
+                "mask_name": "objective_domain",
+                "phi_ref": 0.5,
+                "weight": 1.0
+            }
+        ]
+    }
+}
