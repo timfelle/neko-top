@@ -449,10 +449,10 @@ contains
     this%chkp => chkp
     ! Register the scheme state for checkpointing.
     payload => this%chkp%add_payload("adjoint_fluid")
-    call payload%add_field(this%u)
-    call payload%add_field(this%v)
-    call payload%add_field(this%w)
-    call payload%add_field(this%p)
+    call payload%add_field(this%u_adj)
+    call payload%add_field(this%v_adj)
+    call payload%add_field(this%w_adj)
+    call payload%add_field(this%p_adj)
     call payload%add_field(this%abx1)
     call payload%add_field(this%abx2)
     call payload%add_field(this%aby1)

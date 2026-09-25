@@ -117,6 +117,9 @@ module adjoint_scalar_pnpn
    contains
      !> Constructor.
      procedure, pass(this) :: init => adjoint_scalar_pnpn_init
+     !> Register this scalar scheme with the checkpoint.
+     procedure, pass(this) :: register_checkpoint => &
+          adjoint_scalar_pnpn_register_checkpoint
      !> To restart
      procedure, pass(this) :: restart => adjoint_scalar_pnpn_restart
      !> Destructor.
@@ -244,10 +247,6 @@ contains
     ! Initialize advection factory
     call json_get_or_default(params_adjoint, 'advection', advection, .true.)
 
-    this%ulag => ulag
-    this%vlag => vlag
-    this%wlag => wlag
-
     call chkp%get_time_history(tlag, dtlag)
     call advection_adjoint_factory(this%adv, numerics_params, this%c_Xh, &
          ulag, vlag, wlag, dtlag, &
@@ -256,7 +255,7 @@ contains
   end subroutine adjoint_scalar_pnpn_init
 
   !> Register this scalar scheme with the checkpoint.
-  subroutine scalar_pnpn_register_checkpoint(this, chkp)
+  subroutine adjoint_scalar_pnpn_register_checkpoint(this, chkp)
     class(adjoint_scalar_pnpn_t), target, intent(inout) :: this
     type(chkp_t), intent(inout) :: chkp
     type(checkpoint_payload_t), pointer :: payload
@@ -267,7 +266,7 @@ contains
     call payload%add_field(this%abx1)
     call payload%add_field(this%abx2)
 
-  end subroutine scalar_pnpn_register_checkpoint
+  end subroutine adjoint_scalar_pnpn_register_checkpoint
 
   !> I envision the arguments to this func might need to be expanded
   subroutine adjoint_scalar_pnpn_restart(this, chkp)
