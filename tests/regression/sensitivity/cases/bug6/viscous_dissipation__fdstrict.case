@@ -1,0 +1,205 @@
+// Bug #6, regression-tier dt control (recommended-order step 2). Parent:
+// ../viscous_dissipation.case, byte-for-byte except the three "optimization"
+// keys added below. Never edit the parent.
+//
+// Purpose: this is the fluid-only, Re=1, steady, all-Dirichlet reference
+// case RESULTS step 1 already scored as clean on a like-for-like C_hat
+// basis (+3.59e-4, "references at 1b4a498" -- confirmed this session: the
+// checked-in cases_git history (1b4a498/4a7469e/79db151/bca44ab, this repo)
+// shows this case's end_time/timestep/Re/polynomial_order/tol have been
+// 1.0/1.0e-3/1.0/5/1e-10 unchanged across the whole window, so that C_hat
+// applies to the parent as it stands today). This variant turns on the
+// strict criterion (as the passive_scalar__fdstrict.case sibling already
+// does for the scalar case) purely so the driver PRINTS p_hat/C_hat
+// instead of only the historical smallest-perturbation pass/fail --
+// nothing about the simulation itself changes. Its dt/2 sibling in this
+// directory is the actual dt-control half of the pair.
+//
+// Changed vs parent -- exactly three keys, all new (the parent's
+// "optimization" object sets none of fd_test_strict/fd_test_perturbations/
+// fd_test_tolerance today, so all three below are additions, not edits):
+//
+//   1. optimization.fd_test_strict: true. Enables the strict FD criterion
+//      (tests/shared/fd_criterion.f90) -- see tests/unit/sensitivity/
+//      readme.md "The strict criterion (fd_test_strict)".
+//
+//   2. optimization.fd_test_perturbations: [1e-1, 1e-2, 1e-3, 1e-4] -- the
+//      historical default the regression driver already uses today with
+//      no explicit key (readme.md: "Defaults to [1e-1, 1e-2, 1e-3, 1e-4],
+//      exactly the sweep used before it was configurable"). PINNED
+//      explicitly rather than left to inherit, because turning
+//      fd_test_strict on with no explicit sweep switches the default to
+//      the strict-only 9-point geometric sweep (readme.md: "the sweep
+//      defaults to nine geometric points ... instead of the historical
+//      four") -- a different measurement. Pinning keeps this variant a
+//      pure fd_test_strict toggle over the exact sweep RESULTS step 1's
+//      +3.59e-4 was computed from.
+//
+//   3. optimization.fd_test_tolerance: 1.0e6. A deliberately unreachable
+//      "diagnostic tolerance" -- the same convention already used
+//      elsewhere in this exact investigation for a dt/order control pair
+//      whose C_hat is being COMPARED, not gated (RESULTS section 3f:
+//      "unsteady_viscous_dissipation_Re1.case and
+//      unsteady_brinkman_dissipation_Re1.case ... plus a diagnostic
+//      fd_test_tolerance of 1e6"). Lets the strict criterion certify
+//      (BOUNDED/FIT) and print C_hat/p_hat without asserting a pass/fail
+//      bound that would only be meaningful once this control and its dt/2
+//      sibling have both been measured.
+//
+// NOT run as part of this dispatch (case-authoring only, per task scope).
+// Run notes for the runner: binary tests/regression/sensitivity/
+// sensitivity_regression_driver (already built in this worktree), invoked
+// via tests/regression/sensitivity/run_sensitivity_regression_check.sh
+// <driver> <this case file>, which needs NEKO_TOP_RUN_SENSITIVITY_REGRESSION=1
+// to opt in, generates a periodic-y N=8 box (genmeshbox 0 2 0 1 0 z 16 8 1
+// .false. .true. .true., same mesh as the unit tier) via NEKO_DIR, and runs
+// at 2 MPI ranks (NEKO_TOP_SENSITIVITY_RANKS, default 2) in the working
+// directory it is invoked from. Expected cost: the un-strict parent
+// measured 1769 s at 2 ranks on this exact case/mesh (RESULTS section 3d);
+// this variant does not change the physics, so a similar runtime is
+// expected (this session did not re-run it).
+{
+    "version": 1.0,
+    "case": {
+        "mesh_file": "box.nmsh",
+        "output_checkpoints": false,
+        "output_at_end": false,
+        "output_boundary": true,
+        "time": {
+            "end_time": 1.0,
+            "timestep": 1.0e-3
+        },
+        "numerics": {
+            "time_order": 3,
+            "polynomial_order": 5,
+            "dealias": true
+        },
+        "adjoint_fluid": {
+            "initial_condition": {
+                "type": "uniform",
+                "value": [ 0.0, 0.0, 0.0 ]
+            },
+            "boundary_conditions": [
+                {
+                    "type": "no_slip",
+                    "zone_indices": [ 1, 2 ]
+                }
+            ]
+        },
+        "fluid": {
+            "scheme": "pnpn",
+            "Re": 1.0,
+            "initial_condition": {
+                "type": "uniform",
+                "value": [ 0.0, 0.0, 0.0 ]
+            },
+            "velocity_solver": {
+                "type": "cg",
+                "preconditioner": {
+                    "type": "jacobi"
+                },
+                "absolute_tolerance": 1e-18,
+                "max_iterations": 800
+            },
+            "pressure_solver": {
+                "type": "gmres",
+                "preconditioner": {
+                    "type": "hsmg"
+                },
+                "absolute_tolerance": 1e-12,
+                "max_iterations": 100
+            },
+            "boundary_conditions": [
+                {
+                    "type": "velocity_value",
+                    "value": [ 1.0, 0.0, 0.0 ],
+                    "zone_indices": [ 1, 2 ]
+                }
+            ],
+            "output_control": "never"
+        },
+        "simulation_components": [
+            {
+                "type": "steady",
+                "tol": 1e-10,
+                "compute_control": "tsteps",
+                "compute_value": 1
+            }
+        ],
+        "point_zones": [
+            {
+                "name": "optimization_domain",
+                "geometry": "box",
+                "x_bounds": [ 0.2, 0.8 ],
+                "y_bounds": [ 0.2, 0.8 ],
+                "z_bounds": [ -1.0, 1.0 ]
+            },
+            {
+                "name": "initial_ball",
+                "geometry": "cylinder",
+                "start": [ 0.5, 0.5, -0.5 ],
+                "end": [ 0.5, 0.5, 1.5 ],
+                "radius": 0.25
+            }
+        ]
+    },
+    "optimization": {
+        // --- changed vs ../viscous_dissipation.case: begin ---
+        "fd_test_strict": true,
+        "fd_test_perturbations": [
+            1.0e-1, 1.0e-2, 1.0e-3, 1.0e-4
+        ],
+        "fd_test_tolerance": 1.0e6,
+        // --- changed vs ../viscous_dissipation.case: end ---
+        "domain": {
+            "type": "point_zone",
+            "zone_name": "optimization_domain"
+        },
+        "design": {
+            "type": "brinkman",
+            "mapping": [
+                {
+                    "type": "PDE_filter",
+                    "r": 0.05,
+                    "tol": 1.0e-20,
+                    "max_iter": 600
+                },
+                {
+                    "type": "RAMP",
+                    "f_max": 100.0
+                }
+            ],
+            "initial_distribution": {
+                "type": "point_zone",
+                "base_value": 0.0,
+                "zone_value": 1.0,
+                "zone_name": "initial_ball"
+            }
+        },
+        "solver": {
+            "type": "mma",
+            "max_iterations": 0,
+            "tolerance": 1.0e-3,
+            "mma": {
+                "max_iter": 100,
+                "asyinit": 0.5,
+                "asyincr": 1.2,
+                "asydecr": 0.7,
+                "scale": 1.0,
+                "auto_scale": false,
+                "xmin": 0.0,
+                "xmax": 1.0,
+                "a0": 1.0,
+                "a": 0.0,
+                "c": 1000.0,
+                "d": 0.0
+            }
+        },
+        "objectives": [
+            {
+                "type": "viscous_dissipation",
+                "weight": 1.0
+            }
+        ]
+    }
+}

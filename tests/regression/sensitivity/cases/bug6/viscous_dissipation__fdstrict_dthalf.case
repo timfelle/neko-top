@@ -1,0 +1,200 @@
+// Bug #6, regression-tier dt control (recommended-order step 2), dt/2 half
+// of the pair. Parent: ../viscous_dissipation.case (same parent as the
+// sibling ./viscous_dissipation__fdstrict.case in this directory), byte-
+// for-byte except the same three "optimization" keys plus
+// case.time.timestep halved. Never edit the parent.
+//
+// Purpose: paired with viscous_dissipation__fdstrict.case to give a
+// fluid-only, Re=1, steady dt-halving control -- the dt-invariance check
+// RESULTS step 2 already ran on the scalar-coupled passive_scalar_smallP
+// case (time_order 3, dt/2: C_hat +5.533885e-3 against the dt control's
+// +1.007196e-2, ratio 0.549) but never on a fluid-only case. If this pair's
+// C_hat also roughly halves (or trends toward zero) with dt, that is
+// evidence the O(dt/beta0) splitting-residual mechanism (RESULTS "the
+// defect is O(dt/beta0)") is not scalar-specific; if it stays flat, that
+// argues the opposite.
+//
+// Changed vs parent -- the same three "optimization" keys as
+// ./viscous_dissipation__fdstrict.case (see that file's header for their
+// individual justification, not repeated here) PLUS:
+//
+//   4. case.time.timestep: 1.0e-3 -> 5.0e-4 (dt/2). end_time is LEFT AT
+//      1.0 (unchanged) -- checked, not assumed:
+//        - The parent case's own C_hat (+3.59e-4, RESULTS step 1) is only
+//          a clean, small number if the forward fluid has genuinely
+//          reached the steady_simcomp freeze by end_time=1.0; RESULTS
+//          reads that as established for the unmodified parent case,
+//          which this variant does not change.
+//        - steady_simcomp.f90's energy_norm (both era and current Neko-TOP
+//          agree on this formula -- see sources/simulation_components/
+//          steady_simcomp.f90:282-297) divides the field-difference norm
+//          by dt: sqrt(integral((q^n-q^n-1)^2))/(dt*volume). Near a
+//          genuinely steady state q^n - q^n-1 = O(dt) (a first-order
+//          time-derivative estimate), so this quotient approximates the
+//          dt-INDEPENDENT instantaneous rate dq/dt, not a dt-scaled
+//          quantity -- to leading order the freeze criterion is the same
+//          function of physical time regardless of dt, so halving dt is
+//          not expected to move the physical freeze time materially; it
+//          only doubles the number of steps needed to reach the same
+//          physical time.
+//        - NOT MEASURED THIS SESSION (no run performed, per this task's
+//          "do not build or run" scope). Flagged to the runner: confirm
+//          from this run's own steady_state_data.csv that a freeze row is
+//          reached at or before t=1.0, exactly as the reasoning above
+//          predicts; if it is not, end_time needs raising for this
+//          variant specifically before its C_hat is trusted.
+//
+// NOT run as part of this dispatch (case-authoring only, per task scope).
+// Run notes for the runner: same binary/env/mesh/ranks as the sibling
+// (tests/regression/sensitivity/sensitivity_regression_driver via
+// run_sensitivity_regression_check.sh, NEKO_TOP_RUN_SENSITIVITY_REGRESSION=1,
+// N=8 periodic-y box, 2 MPI ranks). Expected cost: roughly DOUBLE the
+// sibling's ~1769 s (2000 steps/run instead of 1000, same 4-perturbation +
+// baseline + restore sweep shape) -- i.e. on the order of an hour at 2
+// ranks. This session did not measure it.
+{
+    "version": 1.0,
+    "case": {
+        "mesh_file": "box.nmsh",
+        "output_checkpoints": false,
+        "output_at_end": false,
+        "output_boundary": true,
+        "time": {
+            "end_time": 1.0,
+            // --- changed vs ../viscous_dissipation.case ---
+            "timestep": 5.0e-4
+        },
+        "numerics": {
+            "time_order": 3,
+            "polynomial_order": 5,
+            "dealias": true
+        },
+        "adjoint_fluid": {
+            "initial_condition": {
+                "type": "uniform",
+                "value": [ 0.0, 0.0, 0.0 ]
+            },
+            "boundary_conditions": [
+                {
+                    "type": "no_slip",
+                    "zone_indices": [ 1, 2 ]
+                }
+            ]
+        },
+        "fluid": {
+            "scheme": "pnpn",
+            "Re": 1.0,
+            "initial_condition": {
+                "type": "uniform",
+                "value": [ 0.0, 0.0, 0.0 ]
+            },
+            "velocity_solver": {
+                "type": "cg",
+                "preconditioner": {
+                    "type": "jacobi"
+                },
+                "absolute_tolerance": 1e-18,
+                "max_iterations": 800
+            },
+            "pressure_solver": {
+                "type": "gmres",
+                "preconditioner": {
+                    "type": "hsmg"
+                },
+                "absolute_tolerance": 1e-12,
+                "max_iterations": 100
+            },
+            "boundary_conditions": [
+                {
+                    "type": "velocity_value",
+                    "value": [ 1.0, 0.0, 0.0 ],
+                    "zone_indices": [ 1, 2 ]
+                }
+            ],
+            "output_control": "never"
+        },
+        "simulation_components": [
+            {
+                "type": "steady",
+                "tol": 1e-10,
+                "compute_control": "tsteps",
+                "compute_value": 1
+            }
+        ],
+        "point_zones": [
+            {
+                "name": "optimization_domain",
+                "geometry": "box",
+                "x_bounds": [ 0.2, 0.8 ],
+                "y_bounds": [ 0.2, 0.8 ],
+                "z_bounds": [ -1.0, 1.0 ]
+            },
+            {
+                "name": "initial_ball",
+                "geometry": "cylinder",
+                "start": [ 0.5, 0.5, -0.5 ],
+                "end": [ 0.5, 0.5, 1.5 ],
+                "radius": 0.25
+            }
+        ]
+    },
+    "optimization": {
+        // --- changed vs ../viscous_dissipation.case: begin ---
+        "fd_test_strict": true,
+        "fd_test_perturbations": [
+            1.0e-1, 1.0e-2, 1.0e-3, 1.0e-4
+        ],
+        "fd_test_tolerance": 1.0e6,
+        // --- changed vs ../viscous_dissipation.case: end ---
+        "domain": {
+            "type": "point_zone",
+            "zone_name": "optimization_domain"
+        },
+        "design": {
+            "type": "brinkman",
+            "mapping": [
+                {
+                    "type": "PDE_filter",
+                    "r": 0.05,
+                    "tol": 1.0e-20,
+                    "max_iter": 600
+                },
+                {
+                    "type": "RAMP",
+                    "f_max": 100.0
+                }
+            ],
+            "initial_distribution": {
+                "type": "point_zone",
+                "base_value": 0.0,
+                "zone_value": 1.0,
+                "zone_name": "initial_ball"
+            }
+        },
+        "solver": {
+            "type": "mma",
+            "max_iterations": 0,
+            "tolerance": 1.0e-3,
+            "mma": {
+                "max_iter": 100,
+                "asyinit": 0.5,
+                "asyincr": 1.2,
+                "asydecr": 0.7,
+                "scale": 1.0,
+                "auto_scale": false,
+                "xmin": 0.0,
+                "xmax": 1.0,
+                "a0": 1.0,
+                "a": 0.0,
+                "c": 1000.0,
+                "d": 0.0
+            }
+        },
+        "objectives": [
+            {
+                "type": "viscous_dissipation",
+                "weight": 1.0
+            }
+        ]
+    }
+}

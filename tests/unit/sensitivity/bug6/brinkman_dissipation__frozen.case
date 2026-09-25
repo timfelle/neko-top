@@ -1,0 +1,169 @@
+// Bug #6, freeze control (recommended-order step 1 prerequisite). Parent:
+// ../brinkman_dissipation.case. Never edit the parent.
+//
+// Sibling of viscous_dissipation__frozen.case in this directory -- same
+// mesh/BC/Re (only the objective type differs, inherited unchanged from the
+// parent). See that file's header for the full end_time/tolerance
+// reasoning; not repeated here except where a number differs.
+//
+// Changed vs parent -- exactly two keys, nothing else:
+//
+//   1. case.time.end_time: 0.1 -> 5.0 (50x). Same case geometry/Re/mu as
+//      viscous_dissipation.case (Re=0.1, mu=10, same box, same BC), so the
+//      same diffusive-time-scale (H^2/nu = 0.1) and cost-per-step
+//      (~0.045 s/step at this mesh/order, from the sibling handrun log)
+//      reasoning applies unchanged. NOT MEASURED THIS SESSION for THIS
+//      case specifically -- report to the runner as the thing to confirm
+//      (steady_state_data.csv for the actual freeze step).
+//
+//   2. optimization.fd_test_tolerance: 4.5e-3 -> 1.0e6. Same reasoning as
+//      the viscous sibling: the parent's 4.5e-3 was derived from the
+//      parent's OWN measured truncated-transient bias (+2.204826e-3 this
+//      build / +2.204e-3 on record), which does not apply to a different
+//      (frozen) forward trajectory. 1.0e6 is the established "diagnostic
+//      tolerance" convention (RESULTS section 3f).
+//
+// fd_test_strict (already true) and fd_test_perturbations (already the
+// pinned historical 8-point sweep) are UNCHANGED, per this task's
+// instruction to keep both.
+//
+// NOT run as part of this dispatch (case-authoring only, per task scope).
+{
+    "version": 1.0,
+    "case": {
+        "mesh_file": "box.nmsh",
+        "output_checkpoints": false,
+        "output_at_end": false,
+        "output_boundary": true,
+        "time": {
+            // --- changed vs ../brinkman_dissipation.case ---
+            "end_time": 5.0,
+            "timestep": 5.0e-3
+        },
+        "numerics": {
+            "time_order": 3,
+            "polynomial_order": 3,
+            "dealias": false
+        },
+        "adjoint_fluid": {
+            "initial_condition": {
+                "type": "uniform",
+                "value": [ 0.0, 0.0, 0.0 ]
+            },
+            "boundary_conditions": [
+                {
+                    "type": "no_slip",
+                    "zone_indices": [ 1, 2 ]
+                }
+            ]
+        },
+        "fluid": {
+            "scheme": "pnpn",
+            "Re": 0.1,
+            "initial_condition": {
+                "type": "uniform",
+                "value": [ 0.0, 0.0, 0.0 ]
+            },
+            "velocity_solver": {
+                "type": "cg",
+                "preconditioner": {
+                    "type": "jacobi"
+                },
+                "absolute_tolerance": 1e-9,
+                "max_iterations": 800
+            },
+            "pressure_solver": {
+                "type": "gmres",
+                "preconditioner": {
+                    "type": "hsmg"
+                },
+                "absolute_tolerance": 1e-8,
+                "max_iterations": 800
+            },
+            "boundary_conditions": [
+                {
+                    "type": "velocity_value",
+                    "value": [ 1.0, 0.0, 0.0 ],
+                    "zone_indices": [ 1, 2 ]
+                }
+            ],
+            "output_control": "never"
+        },
+        "simulation_components": [
+            {
+                "type": "steady",
+                "tol": 1e-8,
+                "compute_control": "tsteps",
+                "compute_value": 1
+            }
+        ],
+        "point_zones": [
+            {
+                "name": "optimization_domain",
+                "geometry": "box",
+                "x_bounds": [ 0.2, 0.8 ],
+                "y_bounds": [ 0.2, 0.8 ],
+                "z_bounds": [ -1.0, 1.0 ]
+            },
+            {
+                "name": "initial_ball",
+                "geometry": "cylinder",
+                "start": [ 0.5, 0.5, -0.5 ],
+                "end": [ 0.5, 0.5, 1.5 ],
+                "radius": 0.25
+            }
+        ]
+    },
+    "optimization": {
+        "fd_test_strict": true,
+        // --- changed vs ../brinkman_dissipation.case ---
+        "fd_test_tolerance": 1.0e6,
+        "fd_test_perturbations": [
+            5.0e-1, 1.0e-1, 5.0e-2, 1.0e-2, 5.0e-3, 1.0e-3, 5.0e-4, 1.0e-4
+        ],
+        "domain": {
+            "type": "point_zone",
+            "zone_name": "optimization_domain"
+        },
+        "design": {
+            "type": "brinkman",
+            "mapping": [
+                {
+                    "type": "RAMP",
+                    "f_max": 100.0
+                }
+            ],
+            "initial_distribution": {
+                "type": "point_zone",
+                "base_value": 0.0,
+                "zone_value": 1.0,
+                "zone_name": "initial_ball"
+            }
+        },
+        "solver": {
+            "type": "mma",
+            "max_iterations": 0,
+            "tolerance": 1.0e-3,
+            "mma": {
+                "max_iter": 100,
+                "asyinit": 0.5,
+                "asyincr": 1.2,
+                "asydecr": 0.7,
+                "scale": 1.0,
+                "auto_scale": false,
+                "xmin": 0.0,
+                "xmax": 1.0,
+                "a0": 1.0,
+                "a": 0.0,
+                "c": 1000.0,
+                "d": 0.0
+            }
+        },
+        "objectives": [
+            {
+                "type": "brinkman_dissipation",
+                "weight": 1.0
+            }
+        ]
+    }
+}
