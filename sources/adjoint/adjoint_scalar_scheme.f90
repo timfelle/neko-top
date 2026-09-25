@@ -37,6 +37,7 @@
 module adjoint_scalar_scheme
   use gather_scatter, only : gs_t
   use checkpoint, only : chkp_t
+  use checkpoint_payload, only : checkpoint_payload_t
   use num_types, only: rp
   use field, only : field_t
   use field_list, only: field_list_t
@@ -395,6 +396,18 @@ contains
 
   end subroutine adjoint_scalar_scheme_init
 
+  !> Register this scalar scheme with the checkpoint.
+  !! @param chkp Checkpoint object to register with.
+  subroutine scalar_scheme_register_checkpoint(this, chkp)
+    class(scalar_scheme_t), target, intent(inout) :: this
+    type(chkp_t), intent(inout) :: chkp
+    type(checkpoint_payload_t), pointer :: payload
+
+    payload => chkp%add_payload("scalars/" // trim(this%name))
+    call payload%add_field(this%s)
+    call payload%add_series(this%slag)
+
+  end subroutine scalar_scheme_register_checkpoint
 
   !> Deallocate a scalar formulation
   subroutine adjoint_scalar_scheme_free(this)
