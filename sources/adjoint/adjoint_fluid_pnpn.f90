@@ -80,7 +80,7 @@ module adjoint_fluid_pnpn
   use zero_dirichlet, only: zero_dirichlet_t
   use utils, only: neko_error
   use field_math, only: field_add2, field_copy, &
-       field_add2s2
+       field_add2s2, field_sub2
   use bc, only: bc_t, BC_DIRICHLET
   use file, only: file_t
   use operators, only: ortho
@@ -98,7 +98,7 @@ module adjoint_fluid_pnpn
   use comm, only: NEKO_COMM, MPI_REAL_PRECISION
   use mpi_f08, only: mpi_sum, mpi_max, mpi_allreduce, MPI_INTEGER, &
        MPI_LOGICAL, MPI_LOR
-  use operators, only : opgrad, curl, grad
+  use operators, only : opgrad, cdtp
   use normal_vec_bcs, only: normal_vec_bcs_t
 
   implicit none
@@ -674,9 +674,9 @@ contains
     ! Solver results monitors (pressure + 3 velocity)
     type(ksp_monitor_t) :: ksp_results(4)
     type(field_t), pointer :: dx_p_adj, dy_p_adj, dz_p_adj, nx1, nx2, nx3, &
-         work1, work2
+         work1
     integer :: temp_indices(3)
-    integer :: cc_indices(8)
+    integer :: cc_indices(7)
     real(kind=rp) :: rho_val, mu_val
 
     if (this%freeze) return
@@ -717,6 +717,74 @@ contains
       call this%bcs_vel%apply_vector(f_x%x, f_y%x, f_z%x, &
            this%dm_Xh%size(), time, strong = .false.)
 
+      ! BUG6 PROBE P1: exact transpose of the primal curl-curl term of the
+      ! pressure residual (pnpn_prs_res_cpu: -(mu/rho) cdtp(Binv gs(B W)),
+      ! W = curl curl u_e). The load on the u* row is the volume term
+      !   + mu Dc^T M^T Dc^T M^T opgrad(p_adj),   M^T y = B gs(Binv y),
+      ! with no 1/rho and no boundary-only restriction. It is added before
+      ! makeabf so the EXT lags weight the p_adj of the later primal steps
+      ! as sumab weights u_e (exact for any time order, not only at a
+      ! steady state); makeabf scales f by rho, hence mu/rho below.
+      ! No symmetry-surface or rotate_cyc terms: not valid for symmetry or
+      ! cyclic BCs. nx1..nx3 are plain work arrays here, not normals.
+      call neko_scratch_registry%request_field(dx_p_adj, cc_indices(1), .false.)
+      call neko_scratch_registry%request_field(dy_p_adj, cc_indices(2), .false.)
+      call neko_scratch_registry%request_field(dz_p_adj, cc_indices(3), .false.)
+      call neko_scratch_registry%request_field(nx1, cc_indices(4), .false.)
+      call neko_scratch_registry%request_field(nx2, cc_indices(5), .false.)
+      call neko_scratch_registry%request_field(nx3, cc_indices(6), .false.)
+      call neko_scratch_registry%request_field(work1, cc_indices(7), .false.)
+
+      ! g = Binv gs(opgrad(p_adj)), the projected gradient of the correction
+      call opgrad(dx_p_adj%x, dy_p_adj%x, dz_p_adj%x, this%p_adj%x, c_Xh)
+      call gs_Xh%op(dx_p_adj, GS_OP_ADD, event)
+      call device_event_sync(event)
+      call gs_Xh%op(dy_p_adj, GS_OP_ADD, event)
+      call device_event_sync(event)
+      call gs_Xh%op(dz_p_adj, GS_OP_ADD, event)
+      call device_event_sync(event)
+      if (NEKO_BCKND_DEVICE .eq. 1) then
+         call device_col2(dx_p_adj%x_d, c_Xh%Binv_d, n)
+         call device_col2(dy_p_adj%x_d, c_Xh%Binv_d, n)
+         call device_col2(dz_p_adj%x_d, c_Xh%Binv_d, n)
+      else
+         call col2(dx_p_adj%x, c_Xh%Binv, n)
+         call col2(dy_p_adj%x, c_Xh%Binv, n)
+         call col2(dz_p_adj%x, c_Xh%Binv, n)
+      end if
+
+      ! c = Binv gs(Dc^T B g)
+      call adjoint_curl_transpose(nx1, nx2, nx3, dx_p_adj, dy_p_adj, &
+           dz_p_adj, work1, c_Xh)
+      call gs_Xh%op(nx1, GS_OP_ADD, event)
+      call device_event_sync(event)
+      call gs_Xh%op(nx2, GS_OP_ADD, event)
+      call device_event_sync(event)
+      call gs_Xh%op(nx3, GS_OP_ADD, event)
+      call device_event_sync(event)
+      if (NEKO_BCKND_DEVICE .eq. 1) then
+         call device_col2(nx1%x_d, c_Xh%Binv_d, n)
+         call device_col2(nx2%x_d, c_Xh%Binv_d, n)
+         call device_col2(nx3%x_d, c_Xh%Binv_d, n)
+      else
+         call col2(nx1%x, c_Xh%Binv, n)
+         call col2(nx2%x, c_Xh%Binv, n)
+         call col2(nx3%x, c_Xh%Binv, n)
+      end if
+
+      ! L = Dc^T B c, element-local; its gather-scatter happens in the
+      ! velocity residual together with the rest of f
+      call adjoint_curl_transpose(dx_p_adj, dy_p_adj, dz_p_adj, nx1, nx2, &
+           nx3, work1, c_Xh)
+
+      rho_val = rho%x(1,1,1,1)
+      mu_val = mu%x(1,1,1,1)
+      call field_add2s2(f_x, dx_p_adj, mu_val / rho_val)
+      call field_add2s2(f_y, dy_p_adj, mu_val / rho_val)
+      call field_add2s2(f_z, dz_p_adj, mu_val / rho_val)
+
+      call neko_scratch_registry%relinquish_field(cc_indices)
+
       if (oifs) then
          call neko_error("OIFS not implemented for adjoint")
 
@@ -747,58 +815,6 @@ contains
 
       call this%bc_apply_vel(time, strong = .true.)
       call this%bc_apply_prs(time)
-
-      ! Now we need the surface contribution of the curl curl BC.(explicit in p)
-      call neko_scratch_registry%request_field(dx_p_adj, cc_indices(1), .false.)
-      call neko_scratch_registry%request_field(dy_p_adj, cc_indices(2), .false.)
-      call neko_scratch_registry%request_field(dz_p_adj, cc_indices(3), .false.)
-
-      ! Note: zero interior
-      call neko_scratch_registry%request_field(nx1, cc_indices(4), .true.)
-      call neko_scratch_registry%request_field(nx2, cc_indices(5), .true.)
-      call neko_scratch_registry%request_field(nx3, cc_indices(6), .true.)
-
-      call neko_scratch_registry%request_field(work1, cc_indices(7), .false.)
-      call neko_scratch_registry%request_field(work2, cc_indices(8), .false.)
-
-      ! gradient of adjoint pressure (explicit)
-      call grad(dx_p_adj%x, dy_p_adj%x, dz_p_adj%x, this%p_adj%x, c_Xh)
-
-      ! Now we compute the n x grad(p) (this include 2D weights)
-      call this%bc_curl_curl%apply_n_cross(nx1%x, nx2%x, nx3%x, dx_p_adj%x, &
-           dy_p_adj%x, dz_p_adj%x, dx_p_adj%size())
-
-      ! Now we need curl on the test function, note that transpose of curl is
-      ! negative curl
-      ! reuse dx_p_adj etc as fx, fy, fz etc
-      call curl(dx_p_adj, dy_p_adj, dz_p_adj, nx1, nx2, nx3, work1, work2, c_Xh)
-
-      ! Forward does gsop on the residual (which has the pressure gradient)
-      call gs_Xh%op(dx_p_adj, GS_OP_ADD, event)
-      call device_event_sync(event)
-      call gs_Xh%op(dy_p_adj, GS_OP_ADD, event)
-      call device_event_sync(event)
-      call gs_Xh%op(dz_p_adj, GS_OP_ADD, event)
-      call device_event_sync(event)
-
-      ! multiplcity
-      if (NEKO_BCKND_DEVICE .eq. 1) then
-         call device_col2(dx_p_adj%x_d, c_Xh%mult_d, dx_p_adj%size())
-         call device_col2(dy_p_adj%x_d, c_Xh%mult_d, dx_p_adj%size())
-         call device_col2(dz_p_adj%x_d, c_Xh%mult_d, dx_p_adj%size())
-      else
-         call col2(dx_p_adj%x, c_Xh%mult, dx_p_adj%size())
-         call col2(dy_p_adj%x, c_Xh%mult, dx_p_adj%size())
-         call col2(dz_p_adj%x, c_Xh%mult, dx_p_adj%size())
-      end if
-
-      rho_val = rho%x(1,1,1,1)
-      mu_val = mu%x(1,1,1,1)
-      call field_add2s2(f_x, dx_p_adj, -mu_val / rho_val)
-      call field_add2s2(f_y, dy_p_adj, -mu_val / rho_val)
-      call field_add2s2(f_z, dz_p_adj, -mu_val / rho_val)
-
-      call neko_scratch_registry%relinquish_field(cc_indices)
 
       ! Update material properties if necessary
       call this%update_material_properties(time)
@@ -1486,5 +1502,36 @@ contains
     !call neko_log%end_section('Power Iterations', lvl = NEKO_LOG_DEBUG)
     call neko_log%end_section('Power Iterations')
   end subroutine power_iterations_compute
+
+  !> Apply the transpose of the pointwise curl to mass-weighted data,
+  !! \f$ w = D_c^T B y \f$, element-local (no gather-scatter):
+  !! \f$ w_x = (B D_z)^T y_y - (B D_y)^T y_z \f$ and cyclic.
+  !! @param w1 x component of the result.
+  !! @param w2 y component of the result.
+  !! @param w3 z component of the result.
+  !! @param y1 x component of the input.
+  !! @param y2 y component of the input.
+  !! @param y3 z component of the input.
+  !! @param work Work array.
+  !! @param coef The SEM coefficients.
+  subroutine adjoint_curl_transpose(w1, w2, w3, y1, y2, y3, work, coef)
+    type(field_t), intent(inout) :: w1, w2, w3
+    type(field_t), intent(inout) :: y1, y2, y3
+    type(field_t), intent(inout) :: work
+    type(coef_t), intent(in) :: coef
+
+    call cdtp(w1%x, y2%x, coef%drdz, coef%dsdz, coef%dtdz, coef)
+    call cdtp(work%x, y3%x, coef%drdy, coef%dsdy, coef%dtdy, coef)
+    call field_sub2(w1, work)
+
+    call cdtp(w2%x, y3%x, coef%drdx, coef%dsdx, coef%dtdx, coef)
+    call cdtp(work%x, y1%x, coef%drdz, coef%dsdz, coef%dtdz, coef)
+    call field_sub2(w2, work)
+
+    call cdtp(w3%x, y1%x, coef%drdy, coef%dsdy, coef%dtdy, coef)
+    call cdtp(work%x, y2%x, coef%drdx, coef%dsdx, coef%dtdx, coef)
+    call field_sub2(w3, work)
+
+  end subroutine adjoint_curl_transpose
 
 end module adjoint_fluid_pnpn
