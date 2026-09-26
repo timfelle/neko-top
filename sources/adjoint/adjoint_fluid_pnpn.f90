@@ -794,9 +794,8 @@ contains
 
       rho_val = rho%x(1,1,1,1)
       mu_val = mu%x(1,1,1,1)
-      call field_add2s2(f_x, dx_p_adj, -mu_val / rho_val)
-      call field_add2s2(f_y, dy_p_adj, -mu_val / rho_val)
-      call field_add2s2(f_z, dz_p_adj, -mu_val / rho_val)
+      ! BUG6 PROBE P0: the curl-curl block's contribution is dropped; the
+      ! term above is still computed but never added to f.
 
       call neko_scratch_registry%relinquish_field(cc_indices)
 
