@@ -122,6 +122,14 @@ module mma
      procedure, public, pass(this) :: get_max_iter => mma_get_max_iter
      procedure, public, pass(this) :: get_backend_and_subsolver => &
           mma_get_backend_and_subsolver
+     !> Host copy of the dual variable z (always host-resident).
+     procedure, public, pass(this) :: get_z => mma_get_z
+     !> Host copy of the Lagrange multipliers lambda (size m). Downloads
+     !! from the device first when the device backend is in use.
+     procedure, public, pass(this) :: get_lambda => mma_get_lambda
+     !> Host copy of the constraint slack variables y (size m). Downloads
+     !! from the device first when the device backend is in use.
+     procedure, public, pass(this) :: get_y => mma_get_y
 
      generic, public :: update => update_vector, update_cpu, update_device
      procedure, pass(this) :: update_vector => mma_update_vector
@@ -713,6 +721,44 @@ contains
     backend_subsolver = 'backend:' // trim(backend) // ', subsolver:' // &
          trim(this%subsolver)
   end function mma_get_backend_and_subsolver
+
+  !> Get the dual variable z of the last subproblem. Unlike lambda and y,
+  !! z is a plain scalar member of mma_t (not a vector_t), so it is always
+  !! host-resident regardless of backend and needs no device copy.
+  !! @return z_out The dual variable z.
+  pure function mma_get_z(this) result(z_out)
+    class(mma_t), intent(in) :: this
+    real(kind=rp) :: z_out
+    z_out = this%z
+  end function mma_get_z
+
+  !> Get a host copy of the Lagrange multipliers lambda (size m) of the
+  !! last subproblem. For the device backend, lambda is updated on the
+  !! device and the host copy is stale, so it is downloaded first.
+  !! @return lambda Host copy of the Lagrange multipliers (size m).
+  function mma_get_lambda(this) result(lambda)
+    class(mma_t), intent(inout) :: this
+    real(kind=rp), allocatable, dimension(:) :: lambda
+
+    if (NEKO_BCKND_DEVICE .eq. 1 .and. this%bcknd .eq. 'device') then
+       call this%lambda%copy_from(DEVICE_TO_HOST, sync = .true.)
+    end if
+    lambda = this%lambda%x
+  end function mma_get_lambda
+
+  !> Get a host copy of the constraint slack variables y (size m) of the
+  !! last subproblem. For the device backend, y is updated on the device
+  !! and the host copy is stale, so it is downloaded first.
+  !! @return y_out Host copy of the constraint slack variables (size m).
+  function mma_get_y(this) result(y_out)
+    class(mma_t), intent(inout) :: this
+    real(kind=rp), allocatable, dimension(:) :: y_out
+
+    if (NEKO_BCKND_DEVICE .eq. 1 .and. this%bcknd .eq. 'device') then
+       call this%y%copy_from(DEVICE_TO_HOST, sync = .true.)
+    end if
+    y_out = this%y%x
+  end function mma_get_y
 
   ! ========================================================================== !
   ! Private utilities
