@@ -104,3 +104,37 @@ foreach(pf_file ${PFUNIT_TEST_SOURCES})
     )
     add_dependencies(Unit ${test_name})
 endforeach()
+
+# ============================================================================ #
+# mma-backend_consistency: registered separately from the generic loop above
+# because it must NOT use the generic MAX_PES expression
+# ($<IF:$<STREQUAL:${DEVICE_TYPE},CPU>,2,1>) -- that expression launches only
+# 1 rank on device builds, which fails every npes=2 pFUnit variant in this
+# file (known bug #61; 2 ranks may share one GPU, device_init only needs
+# device_count() >= 1 per rank). MAX_PES 2 unconditionally, as
+# tests/unit/optimizer/ and tests/unit/checkpointing/ already do.
+
+add_pfunit_ctest(mma-backend_consistency
+    TEST_SOURCES mma/backend_consistency.pf
+    LINK_LIBRARIES Neko-TOP::neko-top
+    MAX_PES 2
+)
+
+set(mma_backend_consistency_log
+    "${CMAKE_BINARY_DIR}/tests/unit/mma-backend_consistency.log")
+
+if (CMAKE_Fortran_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(mma-backend_consistency PRIVATE
+        $<$<COMPILE_LANGUAGE:Fortran>:-Wno-unused-variable>
+    )
+endif()
+
+set_target_properties(mma-backend_consistency PROPERTIES
+    FOLDER "Tests/Unit"
+)
+set_tests_properties(mma-backend_consistency PROPERTIES
+    LABELS "unit;mma"
+    ENVIRONMENT "NEKO_LOG_FILE=${mma_backend_consistency_log}"
+    TIMEOUT 600
+)
+add_dependencies(Unit mma-backend_consistency)
