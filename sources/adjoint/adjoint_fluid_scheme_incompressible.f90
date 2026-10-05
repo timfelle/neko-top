@@ -37,10 +37,10 @@ module adjoint_fluid_scheme_incompressible
   use adjoint_fluid_scheme, only: adjoint_fluid_scheme_t
   use gather_scatter, only: gs_t, GS_OP_MIN, GS_OP_MAX
   use neko_config, only: NEKO_BCKND_DEVICE
-  use num_types, only: rp, i8
+  use num_types, only: rp, dp, i8
   use adjoint_source_term, only: adjoint_source_term_t
   use field, only: field_t
-  use space, only: space_t, GLL, GL
+  use space, only: space_t, GLL, GL, operator(.ne.)
   use dofmap, only: dofmap_t
   use krylov, only: ksp_t, krylov_solver_factory, KSP_MAX_ITER
   use coefs, only: coef_t
@@ -510,6 +510,15 @@ contains
        call neko_error('Fields are not allocated')
     end if
 
+    if (this%u_adj%Xh .ne. this%v_adj%Xh .or. &
+         this%u_adj%Xh .ne. this%w_adj%Xh) then
+       call neko_error('Different function spaces for velocity components')
+    end if
+
+    if (this%u_adj%msh%nelv .ne. this%p_adj%msh%nelv) then
+       call neko_error('Velocity and pressure defined on different meshes')
+    end if
+
     if (.not. allocated(this%ksp_vel)) then
        call neko_error('No Krylov solver for velocity defined')
     end if
@@ -517,12 +526,6 @@ contains
     if (.not. allocated(this%ksp_prs)) then
        call neko_error('No Krylov solver for pressure defined')
     end if
-
-    !
-    ! Setup checkpoint structure (if everything is fine)
-    !
-    call this%chkp%init()
-    call this%chkp%add_fluid(this%u_adj, this%v_adj, this%w_adj, this%p_adj)
 
   end subroutine adjoint_fluid_scheme_validate
 
@@ -655,8 +658,8 @@ contains
   ! for now.... let's ignore it
   function adjoint_compute_cfl(this, dt) result(c)
     class(adjoint_fluid_scheme_incompressible_t), intent(in) :: this
-    real(kind=rp), intent(in) :: dt
-    real(kind=rp) :: c
+    real(kind=dp), intent(in) :: dt
+    real(kind=dp) :: c
 
     c = cfl(dt, this%u_adj%x, this%v_adj%x, this%w_adj%x, &
          this%Xh, this%c_Xh, this%msh%nelv, this%msh%gdim)

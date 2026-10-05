@@ -216,7 +216,7 @@ _ACEOF
     fi
 
     if [[ -z "$(find $PFUNIT_DIR -name libpfunit.a)" ]]; then
-        cmake -B $PFUNIT_DIR/build -S $PFUNIT_DIR -G "Ninja" -Wno-dev \
+        cmake -B $PFUNIT_DIR/build -S $PFUNIT_DIR -Wno-dev \
             --install-prefix=$PFUNIT_DIR -DCMAKE_BUILD_TYPE=Release -DMPI=YES
         cmake --build $PFUNIT_DIR/build
         cmake --install $PFUNIT_DIR/build
@@ -282,8 +282,8 @@ function find_hdf5() {
         fi
 
         # Build and install HDF5
-        cmake -B $HDF5_ROOT/build -S $HDF5_ROOT \
-            --install-prefix $HDF5_ROOT -DCMAKE_BUILD_TYPE=Release \
+        cmake -B $HDF5_ROOT/build -S $HDF5_ROOT --install-prefix $HDF5_ROOT \
+            -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_C_COMPILER=$MPICC -DCMAKE_CXX_COMPILER=$MPICXX \
             -DCMAKE_Fortran_COMPILER=$MPIFC -DHDF5_ENABLE_PARALLEL=ON \
             -DHDF5_BUILD_FORTRAN=ON -DHDF5_ENABLE_SZIP_SUPPORT:BOOL=OFF \
