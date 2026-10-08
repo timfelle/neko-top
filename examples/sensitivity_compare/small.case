@@ -6,7 +6,7 @@
         "output_at_end": false,
         "output_boundary": false,
         "time": {
-            "end_time": 6.0,
+            "end_time": 2.0,
             "timestep": 1.0e-4
         },
         "numerics": {
@@ -184,16 +184,11 @@
         },
         "solver": {
             "type": "mma",
-            "max_iterations": 2,
-            "max_runtime": "2-00:00:00",
-            "tolerance": 1.0e-13,
+            "max_iterations": 1,
             "mma": {
                 "scale": 1.0,
                 "xmin": 0.0,
                 "xmax": 1.0
-            },
-            "checkpoint": {
-                "interval": 1
             }
         },
         "objectives": [
