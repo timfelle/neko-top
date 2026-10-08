@@ -28,7 +28,7 @@ DataFolder = "/mnt/c/Users/tife/Downloads/steady_200_short_small/"
 # Create a new 'Render View'
 renderView1 = CreateView('RenderView')
 renderView1.Set(
-    ViewSize=[1920, 1080],
+    ViewSize=[1500, 750],
     AxesGrid='Grid Axes 3D Actor',
     OrientationAxesVisibility=0,
     CenterOfRotation=[2.0, 0.5, 0.5],
@@ -47,10 +47,10 @@ SetActiveView(None)
 # setup view layouts
 # ----------------------------------------------------------------
 
-# create new layout object 'Layout #1'
-layout1 = CreateLayout(name='Layout #1')
-layout1.AssignView(0, renderView1)
-layout1.SetSize(1920, 1080)
+# # create new layout object 'Layout #1'
+# layout1 = CreateLayout(name='Layout #1')
+# layout1.AssignView(0, renderView1)
+# layout1.SetSize(1920, 1080)
 
 # ----------------------------------------------------------------
 # restore active view
