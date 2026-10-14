@@ -1,7 +1,7 @@
 #!/usr/bin/env pvpython
 """Load a ParaView state file (.pvsm) and export an animation of all frames.
 
-The output frames are stored in a subdirectory of the data directory, named 
+The output frames are stored in a subdirectory of the data directory, named
 after the state file.
 
 Usage:
@@ -16,6 +16,7 @@ Additional arguments:
 import argparse
 import os
 
+from paraview import __version__ as paraview_version
 from paraview.simple import (
     GetActiveViewOrCreate,
     GetAnimationScene,
@@ -26,27 +27,32 @@ from paraview.simple import (
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Run a ParaView animation export.")
+    parser = argparse.ArgumentParser(
+        description="Run a ParaView animation export.")
     parser.add_argument("state", help="Path to the .pvsm state file")
     parser.add_argument("data_dir", help="Path to the data directory")
-    parser.add_argument(
-        "--resolution", type=int, default=360, help="Height of the output images (default: 360)"
-    )
-    parser.add_argument(
-        "--frames", nargs=2, type=int, default=None, metavar=("START", "END")
-    )
-    parser.add_argument(
-        "--overwrite", action="store_true", help="Overwrite existing files"
-    )
+    parser.add_argument("--resolution",
+                        type=int,
+                        default=360,
+                        help="Height of the output images (default: 360)")
+    parser.add_argument("--frames",
+                        nargs=2,
+                        type=int,
+                        default=None,
+                        metavar=("START", "END"))
+    parser.add_argument("--overwrite",
+                        action="store_true",
+                        help="Overwrite existing files")
     args = parser.parse_args()
 
     if not os.path.isfile(args.state):
         raise FileNotFoundError(args.state)
     if not os.path.splitext(args.state)[1] == ".pvsm":
-        raise ValueError(f"State file must have a .pvsm extension: {args.state}")
+        raise ValueError(
+            f"State file must have a .pvsm extension: {args.state}")
     if not os.path.isdir(args.data_dir):
         raise NotADirectoryError(args.data_dir)
-    
+
     # Load the VTKm plugin to enable VTKm filters in ParaView
     LoadPlugin("VTKmFilters", remote=True)
 
@@ -77,7 +83,8 @@ def main():
     frame_count = len(scene.TimeKeeper.TimestepValues)
     if args.frames:
         if args.frames[0] < 0 or args.frames[1] >= frame_count:
-            raise ValueError(f"Frame range {args.frames} is out of bounds for available frames 0-{frame_count - 1}")
+            raise ValueError(f"Frame range {args.frames} is out of bounds " +
+                             f"for available frames 0-{frame_count - 1}")
         start_frame, end_frame = args.frames
     else:
         start_frame, end_frame = 0, frame_count - 1
@@ -87,14 +94,16 @@ def main():
     output_dir = os.path.join(args.data_dir, "visualisations", state_name)
     os.makedirs(output_dir, exist_ok=True)
 
-    # Define the output file path for the animation frames and detect existing frames
-    animation_file = os.path.join(output_dir, "frame.png")
+    # Define the output file path for the animation frames and detect existing
+    # frames
+    animation_file = os.path.join(output_dir, ".png")
     if not args.overwrite:
         frame_list = list(range(start_frame, end_frame + 1))
         frame_windows = []
         window_start = frame_list[0]
         for frame_index in frame_list:
-            if os.path.isfile(os.path.join(output_dir, f"frame_{frame_index:04d}.png")):
+            if os.path.isfile(
+                    os.path.join(output_dir, f"{frame_index:04d}.png")):
                 if window_start < frame_index:
                     frame_windows.append((window_start, frame_index - 1))
                 window_start = frame_index + 1
@@ -103,6 +112,11 @@ def main():
     else:
         frame_windows = [(start_frame, end_frame)]
 
+    if paraview_version < "6.2":
+        SuffixFormat = "%04d"
+    else:
+        SuffixFormat = "{:04d}"
+
     # Export the animation frames for each frame window
     for frame_window in frame_windows:
         SaveAnimation(
@@ -110,7 +124,8 @@ def main():
             view,
             FrameWindow=(frame_window[0], frame_window[1]),
             ImageResolution=output_resolution,
-            SuffixFormat="_{:04d}",
+            CompressionLevel=0,
+            SuffixFormat=SuffixFormat,
         )
 
 

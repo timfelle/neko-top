@@ -16,7 +16,7 @@ QUALITY_PRESETS = {
     },
     "medium": {
         "colors": 256,
-        "dither": Image.Dither.FLOYDSTEINBERG,
+        "dither": Image.Dither.ORDERED,
         "optimize": True,
     },
     "high": {
@@ -84,7 +84,16 @@ def build_global_palette(frames: list[Image.Image],
         y_offset = index * sample_size[1]
         strip.paste(sample, (0, y_offset))
 
-    return strip.convert("P", palette=Image.Palette.ADAPTIVE, colors=colors)
+    strip = strip.convert("P",
+                          palette=Image.Palette.ADAPTIVE,
+                          colors=colors - 2)
+    palette = strip.getpalette()
+    black_index = colors - 2
+    white_index = colors - 1
+    palette[black_index * 3:(black_index + 1) * 3] = [0, 0, 0]
+    palette[white_index * 3:(white_index + 1) * 3] = [255, 255, 255]
+    strip.putpalette(palette)
+    return strip
 
 
 def has_any_transparency(frames: list[Image.Image]) -> bool:
@@ -178,6 +187,7 @@ def make_gif_from_files(
     fps: int,
     colors: int,
     dither: int,
+    resolution: int,
     optimize: bool,
 ) -> None:
     if not frame_files:
@@ -193,6 +203,15 @@ def make_gif_from_files(
         use_transparency = has_any_transparency(frames)
         palette_colors = min(colors, 255) if use_transparency else colors
         transparency_index = TRANSPARENCY_INDEX if use_transparency else None
+
+        if resolution > 0:
+            size = frames[0].size
+            size = (int(size[0] * (resolution / size[1])),
+                    int(size[1] * (resolution / size[1])))
+            frames = [
+                frame.resize(size, Image.Resampling.LANCZOS)
+                for frame in frames
+            ]
 
         shared_palette = build_global_palette(frames, palette_colors)
         palette_frames = [
@@ -231,7 +250,7 @@ def colors_value(value: str) -> int:
     return colors
 
 
-def parse_args() -> tuple[Path, Path, str, int, int, int, bool]:
+def parse_args() -> tuple[Path, Path, str, int, int, int, int, bool]:
     parser = ArgumentParser(
         description="Create a GIF from PNG frames in a folder")
     parser.add_argument(
@@ -244,7 +263,10 @@ def parse_args() -> tuple[Path, Path, str, int, int, int, bool]:
         default=None,
         help="Folder where generated GIF files are written",
     )
-    parser.add_argument("--fps", type=int, default=DEFAULT_FPS)
+    parser.add_argument("--fps",
+                        type=int,
+                        default=DEFAULT_FPS,
+                        help="Frames per second")
     parser.add_argument(
         "--quality",
         choices=sorted(QUALITY_PRESETS),
@@ -265,14 +287,21 @@ def parse_args() -> tuple[Path, Path, str, int, int, int, bool]:
     )
     parser.add_argument(
         "--pattern",
-        required=True,
+        default=r"(.*)(\d+)\.(png|jpg|jpeg)$",
         help=("Regex pattern for filenames inside input_folder, for example: "
               "Temperature_[0-9]*.png"),
+    )
+    parser.add_argument(
+        "--resolution",
+        type=int,
+        default=-1,
+        help=
+        "Height of the output GIF in pixels (default: native resolution of input images)",
     )
 
     args = parser.parse_args()
     if args.fps <= 0:
-        raise ValueError("fps must be greater than 0")
+        parser.error("fps must be greater than 0")
 
     input_folder = Path(args.input_folder)
     input_folder = input_folder.resolve()
@@ -293,13 +322,14 @@ def parse_args() -> tuple[Path, Path, str, int, int, int, bool]:
     preset = QUALITY_PRESETS[args.quality]
     colors = args.colors if args.colors is not None else preset["colors"]
     optimize = preset["optimize"] and not args.no_optimize
+    resolution = args.resolution
+    dither = preset["dither"]
 
-    return input_folder, output_folder, args.pattern, fps, colors, preset[
-        "dither"], optimize
+    return input_folder, output_folder, args.pattern, fps, colors, dither, resolution, optimize
 
 
 def main() -> None:
-    input_folder, output_folder, pattern, fps, colors, dither, optimize = parse_args(
+    input_folder, output_folder, pattern, fps, colors, dither, resolution, optimize = parse_args(
     )
 
     frames_by_prefix = numbered_image_files_by_pattern(input_folder, pattern)
@@ -311,7 +341,7 @@ def main() -> None:
 
     for prefix, frame_files in frames_by_prefix.items():
         output_stem = collapse_repeated_underscores(
-            f"{prefix}_{input_folder.name}")
+            f"{prefix}{input_folder.name}")
         output_name = f"{output_stem}.gif"
         output_path = output_folder / output_name
         make_gif_from_files(
@@ -320,6 +350,7 @@ def main() -> None:
             fps=fps,
             colors=colors,
             dither=dither,
+            resolution=resolution,
             optimize=optimize,
         )
 
