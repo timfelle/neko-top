@@ -31,6 +31,11 @@ def main():
         description="Run a ParaView animation export.")
     parser.add_argument("state", help="Path to the .pvsm state file")
     parser.add_argument("data_dir", help="Path to the data directory")
+    parser.add_argument(
+        "--output_dir",
+        help=
+        "Path to the output directory (default: data_dir/visualisations/<state_name>)"
+    )
     parser.add_argument("--resolution",
                         type=int,
                         default=360,
@@ -91,7 +96,10 @@ def main():
 
     # Determine the output location and ensure the directory exists
     state_name = os.path.splitext(os.path.basename(args.state))[0]
-    output_dir = os.path.join(args.data_dir, "visualisations", state_name)
+    if args.output_dir:
+        output_dir = args.output_dir
+    else:
+        output_dir = os.path.join(args.data_dir, "visualisations", state_name)
     os.makedirs(output_dir, exist_ok=True)
 
     # Define the output file path for the animation frames and detect existing
