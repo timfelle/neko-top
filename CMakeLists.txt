@@ -160,8 +160,13 @@ endif()
 set(HDF5_NO_FIND_PACKAGE_CONFIG_FILE TRUE)
 find_package(HDF5 COMPONENTS Fortran)
 
-# Determine if the HDF5 found is serial or parallel.
-if (HDF5_FOUND AND DEFINED HDF5_IS_PARALLEL AND NOT HDF5_IS_PARALLEL)
+# Determine if the HDF5 found is known to be serial. If the Fortran compiler
+# is itself the HDF5 wrapper (e.g. Cray ftn), FindHDF5 reads HDF5_IS_PARALLEL
+# from "<compiler> -showconfig", which is FALSE for any compiler that does not
+# print a "Parallel HDF5:" line, and unset on a re-configure. It is then no
+# evidence of a serial HDF5.
+if (HDF5_FOUND AND DEFINED HDF5_IS_PARALLEL AND NOT HDF5_IS_PARALLEL
+        AND NOT HDF5_Fortran_COMPILER_EXECUTABLE_NO_INTERROGATE)
     set(_hdf5_known_serial TRUE)
 else()
     set(_hdf5_known_serial FALSE)
