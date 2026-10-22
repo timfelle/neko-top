@@ -398,6 +398,10 @@ contains
   !! case, a cumulative average is used to determine if the next iteration would
   !! exceed the maximum runtime.
   !!
+  !! When restarting from a checkpoint, the continuation parameters are set to
+  !! their values at the checkpointed iteration before the problem is
+  !! re-evaluated.
+  !!
   !! @param this The optimizer object.
   !! @param problem The problem object.
   !! @param design The design object.
@@ -436,6 +440,14 @@ contains
        if (present(simulation)) then
           call simulation%set_output_counter(this%current_iteration - 1)
        end if
+    end if
+
+    ! On a restart, restore the continuation parameters of the checkpointed
+    ! iteration, so that the problem is re-evaluated with the same values as
+    ! in the original run. A fresh start has nothing to restore, and update(0)
+    ! would index the parameter values at 0.
+    if (this%current_iteration .gt. 0) then
+       call nekotop_continuation%update(this%current_iteration)
     end if
 
     ! Prepare the problem state before starting the optimization
@@ -701,10 +713,11 @@ contains
     this%log_data%x(offset:offset + 1 - 1) = this%max_design_change
     this%log_data%x(offset + 1:offset + 2 - 1) = this%norm2_design_change
 
-    ! Continuation parameter values
+    ! Continuation parameter values, starting at the first slot after the
+    ! design change entries
     offset = offset + 2
     do i = 1, n_cont
-       this%log_data%x(offset + i) = &
+       this%log_data%x(offset + i - 1) = &
             nekotop_continuation%params(i)%target
     end do
 
