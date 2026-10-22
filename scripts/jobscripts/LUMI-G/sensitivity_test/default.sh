@@ -24,7 +24,7 @@
 #SBATCH --mem=0
 
 # Time specifications (dd-hh:mm:ss)
-#SBATCH --time 0-04:00:00
+#SBATCH --time 0-08:00:00
 
 # -- Notification options
 
