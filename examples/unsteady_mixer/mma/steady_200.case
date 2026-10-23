@@ -1,7 +1,7 @@
 {
     "version": 1.0,
     "case": {
-        "mesh_file": "data_local/static_mixer/mixer_32x8x8.nmsh",
+        "mesh_file": "data_local/static_mixer/mixer_256x64x64.nmsh",
         "output_checkpoints": false,
         "output_at_end": false,
         "output_boundary": false,
@@ -16,9 +16,8 @@
         },
         "fluid": {
             "scheme": "pnpn",
-            "Re": 20.0,
+            "Re": 200.0,
             "output_control": "never",
-            "output_value": 10,
             "output_format": "vtkhdf",
             "strict_convergence": true,
             "pressure_solver": {
@@ -30,7 +29,7 @@
                         "solver": "tamg"
                     }
                 },
-                "absolute_tolerance": 1e-7,
+                "absolute_tolerance": 1e-4,
                 "max_iterations": 800
             },
             "velocity_solver": {
@@ -106,7 +105,6 @@
         },
         "adjoint_fluid": {
             "output_control": "never",
-            "output_value": 10,
             "output_format": "vtkhdf",
             "initial_condition": {
                 "type": "uniform",
@@ -145,13 +143,15 @@
                 "y_bounds": [ 0.2, 0.5 ],
                 "z_bounds": [ 0.2, 0.5 ]
             }
+        ],
+        "simulation_components": [
+            {
+                "type": "steady",
+                "tol": 1e-6,
+                "compute_control": "tsteps",
+                "compute_value": 5
+            }
         ]
-    },
-    "unsteady": true,
-    "checkpoints": {
-        "enabled": true,
-        "format": "chkp",
-        "n_memory": 200
     },
     "optimization": {
         "design": {
@@ -162,7 +162,7 @@
             "mapping": [
                 {
                     "type": "PDE_filter",
-                    "r": 0.125,
+                    "r": 0.015625,
                     "tol": 1e-15
                 },
                 {
@@ -184,13 +184,16 @@
         },
         "solver": {
             "type": "mma",
-            "max_iterations": 25,
+            "max_iterations": 200,
             "max_runtime": "2-00:00:00",
+            "stop_design_change": 0.01,
             "tolerance": 1.0e-13,
             "mma": {
-                "scale": 1.0,
                 "xmin": 0.0,
                 "xmax": 1.0
+            },
+            "checkpoint": {
+                "interval": 5
             }
         },
         "objectives": [
@@ -198,15 +201,15 @@
                 "type": "scalar_mixing",
                 "mask_name": "objective_domain",
                 "phi_ref": 0.5,
-                "weight": 10.9888250294
+                "weight": 11.3503685776
             },
             {
                 "type": "viscous_dissipation",
-                "weight": 0.1175703177
+                "weight": 0.9369508196
             },
             {
                 "type": "brinkman_dissipation",
-                "weight": 1.5103368941
+                "weight": 12.5216571753
             }
         ]
     }

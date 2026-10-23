@@ -146,8 +146,7 @@
         ]
     },
     "unsteady": true,
-    "state_recovery": {
-        "type": "checkpoint",
+    "checkpoints": {
         "enabled": true,
         "format": "chkp",
         "n_memory": 200
@@ -184,15 +183,15 @@
         "solver": {
             "type": "mma",
             "max_iterations": 200,
-            "max_runtime": "2-00:00:00",
+            "max_runtime": "3-00:00:00",
+            "stop_design_change": 0.01,
             "tolerance": 1.0e-13,
-            "checkpoint": {
-                "interval": 10
-            },
             "mma": {
-                "scale": 1.0,
                 "xmin": 0.0,
                 "xmax": 1.0
+            },
+            "checkpoint": {
+                "interval": 5
             }
         },
         "objectives": [
@@ -200,15 +199,16 @@
                 "type": "scalar_mixing",
                 "mask_name": "objective_domain",
                 "phi_ref": 0.5,
-                "weight": 11.1854201328
+                "start_time": 8.0,
+                "weight": 34.0703259805
             },
             {
                 "type": "viscous_dissipation",
-                "weight": 1.0308031201
+                "weight": 1.0475493490
             },
             {
                 "type": "brinkman_dissipation",
-                "weight": 3.9995594948
+                "weight": 4.0941956472
             }
         ]
     }

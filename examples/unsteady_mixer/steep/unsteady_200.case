@@ -143,21 +143,20 @@
                 "y_bounds": [ 0.2, 0.5 ],
                 "z_bounds": [ 0.2, 0.5 ]
             }
-        ],
-        "simulation_components": [
-            {
-                "type": "steady",
-                "tol": 1e-6,
-                "compute_control": "tsteps",
-                "compute_value": 5
-            }
         ]
+    },
+    "unsteady": true,
+    "state_recovery": {
+        "type": "checkpoint",
+        "enabled": true,
+        "format": "chkp",
+        "n_memory": 100
     },
     "optimization": {
         "design": {
             "type": "brinkman",
-            "verbose_design": true,
-            "verbose_sensitivity": true,
+            "verbose_design": false,
+            "verbose_sensitivity": false,
             "output_format": "vtkhdf",
             "mapping": [
                 {
@@ -183,12 +182,12 @@
             }
         },
         "solver": {
-            "type": "mma",
-            "max_iterations": 25,
+            "type": "steepest_descent",
+            "max_iterations": 200,
             "max_runtime": "2-00:00:00",
+            "stop_design_change": 0.01,
             "tolerance": 1.0e-13,
-            "mma": {
-                "scale": 1.0,
+            "steepest_descent": {
                 "xmin": 0.0,
                 "xmax": 1.0
             },
@@ -201,15 +200,15 @@
                 "type": "scalar_mixing",
                 "mask_name": "objective_domain",
                 "phi_ref": 0.5,
-                "weight": 113.503685776
+                "weight": 11.1792352991
             },
             {
                 "type": "viscous_dissipation",
-                "weight": 9.369508196
+                "weight": 0.9001745111
             },
             {
                 "type": "brinkman_dissipation",
-                "weight": 125.216571753
+                "weight": 12.7173004446
             }
         ]
     }

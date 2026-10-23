@@ -1,7 +1,7 @@
 {
     "version": 1.0,
     "case": {
-        "mesh_file": "data_local/static_mixer/mixer_256x64x64.nmsh",
+        "mesh_file": "data_local/static_mixer/mixer_32x8x8.nmsh",
         "output_checkpoints": false,
         "output_at_end": false,
         "output_boundary": false,
@@ -29,7 +29,7 @@
                         "solver": "tamg"
                     }
                 },
-                "absolute_tolerance": 1e-4,
+                "absolute_tolerance": 1e-7,
                 "max_iterations": 800
             },
             "velocity_solver": {
@@ -150,18 +150,18 @@
         "type": "checkpoint",
         "enabled": true,
         "format": "chkp",
-        "n_memory": 100
+        "n_memory": 200
     },
     "optimization": {
         "design": {
             "type": "brinkman",
-            "verbose_design": false,
-            "verbose_sensitivity": false,
+            "verbose_design": true,
+            "verbose_sensitivity": true,
             "output_format": "vtkhdf",
             "mapping": [
                 {
                     "type": "PDE_filter",
-                    "r": 0.015625,
+                    "r": 0.125,
                     "tol": 1e-15
                 },
                 {
@@ -183,11 +183,11 @@
         },
         "solver": {
             "type": "mma",
-            "max_iterations": 25,
-            "max_runtime": "2-00:00:00",
+            "max_iterations": 200,
+            "max_runtime": "3-00:00:00",
+            "stop_design_change": 0.01,
             "tolerance": 1.0e-13,
             "mma": {
-                "scale": 1.0,
                 "xmin": 0.0,
                 "xmax": 1.0
             },
@@ -200,16 +200,15 @@
                 "type": "scalar_mixing",
                 "mask_name": "objective_domain",
                 "phi_ref": 0.5,
-                "weight": 111.792352991,
-                "start_time": 10.0
+                "weight": 11.1854201328
             },
             {
                 "type": "viscous_dissipation",
-                "weight": 9.001745111
+                "weight": 1.0308031201
             },
             {
                 "type": "brinkman_dissipation",
-                "weight": 127.173004446
+                "weight": 3.9995594948
             }
         ]
     }

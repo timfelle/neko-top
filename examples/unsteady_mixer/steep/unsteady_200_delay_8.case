@@ -182,12 +182,12 @@
             }
         },
         "solver": {
-            "type": "mma",
-            "max_iterations": 25,
+            "type": "steepest_descent",
+            "max_iterations": 200,
             "max_runtime": "2-00:00:00",
+            "stop_design_change": 0.01,
             "tolerance": 1.0e-13,
-            "mma": {
-                "scale": 1.0,
+            "steepest_descent": {
                 "xmin": 0.0,
                 "xmax": 1.0
             },
@@ -200,15 +200,16 @@
                 "type": "scalar_mixing",
                 "mask_name": "objective_domain",
                 "phi_ref": 0.5,
-                "weight": 111.792352991
+                "weight": 11.3503685776,
+                "start_time": 8.0
             },
             {
                 "type": "viscous_dissipation",
-                "weight": 9.001745111
+                "weight": 0.9369508196
             },
             {
                 "type": "brinkman_dissipation",
-                "weight": 127.173004446
+                "weight": 12.5216571753
             }
         ]
     }

@@ -16,9 +16,8 @@
         },
         "fluid": {
             "scheme": "pnpn",
-            "Re": 20.0,
+            "Re": 200.0,
             "output_control": "never",
-            "output_value": 10,
             "output_format": "vtkhdf",
             "strict_convergence": true,
             "pressure_solver": {
@@ -106,7 +105,6 @@
         },
         "adjoint_fluid": {
             "output_control": "never",
-            "output_value": 10,
             "output_format": "vtkhdf",
             "initial_condition": {
                 "type": "uniform",
@@ -145,15 +143,14 @@
                 "y_bounds": [ 0.2, 0.5 ],
                 "z_bounds": [ 0.2, 0.5 ]
             }
-        ],
-        "simulation_components": [
-            {
-                "type": "steady",
-                "tol": 1e-6,
-                "compute_control": "tsteps",
-                "compute_value": 5
-            }
         ]
+    },
+    "unsteady": true,
+    "state_recovery": {
+        "type": "checkpoint",
+        "enabled": true,
+        "format": "chkp",
+        "n_memory": 200
     },
     "optimization": {
         "design": {
@@ -185,14 +182,17 @@
             }
         },
         "solver": {
-            "type": "mma",
-            "max_iterations": 25,
-            "max_runtime": "2-00:00:00",
+            "type": "steepest_descent",
+            "max_iterations": 200,
+            "max_runtime": "3-00:00:00",
+            "stop_design_change": 0.01,
             "tolerance": 1.0e-13,
-            "mma": {
-                "scale": 1.0,
+            "steepest_descent": {
                 "xmin": 0.0,
                 "xmax": 1.0
+            },
+            "checkpoint": {
+                "interval": 5
             }
         },
         "objectives": [
@@ -200,15 +200,16 @@
                 "type": "scalar_mixing",
                 "mask_name": "objective_domain",
                 "phi_ref": 0.5,
-                "weight": 11.2158401655
+                "start_time": 4.0,
+                "weight": 17.0203615626
             },
             {
                 "type": "viscous_dissipation",
-                "weight": 0.1184449949
+                "weight": 1.0333348346
             },
             {
                 "type": "brinkman_dissipation",
-                "weight": 1.5238304655
+                "weight": 4.0102088269
             }
         ]
     }

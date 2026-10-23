@@ -14,7 +14,7 @@
 # --  Technical Options
 
 # Queue name
-#SBATCH --partition=standard-g
+#SBATCH --partition=small-g
 
 # Ask for n cores placed on R host.
 #SBATCH --nodes=1
@@ -23,7 +23,7 @@
 #SBATCH --cpus-per-task=6
 
 # Time specifications (dd-hh:mm:ss)
-#SBATCH --time 2-00:00:00
+#SBATCH --time 3-00:00:00
 
 # -- Notification options
 
