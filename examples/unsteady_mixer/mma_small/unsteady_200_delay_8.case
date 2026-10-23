@@ -182,7 +182,7 @@
         },
         "solver": {
             "type": "mma",
-            "max_iterations": 200,
+            "max_iterations": 1,
             "max_runtime": "3-00:00:00",
             "stop_design_change": 0.01,
             "tolerance": 1.0e-13,
