@@ -52,9 +52,9 @@ def main():
 
     if not os.path.isfile(args.state):
         raise FileNotFoundError(args.state)
-    if not os.path.splitext(args.state)[1] == ".pvsm":
-        raise ValueError(
-            f"State file must have a .pvsm extension: {args.state}")
+    # if not os.path.splitext(args.state)[1] == ".pvsm":
+    #     raise ValueError(
+    #         f"State file must have a .pvsm extension: {args.state}")
     if not os.path.isdir(args.data_dir):
         raise NotADirectoryError(args.data_dir)
 
@@ -62,11 +62,17 @@ def main():
     LoadPlugin("VTKmFilters", remote=True)
 
     # Load the ParaView state file and extract view and scene information
-    LoadState(
-        args.state,
-        data_directory=args.data_dir,
-        restrict_to_data_directory=True,
-    )
+    if os.path.splitext(args.state)[1] == ".pvsm":
+        LoadState(
+            args.state,
+            data_directory=args.data_dir,
+            restrict_to_data_directory=True,
+        )
+    else:
+        # Evaluate the python state script specified
+        with open(args.state, "r") as f:
+            state_script = f.read()
+        exec(state_script, {"data_directory": args.data_dir})
 
     view = GetActiveViewOrCreate("RenderView")
     scene = GetAnimationScene()
@@ -127,6 +133,7 @@ def main():
 
     # Export the animation frames for each frame window
     for frame_window in frame_windows:
+        print(f"Exporting frames {frame_window[0]}-{frame_window[1]}")
         SaveAnimation(
             animation_file,
             view,
