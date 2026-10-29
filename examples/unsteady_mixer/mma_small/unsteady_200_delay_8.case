@@ -11,7 +11,7 @@
         },
         "numerics": {
             "time_order": 3,
-            "polynomial_order": 5,
+            "polynomial_order": 3,
             "dealias": false
         },
         "fluid": {
@@ -183,7 +183,7 @@
         },
         "solver": {
             "type": "mma",
-            "max_iterations": 200,
+            "max_iterations": 25,
             "max_runtime": "0-12:00:00",
             "stop_design_change": 0.01,
             "tolerance": 1.0e-13,
