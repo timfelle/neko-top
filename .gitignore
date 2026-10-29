@@ -43,3 +43,4 @@ manim_media/
 doxygen.log
 html/
 *.html
+vtkhdf_test_data/

@@ -8,6 +8,9 @@ from paraview.simple import *
 #### disable automatic camera reset on 'Show'
 paraview.simple._DisableFirstRenderCameraReset()
 
+if not 'data_directory' in globals():
+    data_directory = "/home/tife/Projects/neko-top/logs/unsteady_mixer/mma_small/unsteady_200_delay_8"
+
 # ----------------------------------------------------------------
 # setup views used in the visualization
 # ----------------------------------------------------------------
