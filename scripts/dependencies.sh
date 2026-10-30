@@ -24,14 +24,6 @@ function check_system_dependencies() {
         exit 1
     fi
 
-    # Check for correct version of cmake executable (>= 3.21)
-    CMAKE_VERSION=$(cmake --version | grep -oP '(?<=version )\d+\.\d+')
-    if [ $(echo "$CMAKE_VERSION < 3.21" | bc) -eq 1 ]; then
-        printf "CMake version >= 3.21 is required.\n"
-        printf "Please update your CMake installation.\n"
-        exit 1
-    fi
-
 }
 
 # ============================================================================ #
@@ -263,7 +255,7 @@ function find_hdf5() {
             -DCMAKE_C_COMPILER=$MPICC -DCMAKE_CXX_COMPILER=$MPICXX \
             -DCMAKE_Fortran_COMPILER=$MPIFC -DHDF5_ENABLE_PARALLEL=ON \
             -DHDF5_BUILD_FORTRAN=ON -DHDF5_ENABLE_SZIP_SUPPORT:BOOL=OFF \
-            -DHDF5_BUILD_TOOLS:BOOL=ON
+            -DHDF5_BUILD_TOOLS:BOOL=ON -DHDF5_BUILD_HL_LIB=OFF
         cmake --build $HDF5_ROOT/build/ --config Release --parallel
         cmake --install $HDF5_ROOT/build/ --config Release
         rm -fr $HDF5_ROOT/build
@@ -446,19 +438,23 @@ function find_neko() {
 
         [ -z "$CURRENT_DIR" ] && CURRENT_DIR=$(pwd)
         cd $NEKO_DIR
-        if [[ ! -f "configure" || "$CLEAN_NEKO" == true ]]; then
+        if [[ ! -f "configure" || "$NEKO_CLEAN" == true ]]; then
             ./regen.sh
         fi
-        if [[ ! -f Makefile || "$CLEAN_NEKO" == true ]]; then
-            ./configure --prefix="$(realpath ./)" $FEATURES \
-                FC=$FC MPIFC=$MPIFC FCFLAGS="$NEKO_FCFLAGS" \
-                CC=$CC MPICC=$MPICC MPICXX=$MPICXX CFLAGS="$NEKO_CFLAGS" \
-                HIPCC=$HIPCC HIP_HIPCC_FLAGS="$NEKO_HIPCC_FLAGS" \
-                CUDA_CFLAGS="$NEKO_CUDA_CFLAGS"
+        if [[ ! -f Makefile || "$NEKO_CLEAN" == true ]]; then
+
+            # Only apply the user-defined flags if they are set, otherwise use
+            # the default internally.
+            [ "${NEKO_FCFLAGS+set}" ] && export FCFLAGS="$NEKO_FCFLAGS"
+            [ "${NEKO_CFLAGS+set}" ] && export CFLAGS="$NEKO_CFLAGS"
+            [ "${NEKO_HIPCC_FLAGS+set}" ] && export HIP_HIPCC_FLAGS="$NEKO_HIPCC_FLAGS"
+            [ "${NEKO_CUDA_CFLAGS+set}" ] && export CUDA_CFLAGS="$NEKO_CUDA_CFLAGS"
+
+            ./configure --prefix="$(realpath ./)" $FEATURES
         fi
 
         # Update compile dependencies if makedepf90 is installed
-        if command -v makedepf90 2>&1 1>/dev/null; then
+        if [[ -n "$(which makedepf90)" && "$NEKO_CLEAN" == true ]]; then
             size_pre=$(stat -c %s src/.depends)
             cd src/ && make depend && cd ../
             if [ "$size_pre" != "$(stat -c %s src/.depends)" ]; then
@@ -467,10 +463,12 @@ function find_neko() {
             fi
         fi
 
-        [ "$CLEAN_NEKO" == true ] && make clean
-        [ "$QUIET" == true ] && make -s -j || make -j
-        [ "$NEKO_TEST" == true ] && make check -j
-        make install
+        echo "Building and installing Neko, see logs for output"
+        rm -f build.log check.log install.log
+        [ "$NEKO_CLEAN" == true ] && make clean >> build.log
+        make -j >> build.log
+        [ "$NEKO_TEST" == true ] && make check -j >> check.log
+        make install >> install.log
 
         cd $CURRENT_DIR
 
