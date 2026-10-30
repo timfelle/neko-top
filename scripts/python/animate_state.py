@@ -15,6 +15,7 @@ Additional arguments:
 
 import argparse
 import os
+import runpy
 
 from paraview import __version__ as paraview_version
 from paraview.simple import (
@@ -48,13 +49,18 @@ def main():
     parser.add_argument("--overwrite",
                         action="store_true",
                         help="Overwrite existing files")
+    parser.add_argument(
+        "--design-file",
+        default="design_0.vtkhdf",
+        help="Path to the design file (default: design_0.vtkhdf)")
+    parser.add_argument(
+        "--forward-file",
+        default="forward_fields_0.vtkhdf",
+        help=
+        "Path to the forward fields file (default: forward_fields_0.vtkhdf)")
+
     args = parser.parse_args()
 
-    # if not os.path.isfile(args.state):
-    #     raise FileNotFoundError(args.state)
-    # if not os.path.splitext(args.state)[1] == ".pvsm":
-    #     raise ValueError(
-    #         f"State file must have a .pvsm extension: {args.state}")
     if not os.path.isdir(args.data_dir):
         raise NotADirectoryError(args.data_dir)
 
@@ -77,13 +83,15 @@ def main():
             restrict_to_data_directory=True,
         )
     elif "." not in args.state:
-        global data_directory
-        data_directory = args.data_dir
-        # If the state is a string, we assume it is a python function name from
-        # our visualization modules. We will call the function to set up the
-        # ParaView state.
+        # If the state is a string, execute the corresponding visualization
+        # module with the data directory available to its top-level code.
         if args.state == "design_evolution":
-            import design_evolution
+            runpy.run_module(args.state,
+                             init_globals={
+                                 "data_directory": args.data_dir,
+                                 "design_file": args.design_file,
+                                 "forward_file": args.forward_file,
+                             })
         else:
             raise ValueError(f"Unknown state function: {args.state}")
     else:
