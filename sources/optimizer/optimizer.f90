@@ -711,12 +711,6 @@ contains
             trim(nekotop_continuation%get_param_name(i))
     end do
 
-    ! csv_file_t keeps its header in a fixed-length field.
-    if (len(header) .gt. len(this%log_file%header)) then
-       call neko_log%warning("Optimization log header exceeds the " // &
-            "csv_file_t header length; " // trim(log_name) // &
-            " will carry truncated column names.")
-    end if
     call this%log_file%set_header(header)
 
     this%log_initialized = .true.
