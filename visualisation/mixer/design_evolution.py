@@ -1,5 +1,6 @@
 # state file generated using paraview version 6.2.0
 import paraview
+
 paraview.compatibility.major = 6
 paraview.compatibility.minor = 2
 
@@ -8,8 +9,14 @@ from paraview.simple import *
 #### disable automatic camera reset on 'Show'
 paraview.simple._DisableFirstRenderCameraReset()
 
-if not 'data_directory' in globals():
-    data_directory = "/home/tife/Projects/neko-top/logs/unsteady_mixer/mma_small/unsteady_200_delay_8"
+if "data_directory" not in globals():
+    raise RuntimeError(
+        "data_directory is not defined. Please set the data_directory variable before running this script."
+    )
+if "forward_file" not in globals():
+    forward_file = "forward_fields_0.vtkhdf"
+if "design_file" not in globals():
+    design_file = "design_0.vtkhdf"
 
 # ----------------------------------------------------------------
 # setup views used in the visualization
@@ -22,9 +29,15 @@ renderView1.Set(
     AxesGrid='Grid Axes 3D Actor',
     OrientationAxesVisibility=0,
     CenterOfRotation=[2.0, 0.5, 0.5],
-    CameraPosition=[-1.9618733122078622, 1.5781756002322753, 5.509845549477533],
-    CameraFocalPoint=[2.8009413570890658, -0.0204358346537689, -0.966029097427043],
-    CameraViewUp=[0.11333016892331155, 0.980790710365838, -0.15876351996566657],
+    CameraPosition=[
+        -1.9618733122078622, 1.5781756002322753, 5.509845549477533
+    ],
+    CameraFocalPoint=[
+        2.8009413570890658, -0.0204358346537689, -0.966029097427043
+    ],
+    CameraViewUp=[
+        0.11333016892331155, 0.980790710365838, -0.15876351996566657
+    ],
     CameraViewAngle=14.691478942213518,
 )
 
@@ -49,11 +62,13 @@ SetActiveView(renderView1)
 # ----------------------------------------------------------------
 
 # create a new 'VTKHDF Reader'
-forward_fields_0vtkhdf = VTKHDFReader(registrationName='forward_fields_0.vtkhdf', FileName=[data_directory + '/forward_fields_0.vtkhdf'])
+forward_fields_0vtkhdf = VTKHDFReader(registrationName='Forward Fields',
+                                      FileName=[data_directory + forward_file])
 forward_fields_0vtkhdf.PointArrayStatus = ['Pressure', 'Velocity', 's']
 
 # create a new 'Merge Blocks'
-mergeBlocks2 = MergeBlocks(registrationName='MergeBlocks2', Input=forward_fields_0vtkhdf)
+mergeBlocks2 = MergeBlocks(registrationName='MergeBlocks2',
+                           Input=forward_fields_0vtkhdf)
 
 # create a new 'Slice'
 slice1 = Slice(registrationName='Slice1', Input=mergeBlocks2)
@@ -70,11 +85,15 @@ slice1.SliceType.Origin = [0.001, 0.5, 0.5]
 slice1.HyperTreeGridSlicer.Origin = [2.0, 0.5, 0.5]
 
 # create a new 'VTKHDF Reader'
-design_0vtkhdf = VTKHDFReader(registrationName='design_0.vtkhdf', FileName=[data_directory + '/design_0.vtkhdf'])
-design_0vtkhdf.PointArrayStatus = ['PDE_filter_mapping', 'brinkman_amplitude', 'design_indicator']
+design_0vtkhdf = VTKHDFReader(registrationName='Design',
+                              FileName=[data_directory + design_file])
+design_0vtkhdf.PointArrayStatus = [
+    'PDE_filter_mapping', 'brinkman_amplitude', 'design_indicator'
+]
 
 # create a new 'Merge Blocks'
-mergeBlocks1 = MergeBlocks(registrationName='MergeBlocks1', Input=design_0vtkhdf)
+mergeBlocks1 = MergeBlocks(registrationName='MergeBlocks1',
+                           Input=design_0vtkhdf)
 
 # create a new 'VTKm Clip'
 vTKmClip1 = VTKmClip(registrationName='VTKmClip1', Input=mergeBlocks1)
@@ -95,14 +114,16 @@ smooth1 = Smooth(registrationName='Smooth1', Input=vTKmContour1)
 smooth1.Convergence = 0.0001
 
 # create a new 'Clip Closed Surface'
-clipClosedSurface1 = ClipClosedSurface(registrationName='ClipClosedSurface1', Input=smooth1)
+clipClosedSurface1 = ClipClosedSurface(registrationName='ClipClosedSurface1',
+                                       Input=smooth1)
 clipClosedSurface1.ClippingPlane = 'Plane'
 
 # init the 'Plane' selected for 'ClippingPlane'
 clipClosedSurface1.ClippingPlane.Normal = [0.0, 1.0, 0.0]
 
 # create a new 'Clip Closed Surface'
-clipClosedSurface2 = ClipClosedSurface(registrationName='ClipClosedSurface2', Input=clipClosedSurface1)
+clipClosedSurface2 = ClipClosedSurface(registrationName='ClipClosedSurface2',
+                                       Input=clipClosedSurface1)
 clipClosedSurface2.ClippingPlane = 'Plane'
 
 # init the 'Plane' selected for 'ClippingPlane'
@@ -130,7 +151,8 @@ slice2.HyperTreeGridSlicer.Origin = [2.0, 0.5, 0.5]
 # ----------------------------------------------------------------
 
 # show data from mergeBlocks1
-mergeBlocks1Display = Show(mergeBlocks1, renderView1, 'UnstructuredGridRepresentation')
+mergeBlocks1Display = Show(mergeBlocks1, renderView1,
+                           'UnstructuredGridRepresentation')
 
 # trace defaults for the display properties.
 mergeBlocks1Display.Set(
@@ -141,21 +163,24 @@ mergeBlocks1Display.Set(
 )
 
 # init the 'Piecewise Function' selected for 'ScaleTransferFunction'
-mergeBlocks1Display.ScaleTransferFunction.Points = [-1.5584799753888892e-14, 0.0, 0.5, 0.0, 0.9591442346572876, 1.0, 0.5, 0.0]
+mergeBlocks1Display.ScaleTransferFunction.Points = [
+    -1.5584799753888892e-14, 0.0, 0.5, 0.0, 0.9591442346572876, 1.0, 0.5, 0.0
+]
 
 # init the 'Piecewise Function' selected for 'OpacityTransferFunction'
-mergeBlocks1Display.OpacityTransferFunction.Points = [-1.5584799753888892e-14, 0.0, 0.5, 0.0, 0.9591442346572876, 1.0, 0.5, 0.0]
+mergeBlocks1Display.OpacityTransferFunction.Points = [
+    -1.5584799753888892e-14, 0.0, 0.5, 0.0, 0.9591442346572876, 1.0, 0.5, 0.0
+]
 
 # show data from vTKmClip1
-vTKmClip1Display = Show(vTKmClip1, renderView1, 'UnstructuredGridRepresentation')
+vTKmClip1Display = Show(vTKmClip1, renderView1,
+                        'UnstructuredGridRepresentation')
 
 # get color transfer function/color map for 'PDE_filter_mapping'
 pDE_filter_mappingLUT = GetColorTransferFunction('PDE_filter_mapping')
 pDE_filter_mappingLUT.Set(
     AutomaticRescaleRangeMode='Never',
-    RGBPoints=GenerateRGBPoints(
-        preset_name='Grayscale',
-    ),
+    RGBPoints=GenerateRGBPoints(preset_name='Grayscale', ),
     ColorSpace='RGB',
     NanColor=[1.0, 0.0, 0.0],
     Discretize=0,
@@ -165,7 +190,11 @@ pDE_filter_mappingLUT.Set(
 # get opacity transfer function/opacity map for 'PDE_filter_mapping'
 pDE_filter_mappingPWF = GetOpacityTransferFunction('PDE_filter_mapping')
 pDE_filter_mappingPWF.Set(
-    Points=[0.0, 0.0, 0.5, 0.0, 0.01, 0.1, 0.5, 0.0, 0.8, 0.3, 0.5, 0.0, 0.85, 0.4, 0.5, 0.0, 0.89, 0.6, 0.5, 0.0, 0.900293231010437, 0.6875000596046448, 0.5, 0.0, 0.929618775844574, 1.0, 0.5, 0.0, 1.0, 1.0, 0.5, 0.0],
+    Points=[
+        0.0, 0.0, 0.5, 0.0, 0.01, 0.1, 0.5, 0.0, 0.8, 0.3, 0.5, 0.0, 0.85, 0.4,
+        0.5, 0.0, 0.89, 0.6, 0.5, 0.0, 0.900293231010437, 0.6875000596046448,
+        0.5, 0.0, 0.929618775844574, 1.0, 0.5, 0.0, 1.0, 1.0, 0.5, 0.0
+    ],
     ScalarRangeInitialized=1,
 )
 
@@ -183,13 +212,18 @@ vTKmClip1Display.Set(
 )
 
 # init the 'Piecewise Function' selected for 'ScaleTransferFunction'
-vTKmClip1Display.ScaleTransferFunction.Points = [0.0010000000474974513, 0.0, 0.5, 0.0, 0.9636493921279907, 1.0, 0.5, 0.0]
+vTKmClip1Display.ScaleTransferFunction.Points = [
+    0.0010000000474974513, 0.0, 0.5, 0.0, 0.9636493921279907, 1.0, 0.5, 0.0
+]
 
 # init the 'Piecewise Function' selected for 'OpacityTransferFunction'
-vTKmClip1Display.OpacityTransferFunction.Points = [0.0010000000474974513, 0.0, 0.5, 0.0, 0.9636493921279907, 1.0, 0.5, 0.0]
+vTKmClip1Display.OpacityTransferFunction.Points = [
+    0.0010000000474974513, 0.0, 0.5, 0.0, 0.9636493921279907, 1.0, 0.5, 0.0
+]
 
 # show data from clipClosedSurface2
-clipClosedSurface2Display = Show(clipClosedSurface2, renderView1, 'GeometryRepresentation')
+clipClosedSurface2Display = Show(clipClosedSurface2, renderView1,
+                                 'GeometryRepresentation')
 
 # trace defaults for the display properties.
 clipClosedSurface2Display.Set(
@@ -210,13 +244,34 @@ sLUT.Set(
     AutomaticRescaleRangeMode='Never',
     RGBPoints=[
         # scalar, red, green, blue
-        0.0, 0.0, 0.0, 0.2,
-        0.25, 0.0, 0.0, 0.5,
-        0.475, 0.0, 0.8, 0.8,
-        0.5, 1.0, 1.0, 1.0,
-        0.525, 0.8, 0.8, 0.0,
-        0.75, 0.5, 0.0, 0.0,
-        1.0, 0.2, 0.0, 0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.2,
+        0.25,
+        0.0,
+        0.0,
+        0.5,
+        0.475,
+        0.0,
+        0.8,
+        0.8,
+        0.5,
+        1.0,
+        1.0,
+        1.0,
+        0.525,
+        0.8,
+        0.8,
+        0.0,
+        0.75,
+        0.5,
+        0.0,
+        0.0,
+        1.0,
+        0.2,
+        0.0,
+        0.0,
     ],
     ColorSpace='RGB',
     Discretize=0,
@@ -238,10 +293,14 @@ slice1Display.Set(
 )
 
 # init the 'Piecewise Function' selected for 'ScaleTransferFunction'
-slice1Display.ScaleTransferFunction.Points = [1.4744746685028076, 0.0, 0.5, 0.0, 1.5499392747879028, 1.0, 0.5, 0.0]
+slice1Display.ScaleTransferFunction.Points = [
+    1.4744746685028076, 0.0, 0.5, 0.0, 1.5499392747879028, 1.0, 0.5, 0.0
+]
 
 # init the 'Piecewise Function' selected for 'OpacityTransferFunction'
-slice1Display.OpacityTransferFunction.Points = [1.4744746685028076, 0.0, 0.5, 0.0, 1.5499392747879028, 1.0, 0.5, 0.0]
+slice1Display.OpacityTransferFunction.Points = [
+    1.4744746685028076, 0.0, 0.5, 0.0, 1.5499392747879028, 1.0, 0.5, 0.0
+]
 
 # show data from slice2
 slice2Display = Show(slice2, renderView1, 'UnstructuredGridRepresentation')
@@ -261,15 +320,20 @@ slice2Display.Set(
 )
 
 # init the 'Piecewise Function' selected for 'ScaleTransferFunction'
-slice2Display.ScaleTransferFunction.Points = [-0.0018525671912357211, 0.0, 0.5, 0.0, 0.018464360386133194, 1.0, 0.5, 0.0]
+slice2Display.ScaleTransferFunction.Points = [
+    -0.0018525671912357211, 0.0, 0.5, 0.0, 0.018464360386133194, 1.0, 0.5, 0.0
+]
 
 # init the 'Piecewise Function' selected for 'OpacityTransferFunction'
-slice2Display.OpacityTransferFunction.Points = [-0.0018525671912357211, 0.0, 0.5, 0.0, 0.018464360386133194, 1.0, 0.5, 0.0]
+slice2Display.OpacityTransferFunction.Points = [
+    -0.0018525671912357211, 0.0, 0.5, 0.0, 0.018464360386133194, 1.0, 0.5, 0.0
+]
 
 # setup the color legend parameters for each legend in this view
 
 # get color legend/bar for pDE_filter_mappingLUT in view renderView1
-pDE_filter_mappingLUTColorBar = GetScalarBar(pDE_filter_mappingLUT, renderView1)
+pDE_filter_mappingLUTColorBar = GetScalarBar(pDE_filter_mappingLUT,
+                                             renderView1)
 pDE_filter_mappingLUTColorBar.Set(
     AutoOrient=0,
     Orientation='Horizontal',
@@ -367,7 +431,6 @@ SetActiveSource(None)
 # ----------------------------------------------------------------
 # setup camera links
 # ----------------------------------------------------------------
-
 
 ##--------------------------------------------
 ## You may need to add some code at the end of this python script depending on your usage, eg:
