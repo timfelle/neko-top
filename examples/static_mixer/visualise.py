@@ -67,67 +67,70 @@ del _check_mpi_compatibility
 # ----------------------------------------------------------------
 # Parse command-line arguments
 # ----------------------------------------------------------------
-import argparse as _argparse
+import argparse
 
+parser = argparse.ArgumentParser(
+    description='Visualise Neko static-mixer results with ParaView.', )
+parser.add_argument(
+    'input_dir',
+    help='Directory containing the simulation output files.',
+)
+parser.add_argument('--chunk',
+                    metavar="START-END",
+                    help=("Chunk suffix produced by vtkhdf_extract, "
+                          "including zero padding"))
+parser.add_argument(
+    '--stride',
+    type=int,
+    default=1,
+    metavar='N',
+    help='Process every Nth timestep (default: 1).',
+)
+parser.add_argument(
+    '--brinkman-clip',
+    type=float,
+    default=0.5,
+    metavar='VALUE',
+    help='Clip value for the Brinkman indicator field (default: 0.5).',
+)
+parser.add_argument(
+    '--text-color',
+    choices=['white', 'black'],
+    default='black',
+    help='Color of all text and outline elements in the output '
+    '(default: black). Each color variant is written to its own '
+    'subdirectory inside the output directory.',
+)
+parser.add_argument(
+    '--overwrite',
+    action='store_true',
+    default=False,
+    help='Overwrite existing output frames (default: skip existing frames, '
+    'allowing interrupted runs to be resumed).',
+)
+parser.add_argument(
+    '--output-dir',
+    default='visualisation',
+    metavar='DIR',
+    help='Output directory relative to input_dir (default: visualisation). '
+    'The chosen text color is appended as a subdirectory so that '
+    'black and white variants never overwrite each other.',
+)
+args = parser.parse_args()
 
-def _parse_args():
-    p = _argparse.ArgumentParser(
-        description='Visualise Neko static-mixer results with ParaView.', )
-    p.add_argument(
-        'input_dir',
-        help='Directory containing the simulation output files.',
-    )
-    p.add_argument(
-        '--stride',
-        type=int,
-        default=1,
-        metavar='N',
-        help='Process every Nth timestep (default: 1).',
-    )
-    p.add_argument(
-        '--brinkman-clip',
-        type=float,
-        default=0.5,
-        metavar='VALUE',
-        help='Clip value for the Brinkman indicator field (default: 0.5).',
-    )
-    p.add_argument(
-        '--text-color',
-        choices=['white', 'black'],
-        default='black',
-        help='Color of all text and outline elements in the output '
-        '(default: black). Each color variant is written to its own '
-        'subdirectory inside the output directory.',
-    )
-    p.add_argument(
-        '--overwrite',
-        action='store_true',
-        default=False,
-        help='Overwrite existing output frames (default: skip existing frames, '
-        'allowing interrupted runs to be resumed).',
-    )
-    p.add_argument(
-        '--output-dir',
-        default='visualisation',
-        metavar='DIR',
-        help='Output directory relative to input_dir (default: visualisation). '
-        'The chosen text color is appended as a subdirectory so that '
-        'black and white variants never overwrite each other.',
-    )
-    return p.parse_args()
+input_dir = os.path.realpath(args.input_dir)
+design_file = os.path.join(input_dir, 'brinkman_0.vtkhdf')
+field_file = os.path.join(input_dir, 'fields/field_0.vtkhdf')
+if args.chunk:
+    base_name, ext = os.path.splitext(field_file or "")
+    field_file = f"{base_name}_steps_{args.chunk}{ext}"
+output_dir = os.path.join(input_dir, args.output_dir, args.text_color)
+stride = args.stride
+brinkman_clip_value = args.brinkman_clip
+text_color = [1.0, 1.0, 1.0] if args.text_color == 'white' else [0.0, 0.0, 0.0]
+overwrite = args.overwrite
 
-
-_args = _parse_args()
-del _parse_args
-
-input_dir = os.path.realpath(_args.input_dir)
-output_dir = os.path.join(input_dir, _args.output_dir, _args.text_color)
-stride = _args.stride
-brinkman_clip_value = _args.brinkman_clip
-text_color = [1.0, 1.0, 1.0
-              ] if _args.text_color == 'white' else [0.0, 0.0, 0.0]
-overwrite = _args.overwrite
-del _args
+del args, parser
 
 # state file generated using paraview version 6.1.0
 
