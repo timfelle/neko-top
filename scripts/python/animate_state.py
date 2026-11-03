@@ -24,6 +24,7 @@ from paraview.simple import (
     LoadState,
     LoadPlugin,
     SaveAnimation,
+    SaveScreenshot,
 )
 
 
@@ -116,7 +117,8 @@ def main():
     view.UpdateVTKObjects()
 
     # Set the frame index range to export.
-    frame_count = len(scene.TimeKeeper.TimestepValues)
+    timestep_values = list(scene.TimeKeeper.TimestepValues)
+    frame_count = len(timestep_values)
     if args.frames:
         if args.frames[0] < 0 or args.frames[1] >= frame_count:
             raise ValueError(f"Frame range {args.frames} is out of bounds " +
@@ -132,6 +134,30 @@ def main():
     else:
         output_dir = os.path.join(args.data_dir, "visualisations", state_name)
     os.makedirs(output_dir, exist_ok=True)
+
+    if args.state == "design_evolution":
+        for frame_index in range(start_frame, end_frame + 1):
+            timestep = timestep_values[frame_index]
+            iteration = int(timestep)
+            if timestep != iteration:
+                raise ValueError(
+                    "design_evolution timestep values must be integer design iterations"
+                )
+
+            frame_file = os.path.join(output_dir, f"{iteration:04d}.png")
+            if not args.overwrite and os.path.isfile(frame_file):
+                continue
+
+            print(f"Exporting design iteration {iteration}")
+            scene.AnimationTime = timestep
+            scene.TimeKeeper.Time = timestep
+            SaveScreenshot(
+                frame_file,
+                view,
+                ImageResolution=output_resolution,
+                CompressionLevel=0,
+            )
+        return
 
     # Define the output file path for the animation frames and detect existing
     # frames
