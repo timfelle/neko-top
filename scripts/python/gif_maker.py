@@ -204,14 +204,13 @@ def make_gif_from_files(
         palette_colors = min(colors, 255) if use_transparency else colors
         transparency_index = TRANSPARENCY_INDEX if use_transparency else None
 
+        size = frames[0].size
         if resolution > 0:
-            size = frames[0].size
             size = (int(size[0] * (resolution / size[1])),
                     int(size[1] * (resolution / size[1])))
-            frames = [
-                frame.resize(size, Image.Resampling.LANCZOS)
-                for frame in frames
-            ]
+        frames = [
+            frame.resize(size, Image.Resampling.LANCZOS) for frame in frames
+        ]
 
         shared_palette = build_global_palette(frames, palette_colors)
         palette_frames = [
