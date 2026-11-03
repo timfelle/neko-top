@@ -8,7 +8,10 @@ A state can be specified either as a .pvsm file or as a string corresponding to
 a Python module in the visualisation directory.
 
 Usage:
-    pvpython paraview_runner.py state data_dir
+    pvpython paraview_runner.py STATE DATA_DIR [OPTIONS]
+
+STATE and DATA_DIR are the first and second arguments. They must appear before
+all options because --input-files accepts a greedy list.
 
 Additional arguments:
     --resolution H: Set the height of the output images (default: 360)
@@ -22,6 +25,7 @@ import argparse
 import os
 import re
 import runpy
+import sys
 
 from paraview.simple import (
     GetActiveViewOrCreate,
@@ -50,15 +54,17 @@ def input_file(file_name, chunk):
     if chunk:
         base_name, ext = os.path.splitext(file_name or "")
         return f"{base_name}_steps_{chunk}{ext}"
-    return file_name
+    else:
+        return file_name
 
 
 def main():
     parser = argparse.ArgumentParser(
         description="Run a ParaView animation export.")
-    parser.add_argument("state", help="Path to the .pvsm state file")
+    parser.add_argument("state",
+                        help="First argument: .pvsm path or state name")
     parser.add_argument("data_dir",
-                        help="Path to the data directory",
+                        help="Second argument: path to the data directory",
                         type=str)
     parser.add_argument(
         "--output_dir",
@@ -91,7 +97,14 @@ def main():
               "uses the first as design and the second as forward fields"),
     )
 
-    args = parser.parse_args()
+    arguments = sys.argv[1:]
+    if (len(arguments) >= 1 and arguments[0] not in {"-h", "--help"}
+            and arguments[0].startswith("-")):
+        parser.error("STATE must be the first argument")
+    if (len(arguments) >= 2 and arguments[1] not in {"-h", "--help"}
+            and arguments[1].startswith("-")):
+        parser.error("DATA_DIR must be the second argument")
+    args = parser.parse_args(arguments)
 
     if not os.path.isdir(args.data_dir):
         raise NotADirectoryError(args.data_dir)
@@ -101,13 +114,13 @@ def main():
     # Add our visualisation modules to the Python path so we can import them.
     visualisation_dir = os.path.join(os.path.dirname(__file__),
                                      "../../visualisation")
-    if visualisation_dir not in os.sys.path:
-        os.sys.path.append(visualisation_dir)
+    if visualisation_dir not in sys.path:
+        sys.path.append(visualisation_dir)
 
     for path in os.listdir(visualisation_dir):
         subdir = os.path.join(visualisation_dir, path)
-        if os.path.isdir(subdir) and subdir not in os.sys.path:
-            os.sys.path.append(subdir)
+        if os.path.isdir(subdir) and subdir not in sys.path:
+            sys.path.append(subdir)
 
     # Load the VTKm plugin to enable VTKm filters in ParaView
     LoadPlugin("VTKmFilters", remote=True)
