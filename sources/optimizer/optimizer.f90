@@ -713,6 +713,16 @@ contains
 
     call this%log_file%set_header(header)
 
+    ! A Neko that keeps the csv_file_t header in a fixed-length field cuts a
+    ! longer header. set_header stores the trimmed header, and allocates it
+    ! when its length is deferred, so a stored header shorter than the
+    ! trimmed one has been cut.
+    if (len(this%log_file%header) .lt. len_trim(header)) then
+       call neko_log%warning("Optimization log header exceeds the " // &
+            "csv_file_t header length; " // trim(log_name) // &
+            " will carry truncated column names.")
+    end if
+
     this%log_initialized = .true.
   end subroutine optimizer_init_log
 
