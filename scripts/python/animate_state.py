@@ -31,22 +31,19 @@ from paraview.simple import (
     SaveScreenshot,
 )
 
-CHUNK_PATTERN = re.compile(r"^(\d+)-(\d+)$")
 
-
-def chunk_frame_range(chunk):
-    if chunk is None:
-        return None
-
+def chunk_frame_info(chunk):
+    CHUNK_PATTERN = re.compile(r"^(\d+)-(\d+)$")
     match = CHUNK_PATTERN.fullmatch(chunk)
     if match is None:
         raise ValueError(
             "--chunk must be the START-END suffix produced by vtkhdf_extract")
 
-    start_frame, end_frame = (int(value) for value in match.groups())
+    start_text, end_text = match.groups()
+    start_frame, end_frame = int(start_text), int(end_text)
     if end_frame < start_frame:
         raise ValueError("--chunk end must not precede its start")
-    return start_frame, end_frame
+    return start_frame, end_frame, max(len(start_text), len(end_text))
 
 
 def input_file(file_name, chunk):
@@ -100,8 +97,6 @@ def main():
         raise NotADirectoryError(args.data_dir)
     if args.data_dir[-1] != os.sep:
         args.data_dir += os.sep
-
-    chunk_range = chunk_frame_range(args.chunk)
 
     # Add our visualisation modules to the Python path so we can import them.
     visualisation_dir = os.path.join(os.path.dirname(__file__),
@@ -182,14 +177,15 @@ def main():
     if frame_count == 0:
         raise ValueError("No animation frames are available")
 
-    if chunk_range:
-        global_start, global_end = chunk_range
+    if args.chunk:
+        global_start, global_end, frame_digits = chunk_frame_info(args.chunk)
         if global_end - global_start + 1 != frame_count:
             raise ValueError(
                 f"Chunk covers frames {global_start}-{global_end}, "
                 f"but the animation has {frame_count} frames")
     else:
         global_start, global_end = 0, frame_count - 1
+        frame_digits = len(str(global_end))
 
     if args.frames:
         if (args.frames[0] > args.frames[1] or args.frames[0] < global_start
@@ -213,17 +209,9 @@ def main():
     for frame_index in range(start_frame, end_frame + 1):
         timestep = timestep_values[frame_index]
         global_frame = global_start + frame_index
-        if args.state == "design_evolution":
-            iteration = int(timestep)
-            if timestep != iteration:
-                raise ValueError(
-                    "design_evolution timestep values must be integer design iterations"
-                )
-            frame_file = os.path.join(output_dir, f"{iteration:04d}.png")
-            frame_label = f"design iteration {iteration}"
-        else:
-            frame_file = os.path.join(output_dir, f"{global_frame:04d}.png")
-            frame_label = f"frame {global_frame}"
+        frame_file = os.path.join(output_dir,
+                                  f"{global_frame:0{frame_digits}d}.png")
+        frame_label = f"frame {global_frame}"
 
         if not args.overwrite and os.path.isfile(frame_file):
             continue
