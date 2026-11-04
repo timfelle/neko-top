@@ -67,7 +67,7 @@ def main():
                         help="Second argument: path to the data directory",
                         type=str)
     parser.add_argument(
-        "--output_dir",
+        "--output-dir",
         help=
         "Path to the output directory (default: data_dir/visualisations/<state_name>)"
     )
@@ -232,6 +232,8 @@ def main():
         print(f"Exporting {frame_label}")
         scene.AnimationTime = timestep
         scene.TimeKeeper.Time = timestep
+        view.Update()
+        view.StillRender()
         SaveScreenshot(
             frame_file,
             view,

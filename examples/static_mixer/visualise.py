@@ -2,6 +2,11 @@ import os
 import sys
 import paraview
 from paraview.simple import *
+from vtkmodules.vtkCommonCore import vtkSMPTools
+
+# Avoid a ParaView STDThread crash while contouring higher-order cells.
+if vtkSMPTools.GetBackend() == 'STDThread':
+    vtkSMPTools.SetBackend('Sequential')
 
 
 def _check_mpi_compatibility():
@@ -151,20 +156,21 @@ paraview.simple._DisableFirstRenderCameraReset()
 # ----------------------------------------------------------------
 # setup views used in the visualization
 # ----------------------------------------------------------------
+Camera = {
+    'CenterOfRotation': [2.0, 0.5, 0.5],
+    'CameraPosition':
+    [5.020324448930026, -1.8297157368714903, 0.5812359914484109],
+    'CameraFocalPoint':
+    [-1.9498493032274087, 5.194391764340749, 0.09120846059253512],
+    'CameraViewUp': [0, 0, 1]
+}
 
 # Create a new 'Render View'
 velocityView = CreateView('RenderView')
-velocityView.Set(
-    ViewSize=[1920, 1080],
-    AxesGrid='Grid Axes 3D Actor',
-    OrientationAxesVisibility=0,
-    CenterOfRotation=[2.0, 0.5, 0.5],
-    CameraPosition=[4.77493228495059, -2.6157057373401145, 1.6192436657419564],
-    CameraFocalPoint=[
-        -0.8086255538276163, 4.860015290263143, -1.7409940566481248
-    ],
-    CameraViewUp=[-0.2112642288118684, 0.2650839449526201, 0.9407964326850324],
-)
+velocityView.Set(ViewSize=[1920, 1080],
+                 AxesGrid='Grid Axes 3D Actor',
+                 OrientationAxesVisibility=0,
+                 **Camera)
 
 # Create a secondary 'Render View' — identical camera, temperature slices only
 temperatureView = CreateView('RenderView')
@@ -173,11 +179,13 @@ temperatureView.Set(
     AxesGrid='Grid Axes 3D Actor',
     OrientationAxesVisibility=0,
     CenterOfRotation=[2.0, 0.5, 0.5],
-    CameraPosition=[4.77493228495059, -2.6157057373401145, 1.6192436657419564],
-    CameraFocalPoint=[
-        -0.8086255538276163, 4.860015290263143, -1.7409940566481248
+    CameraPosition=[
+        5.020324448930026, -1.8297157368714903, 0.5812359914484109
     ],
-    CameraViewUp=[-0.2112642288118684, 0.2650839449526201, 0.9407964326850324],
+    CameraFocalPoint=[
+        -1.9498493032274087, 5.194391764340749, 0.09120846059253512
+    ],
+    CameraViewUp=[0, 0, 1],
 )
 
 SetActiveView(None)
@@ -192,9 +200,7 @@ annotateTime1.Format = 'Time: {time:.2f}'
 
 # create a new 'VTKHDF Reader'
 brinkman_field = VTKHDFReader(registrationName='Brinkman',
-                              FileName=[
-                                  input_dir + '/brinkman_0.vtkhdf',
-                              ])
+                              FileName=design_file)
 brinkman_field.PointArrayStatus = ['brinkman_indicator']
 
 # create a new 'Merge Blocks'
@@ -210,7 +216,7 @@ BrinkmanClip.Set(
 
 # create a new 'VTKHDF Reader'
 physics_field = VTKHDFReader(registrationName='Physics Field',
-                             FileName=[input_dir + '/fields/field_0.vtkhdf'])
+                             FileName=field_file)
 physics_field.PointArrayStatus = ['Velocity', 'temperature']
 
 # create a new 'Merge Blocks'
