@@ -370,8 +370,8 @@ contains
   !! @details Before the first step, at time step 0, the initial state is
   !! copied to a RAM slot of its own, from which `restore(0)` returns it.
   !! After a step, the state is saved by the checkpointing algorithm. The
-  !! time of the state, and the coefficients of the time scheme of the
-  !! fluid, are recorded either way.
+  !! time of the state is recorded either way, and after a step also the
+  !! coefficients and orders of the time scheme the step used.
   !! @param[inout] this Checkpointing implementation.
   subroutine checkpoint_save(this)
     class(state_recover_checkpoint_t), intent(inout) :: this
