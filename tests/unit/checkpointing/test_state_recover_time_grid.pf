@@ -1,0 +1,287 @@
+module test_state_recover_time_grid
+  use pfunit
+  use num_types, only: dp, rp
+  use math, only: abscmp, NEKO_EPS
+  use json_module, only: json_file
+  use json_utils_ext, only: json_read_file
+  use simulation_m, only: simulation_t
+  use state_recover_checkpoint, only: state_recover_checkpoint_t
+  use simulation, only: simulation_init, simulation_step, simulation_finalize
+  use time_step_controller, only: time_step_controller_t
+  use time_state, only: time_state_t
+  use design, only: design_t
+  use problem, only: problem_t
+  use field_array, only: field_array_t
+  use field, only: field_t
+  use field_math, only: field_copy
+  use checkpointing_test_utils, only: initialize_runtime_once, &
+       initialize_case_from_parameters, set_variable_time_step, &
+       finalize_case_objects, cleanup_runtime_state, &
+       allocate_snapshot_fields, free_snapshot_fields, rmse
+  implicit none
+
+  !> Steps of the live run.
+  integer, parameter :: n_steps = 5
+  !> The time step Neko's time state starts a variable time step from.
+  real(kind=dp), parameter :: placeholder_dt = 1.0_dp
+
+  @TestCase
+  type, extends(MPITestCase) :: time_grid_case
+   contains
+     procedure :: setUp
+     procedure :: tearDown
+  end type time_grid_case
+
+  logical :: initialized_lock = .false.
+
+contains
+
+  subroutine setUp(this)
+    class(time_grid_case), intent(inout) :: this
+
+    if (initialized_lock) return
+    initialized_lock = .true.
+
+    call initialize_runtime_once()
+  end subroutine setUp
+
+  !> Clear the registries, which the next case registers its fields in.
+  subroutine tearDown(this)
+    class(time_grid_case), intent(inout) :: this
+
+    call cleanup_runtime_state()
+  end subroutine tearDown
+
+  !> The recorded grid rebuilds the time state of every step of a live run
+  !! with a variable time step, a reset clears it but keeps its capacity and
+  !! the frozen grid, a replay of the frozen grid reproduces the live run,
+  !! and the grid grows past its initial capacity.
+  @test(npes=[2])
+  subroutine time_grid_api(this)
+    class(time_grid_case), intent(inout) :: this
+
+    type(json_file) :: parameters
+    type(simulation_t), target :: sim
+    type(state_recover_checkpoint_t) :: chkp
+    class(design_t), allocatable :: des
+    type(problem_t) :: prob
+    type(time_step_controller_t) :: dt_controller, fixed_controller
+    type(time_state_t) :: live(0:n_steps), rebuilt, synthetic
+    type(field_array_t) :: p_fields, u_fields, v_fields, w_fields
+    type(field_t), pointer :: p, u, v, w
+
+    integer :: i, n_grown, capacity, initial_capacity
+    integer :: rebuild_fail, replay_fail
+    logical :: placeholder_seen, dt_varies, reset_ok, frozen_ok
+    logical :: unfrozen_ok, growth_ok
+    character(len=512) :: msg
+
+    parameters = json_read_file('checkpoint.case')
+    call set_variable_time_step(parameters, 1.0e-4_dp)
+    call initialize_case_from_parameters(parameters, sim, des, prob)
+
+    p => sim%neko_case%fluid%p
+    u => sim%neko_case%fluid%u
+    v => sim%neko_case%fluid%v
+    w => sim%neko_case%fluid%w
+    call allocate_snapshot_fields(p, u, v, w, n_steps, p_fields, &
+         u_fields, v_fields, w_fields)
+
+    call chkp%init_from_components(sim%neko_case, 'linear', &
+         n_saves_memory = 10, &
+         path = 'time_grid_checkpoints/', &
+         filename = 'checkpoint', &
+         fmt = 'chkp', &
+         keep_checkpoints = .false.)
+
+    ! A live run from a reset case, as an unsteady problem runs, saving the
+    ! initial state and every step
+    call sim%reset()
+    call sim%init_dt_controller(dt_controller)
+    call simulation_init(sim%neko_case, dt_controller)
+    live(0) = sim%neko_case%time
+    call chkp%save(dt_controller)
+    do i = 1, n_steps
+       call simulation_step(sim%neko_case, dt_controller)
+       live(i) = sim%neko_case%time
+       call take_snapshot(sim, i, p_fields, u_fields, v_fields, w_fields)
+       call chkp%save(dt_controller)
+    end do
+    call simulation_finalize(sim%neko_case)
+
+    ! The history of the first step still holds the placeholder, and the
+    ! controller ramps the step up, so both parts of the rebuilt history
+    ! are covered
+    placeholder_seen = .not. differs(live(1)%dtlag(2), placeholder_dt)
+    dt_varies = live(2)%dt .gt. 1.1_dp * live(1)%dt
+
+    rebuild_fail = -1
+    do i = n_steps, 0, -1
+       call chkp%get_time_state(i, rebuilt)
+       if (.not. same_time_state(rebuilt, live(i))) then
+          if (rebuild_fail .lt. 0) rebuild_fail = i
+       end if
+    end do
+
+    ! Freeze the grid; a reset clears the record but keeps its room and the
+    ! frozen grid
+    capacity = chkp%time_grid_capacity()
+    call chkp%freeze_time_grid()
+    call chkp%reset()
+    reset_ok = chkp%get_n_timesteps() .eq. 0 .and. &
+         chkp%time_grid_capacity() .eq. capacity .and. capacity .gt. 0
+    frozen_ok = chkp%has_prescribed_grid()
+    if (frozen_ok) then
+       do i = 1, n_steps
+          frozen_ok = frozen_ok .and. &
+               .not. differs(chkp%get_prescribed_dt(i), live(i)%dt)
+       end do
+    end if
+
+    ! Replay the frozen grid as the unsteady forward does: the default
+    ! controller keeps each prescribed step, and the run starts from the
+    ! same reset history, so it reproduces the live run
+    replay_fail = -1
+    if (frozen_ok) then
+       call sim%reset()
+       call simulation_init(sim%neko_case, fixed_controller)
+       call chkp%save(fixed_controller)
+       do i = 1, n_steps
+          sim%neko_case%time%dt = chkp%get_prescribed_dt(i)
+          call simulation_step(sim%neko_case, fixed_controller)
+          if (.not. same_time_state(sim%neko_case%time, live(i)) .or. &
+               .not. matches_snapshot(sim, i, p_fields, u_fields, &
+               v_fields, w_fields)) then
+             if (replay_fail .lt. 0) replay_fail = i
+          end if
+          call chkp%save(fixed_controller)
+       end do
+       call simulation_finalize(sim%neko_case)
+       do i = 1, n_steps
+          if (differs(chkp%get_dt(i), live(i)%dt)) replay_fail = i
+       end do
+    end if
+
+    call chkp%unfreeze_time_grid()
+    unfrozen_ok = .not. chkp%has_prescribed_grid()
+
+    ! Grow the grid past its initial capacity with a synthetic record
+    call chkp%reset()
+    initial_capacity = chkp%time_grid_capacity()
+    n_grown = 3 * initial_capacity + 1
+    do i = 1, n_grown
+       call synthetic_time_state(i, synthetic)
+       call chkp%set_n_timesteps(i)
+       call chkp%record_time(synthetic)
+    end do
+    growth_ok = chkp%time_grid_capacity() .ge. n_grown .and. &
+         chkp%get_n_timesteps() .eq. n_grown .and. &
+         .not. differs(chkp%get_time(0), 0.0_dp) .and. &
+         .not. differs(chkp%get_end_time(), synthetic%t)
+    do i = 1, n_grown
+       call synthetic_time_state(i, synthetic)
+       growth_ok = growth_ok .and. &
+            .not. differs(chkp%get_time(i), synthetic%t) .and. &
+            .not. differs(chkp%get_dt(i), synthetic%dt)
+    end do
+
+    call free_snapshot_fields(p_fields, u_fields, v_fields, w_fields)
+    call finalize_case_objects(sim, des, prob, chkp)
+
+    @assertTrue(placeholder_seen, 'The first step has no placeholder history')
+    @assertTrue(dt_varies, 'The live run keeps its time step')
+    write(msg, '(A,I0)') 'Rebuilt time state differs from the live one ' // &
+         'at step ', rebuild_fail
+    @assertTrue(rebuild_fail .lt. 0, trim(msg))
+    @assertTrue(reset_ok, 'Reset does not clear the grid or loses its room')
+    @assertTrue(frozen_ok, 'The frozen grid does not survive a reset')
+    write(msg, '(A,I0)') 'The replay of the frozen grid differs from ' // &
+         'the live run at step ', replay_fail
+    @assertTrue(replay_fail .lt. 0, trim(msg))
+    @assertTrue(unfrozen_ok, 'The frozen grid is not dropped')
+    write(msg, '(A,I0,A,I0)') 'The grid does not grow from ', &
+         initial_capacity, ' to ', n_grown
+    @assertTrue(growth_ok, trim(msg))
+  end subroutine time_grid_api
+
+  !> A time state of step `i` of a run with a step growing with `i`.
+  subroutine synthetic_time_state(i, time)
+    integer, intent(in) :: i
+    type(time_state_t), intent(inout) :: time
+    integer :: k
+
+    time%tstep = i
+    time%dt = 1.0_dp + 1.0e-3_dp * real(i, dp)
+    time%t = 0.0_dp
+    do k = 1, i
+       time%t = time%t + 1.0_dp + 1.0e-3_dp * real(k, dp)
+    end do
+    time%tlag = time%t - time%dt
+    time%dtlag = time%dt
+  end subroutine synthetic_time_state
+
+  !> Copy the fluid fields into the snapshots of state `i`.
+  subroutine take_snapshot(sim, i, p_fields, u_fields, v_fields, w_fields)
+    type(simulation_t), intent(inout) :: sim
+    integer, intent(in) :: i
+    type(field_array_t), intent(inout) :: p_fields, u_fields, v_fields, &
+         w_fields
+    type(field_t), pointer :: snapshot
+
+    snapshot => p_fields%get(i)
+    call field_copy(snapshot, sim%neko_case%fluid%p)
+    snapshot => u_fields%get(i)
+    call field_copy(snapshot, sim%neko_case%fluid%u)
+    snapshot => v_fields%get(i)
+    call field_copy(snapshot, sim%neko_case%fluid%v)
+    snapshot => w_fields%get(i)
+    call field_copy(snapshot, sim%neko_case%fluid%w)
+  end subroutine take_snapshot
+
+  !> Whether the fluid fields match the snapshots of state `i`.
+  function matches_snapshot(sim, i, p_fields, u_fields, v_fields, &
+       w_fields) result(matches)
+    type(simulation_t), intent(inout) :: sim
+    integer, intent(in) :: i
+    type(field_array_t), intent(inout) :: p_fields, u_fields, v_fields, &
+         w_fields
+    logical :: matches
+    type(field_t), pointer :: snapshot
+
+    snapshot => p_fields%get(i)
+    matches = abscmp(rmse(snapshot, sim%neko_case%fluid%p), 0.0_rp, &
+         NEKO_EPS)
+    snapshot => u_fields%get(i)
+    matches = matches .and. abscmp(rmse(snapshot, sim%neko_case%fluid%u), &
+         0.0_rp, NEKO_EPS)
+    snapshot => v_fields%get(i)
+    matches = matches .and. abscmp(rmse(snapshot, sim%neko_case%fluid%v), &
+         0.0_rp, NEKO_EPS)
+    snapshot => w_fields%get(i)
+    matches = matches .and. abscmp(rmse(snapshot, sim%neko_case%fluid%w), &
+         0.0_rp, NEKO_EPS)
+  end function matches_snapshot
+
+  !> Whether two times differ in any bit, a NaN included.
+  pure function differs(a, b)
+    real(kind=dp), intent(in) :: a, b
+    logical :: differs
+
+    differs = .not. (abs(a - b) .le. 0.0_dp)
+  end function differs
+
+  !> Whether two time states agree in time, step, step count and histories.
+  pure function same_time_state(a, b) result(same)
+    type(time_state_t), intent(in) :: a, b
+    logical :: same
+    integer :: j
+
+    same = .not. differs(a%t, b%t) .and. .not. differs(a%dt, b%dt) .and. &
+         a%tstep .eq. b%tstep
+    do j = 1, size(a%dtlag)
+       same = same .and. .not. differs(a%dtlag(j), b%dtlag(j)) .and. &
+            .not. differs(a%tlag(j), b%tlag(j))
+    end do
+  end function same_time_state
+
+end module test_state_recover_time_grid

@@ -1,0 +1,279 @@
+module test_checkpoint_restore_consistency_variable_dt
+  use pfunit
+  use num_types, only: dp, rp
+  use math, only: abscmp, NEKO_EPS
+  use json_module, only: json_file
+  use json_utils_ext, only: json_read_file
+  use simulation_m, only: simulation_t
+  use state_recover_checkpoint, only: state_recover_checkpoint_t
+  use simulation, only: simulation_init, simulation_step, simulation_finalize
+  use time_step_controller, only: time_step_controller_t
+  use time_state, only: time_state_t
+  use design, only: design_t
+  use problem, only: problem_t
+  use field_array, only: field_array_t
+  use field, only: field_t
+  use field_math, only: field_copy
+  use checkpointing_test_utils, only: initialize_runtime_once, &
+       initialize_case_from_parameters, set_variable_time_step, &
+       finalize_case_objects, cleanup_runtime_state, &
+       allocate_snapshot_fields, free_snapshot_fields, rmse
+  implicit none
+
+  integer, parameter :: checkpoint_saves_in_memory = 10
+  !> Room for the states of a run, the initial one included.
+  integer, parameter :: max_states = 60
+  real(kind=rp), parameter :: restore_tolerance = NEKO_EPS
+
+  @TestCase
+  type, extends(MPITestCase) :: restore_variable_dt_case
+   contains
+     procedure :: setUp
+     procedure :: tearDown
+  end type restore_variable_dt_case
+
+  logical :: initialized_lock = .false.
+
+contains
+
+  subroutine setUp(this)
+    class(restore_variable_dt_case), intent(inout) :: this
+
+    if (initialized_lock) return
+    initialized_lock = .true.
+
+    call initialize_runtime_once()
+  end subroutine setUp
+
+  !> Clear the registries, which the next case registers its fields in.
+  subroutine tearDown(this)
+    class(restore_variable_dt_case), intent(inout) :: this
+
+    call cleanup_runtime_state()
+  end subroutine tearDown
+
+  !> 33 steps of 3e-4 land on a scheduled time at 9.9e-3, and one step of
+  !! 1e-4 lands on the end time. The step count of a run of steps as long as
+  !! the last one is 100, so a RAM ring filled from that count misses the
+  !! last block of the run.
+  @test(npes=[2])
+  subroutine landing_step(this)
+    class(restore_variable_dt_case), intent(inout) :: this
+
+    call check_restore_consistency(3.0e-4_dp, &
+         'variable_dt_landing/', .true.)
+  end subroutine landing_step
+
+  !> The run ramps its step up from 1e-4 before it lands as above, so the
+  !! time step changes inside the first block the recompute steps through.
+  @test(npes=[2])
+  subroutine ramp_and_landing_step(this)
+    class(restore_variable_dt_case), intent(inout) :: this
+
+    call check_restore_consistency(1.0e-4_dp, &
+         'variable_dt_ramp/', .false.)
+  end subroutine ramp_and_landing_step
+
+  !> Run the case forward with a variable time step, saving every state,
+  !! then restore the states in the order of the adjoint and compare them,
+  !! and the recorded time grid, with copies taken during the run.
+  !! @param timestep The first time step of the run.
+  !! @param path The directory of the checkpoint files.
+  !! @param uniform Whether the run takes steps of 3e-4 up to the landing.
+  subroutine check_restore_consistency(timestep, path, uniform)
+    real(kind=dp), intent(in) :: timestep
+    character(len=*), intent(in) :: path
+    logical, intent(in) :: uniform
+
+    type(json_file) :: parameters
+    type(simulation_t), target :: sim
+    type(state_recover_checkpoint_t) :: chkp
+    class(design_t), allocatable :: des
+    type(problem_t) :: prob
+    type(time_step_controller_t) :: dt_controller
+    type(time_state_t) :: live(0:max_states - 1), rebuilt
+    type(field_array_t) :: p_fields, u_fields, v_fields, w_fields
+    type(field_t), pointer :: p, u, v, w
+
+    integer :: i, n, n_ring, last_disk_save
+    integer :: tail_fail, block_fail, time_fail
+    logical :: grid_ok, initial_ok, restore_ok
+    real(kind=dp) :: end_time
+    character(len=512) :: msg
+
+    parameters = json_read_file('checkpoint.case')
+    call set_variable_time_step(parameters, timestep)
+    call initialize_case_from_parameters(parameters, sim, des, prob)
+
+    p => sim%neko_case%fluid%p
+    u => sim%neko_case%fluid%u
+    v => sim%neko_case%fluid%v
+    w => sim%neko_case%fluid%w
+    call allocate_snapshot_fields(p, u, v, w, max_states, p_fields, &
+         u_fields, v_fields, w_fields)
+
+    call chkp%init_from_components(sim%neko_case, 'linear', &
+         n_saves_memory = checkpoint_saves_in_memory, &
+         path = path, &
+         filename = 'checkpoint', &
+         fmt = 'chkp', &
+         keep_checkpoints = .false.)
+
+    call sim%init_dt_controller(dt_controller)
+    call simulation_init(sim%neko_case, dt_controller)
+
+    ! The initial state, then the steps up to the end time
+    n = 0
+    call take_snapshot(sim, n, p_fields, u_fields, v_fields, w_fields)
+    live(n) = sim%neko_case%time
+    call chkp%save(dt_controller)
+    do while (.not. sim%neko_case%time%is_done() .and. n .lt. max_states - 1)
+       n = n + 1
+       call simulation_step(sim%neko_case, dt_controller)
+       call take_snapshot(sim, n, p_fields, u_fields, v_fields, w_fields)
+       live(n) = sim%neko_case%time
+       call chkp%save(dt_controller)
+    end do
+    call simulation_finalize(sim%neko_case)
+
+    ! The run must be the one the test is about: it ends at the end time
+    ! with a landing step, and a run of steps as long as that one would take
+    ! more steps than fit into the last block of the RAM ring, which is how
+    ! a ring filled from the current step misses the end of the run.
+    end_time = sim%neko_case%time%end_time
+    n_ring = nint(end_time / live(n)%dt)
+    grid_ok = sim%neko_case%time%is_done() .and. n .ge. 2 .and. &
+         n .eq. chkp%get_n_timesteps()
+    if (grid_ok) then
+       grid_ok = live(n)%dt .lt. 0.5_dp * live(n - 1)%dt .and. &
+            n_ring - modulo(n_ring, checkpoint_saves_in_memory) .gt. n
+    end if
+    if (grid_ok .and. uniform) then
+       grid_ok = n .eq. 34 .and. abs(live(n)%dt - 1.0e-4_dp) .lt. 1.0e-12_dp
+       do i = 1, n - 1
+          grid_ok = grid_ok .and. &
+               abs(live(i)%dt - 3.0e-4_dp) .lt. 1.0e-12_dp
+       end do
+    else if (grid_ok) then
+       grid_ok = n .gt. 2 * checkpoint_saves_in_memory .and. &
+            live(3)%dt .gt. 1.1_dp * live(2)%dt
+    end if
+
+    ! Restore in the order of the adjoint, from the last state to the first
+    call sim%init_dt_controller(dt_controller)
+    call simulation_init(sim%neko_case, dt_controller)
+
+    last_disk_save = n - modulo(n, checkpoint_saves_in_memory)
+    tail_fail = -1
+    block_fail = -1
+    time_fail = -1
+    initial_ok = .true.
+    do i = n, 0, -1
+       call chkp%restore(i)
+
+       if (.not. matches_snapshot(sim, i, p_fields, u_fields, v_fields, &
+            w_fields)) then
+          if (i .eq. 0) then
+             initial_ok = .false.
+          else if (i .ge. last_disk_save) then
+             if (tail_fail .lt. 0) tail_fail = i
+          else
+             if (block_fail .lt. 0) block_fail = i
+          end if
+       end if
+
+       if (differs(chkp%get_time(i), live(i)%t)) then
+          if (time_fail .lt. 0) time_fail = i
+       end if
+       if (i .ge. 1) then
+          call chkp%get_time_state(i, rebuilt)
+          if (differs(chkp%get_dt(i), live(i)%dt) .or. &
+               .not. same_time_state(rebuilt, live(i))) then
+             if (time_fail .lt. 0) time_fail = i
+          end if
+       end if
+    end do
+    call simulation_finalize(sim%neko_case)
+
+    call free_snapshot_fields(p_fields, u_fields, v_fields, w_fields)
+    call finalize_case_objects(sim, des, prob, chkp)
+
+    write(msg, '(A,I0,A)') 'The forward run is not the variable time ' // &
+         'step run the test needs, it took ', n, ' steps'
+    @assertTrue(grid_ok, trim(msg))
+
+    restore_ok = initial_ok .and. tail_fail .lt. 0 .and. &
+         block_fail .lt. 0 .and. time_fail .lt. 0
+    write(msg, '(A,L1,A,I0,A,I0,A,I0,A,I0)') &
+         'Restore mismatch (-1 for none): initial state ok ', initial_ok, &
+         '; last block, steps ', last_disk_save, ' on, at step ', &
+         tail_fail, '; blocks recomputed from disk at step ', block_fail, &
+         '; time record at step ', time_fail
+    @assertTrue(restore_ok, trim(msg))
+  end subroutine check_restore_consistency
+
+  !> Copy the fluid fields into the snapshots of state `i`.
+  subroutine take_snapshot(sim, i, p_fields, u_fields, v_fields, w_fields)
+    type(simulation_t), intent(inout) :: sim
+    integer, intent(in) :: i
+    type(field_array_t), intent(inout) :: p_fields, u_fields, v_fields, &
+         w_fields
+    type(field_t), pointer :: snapshot
+
+    snapshot => p_fields%get(i + 1)
+    call field_copy(snapshot, sim%neko_case%fluid%p)
+    snapshot => u_fields%get(i + 1)
+    call field_copy(snapshot, sim%neko_case%fluid%u)
+    snapshot => v_fields%get(i + 1)
+    call field_copy(snapshot, sim%neko_case%fluid%v)
+    snapshot => w_fields%get(i + 1)
+    call field_copy(snapshot, sim%neko_case%fluid%w)
+  end subroutine take_snapshot
+
+  !> Whether the fluid fields match the snapshots of state `i`.
+  function matches_snapshot(sim, i, p_fields, u_fields, v_fields, &
+       w_fields) result(matches)
+    type(simulation_t), intent(inout) :: sim
+    integer, intent(in) :: i
+    type(field_array_t), intent(inout) :: p_fields, u_fields, v_fields, &
+         w_fields
+    logical :: matches
+    type(field_t), pointer :: snapshot
+
+    snapshot => p_fields%get(i + 1)
+    matches = abscmp(rmse(snapshot, sim%neko_case%fluid%p), 0.0_rp, &
+         restore_tolerance)
+    snapshot => u_fields%get(i + 1)
+    matches = matches .and. abscmp(rmse(snapshot, sim%neko_case%fluid%u), &
+         0.0_rp, restore_tolerance)
+    snapshot => v_fields%get(i + 1)
+    matches = matches .and. abscmp(rmse(snapshot, sim%neko_case%fluid%v), &
+         0.0_rp, restore_tolerance)
+    snapshot => w_fields%get(i + 1)
+    matches = matches .and. abscmp(rmse(snapshot, sim%neko_case%fluid%w), &
+         0.0_rp, restore_tolerance)
+  end function matches_snapshot
+
+  !> Whether two times differ in any bit, a NaN included.
+  pure function differs(a, b)
+    real(kind=dp), intent(in) :: a, b
+    logical :: differs
+
+    differs = .not. (abs(a - b) .le. 0.0_dp)
+  end function differs
+
+  !> Whether two time states agree in time, step, step count and histories.
+  pure function same_time_state(a, b) result(same)
+    type(time_state_t), intent(in) :: a, b
+    logical :: same
+    integer :: j
+
+    same = .not. differs(a%t, b%t) .and. .not. differs(a%dt, b%dt) .and. &
+         a%tstep .eq. b%tstep
+    do j = 1, size(a%dtlag)
+       same = same .and. .not. differs(a%dtlag(j), b%dtlag(j)) .and. &
+            .not. differs(a%tlag(j), b%tlag(j))
+    end do
+  end function same_time_state
+
+end module test_checkpoint_restore_consistency_variable_dt
