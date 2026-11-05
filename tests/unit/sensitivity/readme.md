@@ -111,12 +111,13 @@ Currently, we have added tests for the following components:
   `exact_output_time`. The step ramps from `timestep` towards `max_timestep`
   and is fitted to the end time on the way, so the frozen grid holds 15 steps
   of 10 different sizes, from `1e-3` to `3.69e-3`. The driver checks that it
-  does. It is not in `test_list`. The error at the smallest perturbation is
-  `-1.46e-2`: under a variable timestep the replayed adjoint is consistent
-  with the forward run, not its exact transpose. Time order 1 on the same
-  grid gives `-3.65e-3`, an adjoint that takes the mean step instead of
-  replaying the grid `+7.39e-2`, and the same case at a fixed step of
-  `2.5e-3` `+3.5e-6`.
+  does. Under a variable timestep the replayed adjoint is consistent with
+  the forward run, not its exact transpose: the error at the smallest
+  perturbation is `+2.17e-3`, and the tolerance is `5e-3`. An adjoint that
+  takes the mean step instead of replaying the grid gave `+7.39e-2`, and one
+  that weights the coupling term by `dt_(i+1)` at this time order, as at
+  time order 1, `-1.46e-2`. The same case at a fixed step of `2.5e-3` gives
+  `+3.5e-6`.
 - `brinkman_dissipation_rejection` — checks the invalid mixed-dealias
   configuration directly through Neko's pFUnit error-redirection fixture. A
   mixed setting has no value its sensitivity is the gradient of, so the
