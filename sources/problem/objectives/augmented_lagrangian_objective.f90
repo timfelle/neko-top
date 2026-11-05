@@ -37,10 +37,11 @@ module augmented_lagrangian_objective
   use num_types, only: rp
   use field, only: field_t
   use field_math, only: field_col3, field_addcol3, field_cmult
-  use registry, only: neko_registry
   use scratch_registry, only: neko_scratch_registry, scratch_registry_t
   use objective, only: objective_t
   use simulation_m, only: simulation_t
+  use adjoint_fluid_pnpn, only: adjoint_fluid_pnpn_t
+  use utils, only: neko_error
   use neko_config, only: NEKO_BCKND_DEVICE
   use math, only: copy, col2, invcol2
   use device_math, only: device_copy, device_col2, device_invcol2
@@ -171,9 +172,15 @@ contains
     this%v => simulation%neko_case%fluid%v
     this%w => simulation%neko_case%fluid%w
     if (simulation%exact_adjoint) then
-       this%adjoint_u => neko_registry%get_field('u_adj_e')
-       this%adjoint_v => neko_registry%get_field('v_adj_e')
-       this%adjoint_w => neko_registry%get_field('w_adj_e')
+       select type (fluid_adj => simulation%adjoint_case%fluid_adj)
+       type is (adjoint_fluid_pnpn_t)
+          this%adjoint_u => fluid_adj%u_adj_e
+          this%adjoint_v => fluid_adj%v_adj_e
+          this%adjoint_w => fluid_adj%w_adj_e
+       class default
+          call neko_error("The exact time transpose needs " // &
+               "adjoint_fluid_pnpn_t")
+       end select
     else
        this%adjoint_u => simulation%adjoint_case%fluid_adj%u_adj
        this%adjoint_v => simulation%adjoint_case%fluid_adj%v_adj
