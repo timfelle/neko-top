@@ -53,8 +53,7 @@ module simulation_adjoint
   private
 
   public :: simulation_adjoint_init, simulation_adjoint_step, &
-       simulation_adjoint_finalize, simulation_adjoint_restart, &
-       simulation_adjoint_set_start_dt
+       simulation_adjoint_finalize, simulation_adjoint_restart
 
 contains
 
@@ -87,28 +86,6 @@ contains
     call neko_log%newline()
 
   end subroutine simulation_adjoint_init
-
-  !> Start the time state of an adjoint run from a history of equal steps.
-  !! @details The reset of the adjoint starts its time-step history from the
-  !! adjoint's initial time step, before the forward run has chosen its
-  !! steps. An adjoint that replays the forward steps in reverse starts from
-  !! the last of them instead, the way the forward starts from its first,
-  !! so that the history is saturated with equal steps at both ends of the
-  !! run. At a fixed time step this changes nothing.
-  !! @param C The adjoint case, reset and not yet stepped.
-  !! @param dt The time step to start from.
-  subroutine simulation_adjoint_set_start_dt(C, dt)
-    type(adjoint_case_t), intent(inout) :: C
-    real(kind=dp), intent(in) :: dt
-    integer :: i
-
-    C%time%dt = dt
-    C%time%dtlag = dt
-    do i = 1, size(C%time%tlag)
-       C%time%tlag(i) = C%time%t - i * dt
-    end do
-
-  end subroutine simulation_adjoint_set_start_dt
 
   !> Finalize a simulation of a case
   !! @param C The adjoint case.
