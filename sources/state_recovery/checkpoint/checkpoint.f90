@@ -81,9 +81,6 @@ module state_recover_checkpoint
      integer :: algorithm_id = 0
      integer :: n_saves_disc = 0
      integer :: first_valid_timestep = 2
-     integer :: loaded_checkpoint = -1
-     !> Whether the initial state, before the first step, has been saved.
-     logical :: initial_saved = .false.
 
      ! Field pointers
      type(field_list_t) :: state_list
@@ -91,6 +88,8 @@ module state_recover_checkpoint
      !! `n_saves_memory` are a ring over the time steps, slot 0 holds the
      !! initial state.
      type(host_array_t), dimension(:,:), allocatable :: state_storage
+     !> The time step of the state each RAM slot holds, -1 if none.
+     integer, allocatable :: slot_tstep(:)
 
      ! Structures to hold the checkpoint data
      type(chkp_output_t) :: chkp_output
@@ -276,6 +275,8 @@ contains
     ! Allocate the storage for the RAM checkpoints and the initial state
     allocate(this%state_storage(0:this%n_saves_memory, &
          this%state_list%size()))
+    allocate(this%slot_tstep(0:this%n_saves_memory))
+    this%slot_tstep = -1
     do i = 0, this%n_saves_memory
        do j = 1, this%state_list%size()
           si => this%state_list%get(j)
@@ -333,6 +334,7 @@ contains
 
     call this%state_list%free()
     if (allocated(this%state_storage)) deallocate(this%state_storage)
+    if (allocated(this%slot_tstep)) deallocate(this%slot_tstep)
 
     ! Delete the checkpoint file list
     if (.not. this%keep_checkpoints .and. pe_rank .eq. 0) then
@@ -358,8 +360,6 @@ contains
 
     this%n_saves_disc = 0
     this%first_valid_timestep = 2
-    this%loaded_checkpoint = -1
-    this%initial_saved = .false.
     call this%free_base()
 
   end subroutine checkpoint_free
@@ -386,8 +386,7 @@ contains
           call neko_error("The initial state is saved before the first step")
        end if
        call this%record_time(this%neko_case%time, dt_controller)
-       call this%save_data(0)
-       this%initial_saved = .true.
+       call this%save_data(0, 0)
        call profiler_end_region("Checkpoint save")
        return
     end if
@@ -423,7 +422,7 @@ contains
     end if
 
     if (tstep .eq. 0) then
-       if (.not. this%initial_saved) then
+       if (this%slot_tstep(0) .ne. 0) then
           call neko_error("The initial state was not saved")
        end if
        call this%load_data(0)
@@ -445,9 +444,11 @@ contains
   !! @param this The checkpoint object.
   !! @param index The index in the RAM checkpoint to save to, 0 for the
   !! initial state.
-  subroutine checkpoint_save_data(this, index)
+  !! @param tstep The time step of the state, which the slot is tagged with.
+  subroutine checkpoint_save_data(this, index, tstep)
     class(state_recover_checkpoint_t), intent(inout) :: this
     integer, intent(in) :: index
+    integer, intent(in) :: tstep
     type(field_t), pointer :: si !< Pointer to the i'th state field
     integer :: i
     character(len=1024) :: msg
@@ -480,6 +481,7 @@ contains
        end do
     end if
 
+    this%slot_tstep(index) = tstep
     nullify(si)
   end subroutine checkpoint_save_data
 
@@ -528,9 +530,8 @@ contains
     integer :: i, j
 
     ! Reset our checkpoints
-    this%loaded_checkpoint = -1
     this%n_saves_disc = 0
-    this%initial_saved = .false.
+    this%slot_tstep = -1
     call this%reset_base()
 
     do i = lbound(this%state_storage, 1), ubound(this%state_storage, 1)

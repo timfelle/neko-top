@@ -52,22 +52,21 @@ contains
   !> Save the current state of the simulation in a linear fashion.
   !! We save every `n_saves_memory` time steps to disc and we always save
   !! any timestep leading up to the `first_valid_timestep` time steps to disc.
+  !! The states of the block the run is expected to end in are kept in RAM
+  !! as well, so that the adjoint finds the first states it restores there.
   module subroutine checkpoint_save_linear(this)
     class(state_recover_checkpoint_t), intent(inout) :: this
-    integer :: index, tstep, counter, n_total
-    real(kind=dp) :: time, start_time, end_time, dt
+    integer :: index, tstep, counter, n_estimate
+    real(kind=dp) :: time, end_time, dt, remaining
 
     time = this%neko_case%time%t
     dt = this%neko_case%time%dt
     tstep = this%neko_case%time%tstep
-    start_time = this%neko_case%time%start_time
     end_time = this%neko_case%time%end_time
 
     ! We save to disc only every n_saves_memory time steps
     index = modulo(tstep, this%n_saves_memory)
     if (index .eq. 0 .or. tstep .le. this%first_valid_timestep) then
-       this%loaded_checkpoint = tstep
-
        counter = determine_counter(tstep, this%n_saves_memory, &
             this%first_valid_timestep)
 
@@ -79,14 +78,17 @@ contains
     end if
 
     ! Only save to RAM from the last disc checkpoint to the end of the forward
-    ! simulation. With fixed timesteps, the total count and the last disc-save
-    ! timestep are known from the time object.
-    ! Note: the plus 0.5 is to round up to the next integer, as the division can
-    ! be slightly smaller than the actual number of steps due to floating point
-    ! errors.
-    n_total = int(((end_time - start_time) / dt) + 0.5_dp)
-    if (tstep .ge. n_total - modulo(n_total, this%n_saves_memory)) then
-       call this%save_data(index + 1)
+    ! simulation. The last step is estimated from the time left at the
+    ! current time step, which is exact for a fixed time step. The slots are
+    ! tagged with their time step, so a wrong estimate under a variable time
+    ! step only costs a recompute when the state is restored.
+    remaining = (end_time - time) / dt
+    if (remaining .lt. real(this%n_saves_memory, dp)) then
+       n_estimate = tstep + max(0, nint(remaining))
+       if (n_estimate / this%n_saves_memory .eq. &
+            tstep / this%n_saves_memory) then
+          call this%save_data(index + 1, tstep)
+       end if
     end if
 
   end subroutine checkpoint_save_linear
@@ -121,8 +123,9 @@ contains
        previous_save = this%first_valid_timestep
     end if
 
-    ! Load a new batch of checkpoints if needed
-    if (this%loaded_checkpoint .ne. previous_save) then
+    ! Load a new batch of checkpoints unless the slot holds the state
+    local_idx = modulo(tstep, this%n_saves_memory) + 1
+    if (this%slot_tstep(local_idx) .ne. tstep) then
 
        ! Restart the simulation form the checkpoint file
        counter = determine_counter(previous_save, this%n_saves_memory, &
@@ -136,7 +139,6 @@ contains
        ! Continue from the recorded time step of the checkpoint
        this%neko_case%time%dt = this%get_dt(previous_save)
        this%neko_case%time%tstep = previous_save
-       this%loaded_checkpoint = this%neko_case%time%tstep
        call check_restart_time(this, previous_save)
 
        call profiler_start_region("Checkpoint recompute")
@@ -150,14 +152,17 @@ contains
           end if
 
           ! Save the restored state in memory
-          local_idx = modulo(k, this%n_saves_memory) + 1
-          call this%save_data(local_idx)
+          call this%save_data(modulo(k, this%n_saves_memory) + 1, k)
        end do
        call profiler_end_region("Checkpoint recompute")
+
+       if (this%slot_tstep(local_idx) .ne. tstep) then
+          call neko_error("Checkpoint recompute did not reach the " // &
+               "requested time step")
+       end if
     end if
 
     ! Restore the required time step from memory
-    local_idx = modulo(tstep, this%n_saves_memory) + 1
     call this%load_data(local_idx)
   end subroutine checkpoint_restore_linear
 
