@@ -75,6 +75,30 @@ Currently, we have added tests for the following components:
 - The guard against a variable timestep without the `timestep` that caps its
   first step (`variable_timestep_without_timestep.case`). It is not in
   `test_list`: it passes only if the run stops with its error.
+- The four rejections of a variable timestep in an unsteady problem. None is
+  in `test_list`, so a change that drops one still passes the suite; each
+  passes only if the run stops with its error. They are checked by hand:
+  copy the case into this directory of the build tree, where the mesh is,
+  and run the driver there, `./problem_tester_sensitivity_bin <case>`, on:
+  - `unsteady_variable_timestep_without_timestep.case`, which has neither
+    `timestep` nor `max_timestep`. It stops with `case.time.variable_timestep
+    needs case.time.timestep or case.time.max_timestep`.
+  - A copy of `unsteady_variable_timestep.case` with `exact_output_time` set
+    to `false`. It stops with `case.time.variable_timestep needs
+    case.time.exact_output_time`.
+  - A copy with a `projection_space_size` above 0 in
+    `case.fluid.velocity_solver` or `pressure_solver`, in
+    `case.adjoint_fluid.velocity_solver` or `pressure_solver`, or in the
+    `solver` of a scalar or an adjoint scalar. It stops with
+    `case.time.variable_timestep does not support projection_space_size`.
+    With `case.adjoint_fluid.velocity_solver.projection_space_size` at 4, a
+    run that does not stop gives an error of `-1.54e-2` at the smallest
+    perturbation, against `+2.17e-3` without it.
+  - `unsteady_variable_timestep.case` in an MPMD run, two copies of the
+    driver launched together with `NEKO_COMM_ID` set to 0 and 1, e.g.
+    `mpirun -np 1 -x NEKO_COMM_ID=0 <driver> <case> : -np 1 -x
+    NEKO_COMM_ID=1 <driver> <case>`. It stops with `is not supported in an
+    MPMD run`.
 - `brinkman_dissipation_objective_t`, unsteady
   (`unsteady_brinkman_dissipation.case`) — 20 time steps at polynomial order
   3, with a PDE filter and the objective's default over-integration. It checks
