@@ -104,6 +104,8 @@ module simulation_m
      !> The forward time step as initialised from the case file. A variable
      !! timestep changes `neko_case%time%dt` during a run, and `reset` starts
      !! the next run's time-step history from it, so it is restored first.
+     !! For an unsteady problem with a variable time step it is the step the
+     !! controller takes from rest, see `simulation_init_unsteady_time`.
      real(kind=dp) :: forward_init_dt = 0.0_dp
      !> The adjoint time step as initialised from the case file, restored on
      !! `reset` for the same reason as `forward_init_dt`.
@@ -126,6 +128,9 @@ module simulation_m
      procedure, pass(this) :: run_backward => simulation_run_backward
      !> Reset the simulation
      procedure, pass(this) :: reset => simulation_reset
+     !> Initialise a time-step controller from the case's time settings.
+     procedure, pass(this) :: init_dt_controller => &
+          simulation_init_dt_controller
      !> Set simulation output counters.
      procedure, pass(this) :: set_output_counter => &
           simulation_set_output_counter
@@ -284,6 +289,8 @@ contains
                "for unsteady problems")
        end if
 
+       call simulation_init_unsteady_time(this)
+
        call json_get(parameters, 'state_recovery', state_recovery_params)
        call state_recover_factory(this%state_recover, this%neko_case, &
             state_recovery_params)
@@ -335,15 +342,87 @@ contains
 
   end subroutine simulation_free
 
+  !> Check the time settings of an unsteady problem, and choose the time step
+  !! its runs start their time-step history from.
+  !! @details With a variable time step, every run has to end exactly at the
+  !! end time, so that the objective is a smooth function of the design. The
+  !! time-step history a run starts from has to be known before the run, so
+  !! that a run replaying a recorded time grid takes its first step with the
+  !! same coefficients as the run that recorded the grid. Neko's time state
+  !! starts a variable time step from a placeholder of 1, which `reset`
+  !! would copy into the whole history; the history starts from the step the
+  !! controller takes from rest instead, `timestep` limited by `min_timestep`
+  !! and `max_timestep`. The Krylov projection spaces are cleared when the
+  !! controller flags a change of the time step, which neither a replay of a
+  !! recorded grid nor the recompute of the state recovery does, so they are
+  !! not supported with a variable time step.
+  !! @param this The simulation object.
+  subroutine simulation_init_unsteady_time(this)
+    class(simulation_t), intent(inout) :: this
+    type(time_step_controller_t) :: dt_controller
+    logical :: projection
+    integer :: i
+
+    call this%init_dt_controller(dt_controller)
+    if (.not. dt_controller%is_variable_dt) return
+
+    if (.not. dt_controller%exact_output_time) then
+       call neko_error("case.time.variable_timestep needs " // &
+            "case.time.exact_output_time in an unsteady problem, so that " // &
+            "every run ends exactly at the end time")
+    end if
+    if (dt_controller%init_dt .ge. huge(0.0_dp) .and. &
+         dt_controller%max_dt .ge. huge(0.0_dp)) then
+       call neko_error("case.time.variable_timestep needs " // &
+            "case.time.timestep or case.time.max_timestep in an unsteady " // &
+            "problem, for the first time step of its runs")
+    end if
+
+    projection = .false.
+    select type (fluid => this%neko_case%fluid)
+    class is (fluid_scheme_incompressible_t)
+       projection = fluid%vel_projection_dim .gt. 0 .or. &
+            fluid%pr_projection_dim .gt. 0
+    end select
+    if (allocated(this%neko_case%scalars)) then
+       do i = 1, size(this%neko_case%scalars%scalar_fields)
+          projection = projection .or. &
+               this%neko_case%scalars%scalar_fields(i)%scalar%projection_dim &
+               .gt. 0
+       end do
+    end if
+    if (projection) then
+       call neko_error("case.time.variable_timestep does not support " // &
+            "projection_space_size in an unsteady problem")
+    end if
+
+    this%forward_init_dt = max(min(dt_controller%init_dt, &
+         dt_controller%max_dt), dt_controller%min_dt)
+
+  end subroutine simulation_init_unsteady_time
+
+  !> Initialise a time-step controller from the time settings of the case,
+  !! `case.time`.
+  !! @param this The simulation object.
+  !! @param dt_controller The time-step controller to initialise.
+  subroutine simulation_init_dt_controller(this, dt_controller)
+    class(simulation_t), intent(inout) :: this
+    type(time_step_controller_t), intent(inout) :: dt_controller
+    type(json_file) :: dt_params
+
+    call json_get(this%neko_case%params, 'case.time', dt_params)
+    call dt_controller%init(dt_params)
+    call dt_params%destroy()
+
+  end subroutine simulation_init_dt_controller
+
   !> Run the simulation
   subroutine simulation_run_forward(this)
     class(simulation_t), intent(inout) :: this
     type(time_step_controller_t) :: dt_controller
     real(kind=dp) :: loop_start
-    type(json_file) :: dt_params
 
-    call json_get(this%neko_case%params, 'case.time', dt_params)
-    call dt_controller%init(dt_params)
+    call this%init_dt_controller(dt_controller)
 
     call this%neko_case%time%reset()
     call simulation_init(this%neko_case, dt_controller)
@@ -370,13 +449,11 @@ contains
   subroutine simulation_run_backward(this)
     class(simulation_t), intent(inout) :: this
     type(time_step_controller_t) :: dt_controller
-    type(json_file) :: dt_params
     real(kind=dp) :: loop_start
     real(kind=rp) :: cfl
     integer :: i
 
-    call json_get(this%neko_case%params, 'case.time', dt_params)
-    call dt_controller%init(dt_params)
+    call this%init_dt_controller(dt_controller)
 
     call simulation_adjoint_init(this%adjoint_case, dt_controller)
 

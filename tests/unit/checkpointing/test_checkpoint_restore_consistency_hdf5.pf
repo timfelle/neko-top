@@ -92,7 +92,7 @@ contains
          fmt = 'hdf5', &
          keep_checkpoints = .false.)
 
-    call dt_controller%init(sim%neko_case%params)
+    call sim%init_dt_controller(dt_controller)
     call simulation_init(sim%neko_case, dt_controller)
 
     initial_tstep = sim%neko_case%time%tstep
@@ -122,7 +122,7 @@ contains
 
     call simulation_finalize(sim%neko_case)
 
-    call dt_controller%init(sim%neko_case%params)
+    call sim%init_dt_controller(dt_controller)
     call simulation_init(sim%neko_case, dt_controller)
 
     restore_ok = .true.
