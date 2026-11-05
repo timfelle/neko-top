@@ -13,6 +13,9 @@
 
 # --  Technical Options
 
+# Job name
+#BSUB -J "visualise_dtu"
+
 # Queue name
 #BSUB -q "gpuv100"
 
@@ -61,7 +64,11 @@ colors=(
 )
 
 for exp in "${experiments[@]}"; do
-    exp=${exp##$RESULT_ROOT/}
+    if [[ "$exp" == "$RESULT_ROOT" ]]; then
+        exp=.
+    else
+        exp=${exp##$RESULT_ROOT/}
+    fi
     if [[ ! -d "$RESULT_ROOT/$exp" ]]; then
         echo "Results for experiment $exp not found. Skipping visualization."
         continue
