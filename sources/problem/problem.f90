@@ -531,7 +531,7 @@ contains
     class(design_t), intent(inout) :: design
     type(time_step_controller_t) :: dt_controller
     real(kind=dp) :: loop_start, dt_first
-    logical :: replay
+    logical :: replay, seeded
 
     if (.not. allocated(simulation%state_recover)) then
        call neko_error("State recovery not initialized.")
@@ -553,7 +553,8 @@ contains
     ! The reset starts the time scheme at full order, so the first step uses
     ! the whole time-step history. Start it from equal steps of the first
     ! step, the same in a replay as in the run that recorded the grid.
-    if (replay .or. dt_controller%is_variable_dt) then
+    seeded = replay .or. dt_controller%is_variable_dt
+    if (seeded) then
        call forward_first_dt(simulation%neko_case, dt_controller, dt_first)
        call start_time_history(simulation%neko_case%time, dt_first)
     end if
@@ -576,6 +577,16 @@ contains
        end if
        ! step forward
        call simulation_step(simulation%neko_case, dt_controller, loop_start)
+       ! The first step has to take the step its history was started from.
+       ! The prediction repeats the arithmetic of simulation_step on the same
+       ! state, so the two agree exactly unless they have drifted apart.
+       if (seeded .and. simulation%n_timesteps .eq. 1) then
+          if (.not. (abs(simulation%neko_case%time%dt - dt_first) .le. &
+               0.0_dp)) then
+             call neko_error("The first forward step did not take the " // &
+                  "time step forward_first_dt predicted for it")
+          end if
+       end if
        this%run_time = this%run_time + &
             real(simulation%neko_case%time%dt, kind=xp)
        ! accumulate objective value
@@ -596,9 +607,9 @@ contains
   !! state, the way `simulation_step` computes it: the step the controller
   !! chooses, fitted to the next output time or to the end time with
   !! `exact_output_time`. The case holds the fields and the time the first
-  !! step starts from, so the step then takes the same time step. With the
-  !! default controller, as in a replay, it is the time step the time state
-  !! holds.
+  !! step starts from, so the step then takes the same time step, which the
+  !! forward run checks. With the default controller, as in a replay, it is
+  !! the time step the time state holds.
   !! @param neko_case The case, about to take its first step.
   !! @param dt_controller The time-step controller of the run.
   !! @param dt The time step of the first step.
