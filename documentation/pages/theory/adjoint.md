@@ -256,12 +256,38 @@ With these adjoint variables, the discrete gradient contribution associated
 with an explicit linear operator \f$\chi\f$ is
 \f[
   \mathrm{d}F(\chi,\delta \chi)
-  = -\sum_{n=1}^{N} \int_\Omega \delta \chi\,
+  = -\sum_{n=0}^{N} \int_\Omega \delta \chi\,
   \mathbf{u}_{n+1}^{\dagger} \mathbf{u}_n \, \mathrm{d}\Omega.
 \f]
+The term \f$n = 0\f$ comes from the first forward step, which applies
+\f$\chi\f$ to the initial state \f$\mathbf{u}_0\f$. It pairs the initial
+state with the adjoint state the adjoint run ends at, and the objective has no
+sample there. It vanishes for a flow that starts at rest.
 The order above matches the implementation: solve the implicit adjoint step,
 then the adjoint pressure correction, then form the projection to obtain the
 adjoint velocity used in the sensitivity accumulation.
+
+### Variable time step {#adjoint-variable-time-step}
+With a variable time step, forward step \f$n\f$ advances from
+\f$t_{n-1}\f$ to \f$t_n = t_{n-1} + \Delta t_n\f$ and the objective is
+\f$F \approx \sum_{n=1}^{N} \Delta t_n f(\mathbf{u}_n)\f$. The state
+recovery records every \f$t_n\f$ and \f$\Delta t_n\f$, and the adjoint
+replays them in reverse: the adjoint step that goes back over forward step
+\f$n\f$ takes \f$\Delta t_n\f$, with the BDF and EXT coefficients of the
+adjoint's own history of steps, and every term of the gradient takes its time
+and its weight from the record. Its history starts from equal steps of
+\f$\Delta t_N\f$, the way the forward's starts from equal steps of its
+initial time step.
+
+At a constant time step the forward and the reversed stencils are the same,
+and the replayed adjoint, with the \f$n = 0\f$ term above, is the exact
+discrete adjoint of the forward scheme. Under a variable time step the exact
+transpose would combine, for every forward state, the coefficients of the
+forward steps that use it, while the replayed adjoint builds its coefficients
+from its own steps in reverse order. The two agree only for equal steps, so
+the replayed adjoint is consistent with the forward run but not its exact
+transpose, and the difference grows with how much the time step changes from
+one step to the next.
 
 ### The curl--curl term {#adjoint-curl-curl}
 The forward pressure equation above contains the curl--curl term
