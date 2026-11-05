@@ -213,6 +213,13 @@ contains
   end subroutine check_restore_consistency
 
   !> Copy the fluid fields into the snapshots of state `i`.
+  !! @param sim The simulation holding the fluid fields.
+  !! @param i Index of the state, 0 for the initial state, in snapshot
+  !! `i + 1`.
+  !! @param p_fields Snapshots of the pressure.
+  !! @param u_fields Snapshots of the x-velocity.
+  !! @param v_fields Snapshots of the y-velocity.
+  !! @param w_fields Snapshots of the z-velocity.
   subroutine take_snapshot(sim, i, p_fields, u_fields, v_fields, w_fields)
     type(simulation_t), intent(inout) :: sim
     integer, intent(in) :: i
@@ -231,6 +238,14 @@ contains
   end subroutine take_snapshot
 
   !> Whether the fluid fields match the snapshots of state `i`.
+  !! @param sim The simulation holding the fluid fields.
+  !! @param i Index of the state, 0 for the initial state, in snapshot
+  !! `i + 1`.
+  !! @param p_fields Snapshots of the pressure.
+  !! @param u_fields Snapshots of the x-velocity.
+  !! @param v_fields Snapshots of the y-velocity.
+  !! @param w_fields Snapshots of the z-velocity.
+  !! @return `.true.` if every field matches its snapshot.
   function matches_snapshot(sim, i, p_fields, u_fields, v_fields, &
        w_fields) result(matches)
     type(simulation_t), intent(inout) :: sim
@@ -255,6 +270,9 @@ contains
   end function matches_snapshot
 
   !> Whether two times differ in any bit, a NaN included.
+  !! @param a The first time.
+  !! @param b The second time.
+  !! @return `.true.` unless `a` and `b` are equal.
   pure function differs(a, b)
     real(kind=dp), intent(in) :: a, b
     logical :: differs
@@ -263,6 +281,10 @@ contains
   end function differs
 
   !> Whether two time states agree in time, step, step count and histories.
+  !! @param a The first time state.
+  !! @param b The second time state.
+  !! @return `.true.` if the step counts agree and no time or time step of
+  !! the two differs in any bit.
   pure function same_time_state(a, b) result(same)
     type(time_state_t), intent(in) :: a, b
     logical :: same
