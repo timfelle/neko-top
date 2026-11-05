@@ -614,7 +614,7 @@ contains
   !! @param dt_controller The time-step controller of the run.
   !! @param dt The time step of the first step.
   subroutine forward_first_dt(neko_case, dt_controller, dt)
-    type(case_t), intent(inout) :: neko_case
+    type(case_t), intent(in) :: neko_case
     type(time_step_controller_t), intent(in) :: dt_controller
     real(kind=dp), intent(out) :: dt
     type(time_step_controller_t) :: controller
@@ -776,7 +776,7 @@ contains
        i)
     class(problem_t), intent(inout) :: this
     class(design_t), intent(in) :: design
-    class(simulation_t), intent(inout) :: simulation
+    class(simulation_t), intent(in) :: simulation
     integer, intent(in) :: i
     type(time_state_t) :: sample
     real(kind=dp) :: coupling_weight
