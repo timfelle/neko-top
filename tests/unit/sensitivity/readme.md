@@ -100,6 +100,24 @@ Currently, we have added tests for the following components:
     `mpirun -np 1 -x NEKO_COMM_ID=0 <driver> <case> : -np 1 -x
     NEKO_COMM_ID=1 <driver> <case>`. It stops with `is not supported in an
     MPMD run`.
+- The rejections of the time transpose. None is in `test_list` either; each
+  passes only if the run stops with its error, and is checked by hand the same
+  way, on a copy of `unsteady_brinkman_dissipation.case`:
+  - With `case.adjoint_fluid.time_transpose` set to anything but `"exact"` or
+    `"reverse"`, e.g. `"exactly"`, it stops before the forward run with
+    `case.adjoint_fluid.time_transpose must be 'exact' or 'reverse', not
+    'exactly'`.
+  - With `case.adjoint_fluid.freeze_flow` set to `true`, it stops before the
+    forward run with `The exact time transpose of the unsteady adjoint does
+    not support a frozen adjoint fluid, case.adjoint_fluid.freeze_flow`.
+  - With a nonzero `case.adjoint_fluid.initial_condition`, e.g. a uniform
+    `[ 1.0, 0.0, 0.0 ]`, it stops after the forward run with `The exact time
+    transpose of the unsteady adjoint needs a zero
+    case.adjoint_fluid.initial_condition, or set
+    case.adjoint_fluid.time_transpose to "reverse"`.
+
+  With `"reverse"`, the last two run to the end and fail the
+  finite-difference check instead.
 - `brinkman_dissipation_objective_t`, unsteady
   (`unsteady_brinkman_dissipation.case`) — 20 time steps at polynomial order
   3, with a PDE filter and the objective's default over-integration. It checks
@@ -131,6 +149,23 @@ Currently, we have added tests for the following components:
   smallest perturbation was `-4.34e-2`; with it, it is `-1.72e-5`, which is
   first-order truncation (`-1.71e-4` at `1e-3`). The tolerance of `1e-4` lies
   between the two. From rest the sample is zero, so no other case sees it.
+- `brinkman_dissipation_objective_t`, unsteady from a moving start with the
+  reverse time transpose
+  (`unsteady_brinkman_dissipation_moving_start_reverse.case`) — the
+  moving-start case with `case.adjoint_fluid.time_transpose` set to
+  `"reverse"`: the adjoint replays the forward steps in reverse with the
+  coefficients of its own history, which is exact at a fixed step. It is the
+  only registered case on that path of the fluid, which adjoint scalars
+  otherwise take. Its CSV is that of the moving-start case bit for bit: the
+  finite differences come from the same forward runs, and at time order 1 and
+  a fixed step the two transposes compute the same terms and differ only in
+  the order they are summed, which the probed sensitivity does not see. The
+  case therefore guards the reverse path, not the selection of it, which the
+  variable-timestep cases below show with the reverse transpose. With the
+  reverse replay sampling the sensitivity after the adjoint step instead of
+  before, the error at the smallest perturbation was `+3.62e-2`, and without
+  the adjoint convection in the reverse replay `-4.13e-3`; the moving-start
+  case stayed at `-1.72e-5` with both.
 - `brinkman_dissipation_objective_t`, unsteady with a variable timestep
   (`unsteady_variable_timestep.case`) — time order 3, starting at rest, with
   `exact_output_time`. The step ramps from `timestep` towards `max_timestep`
