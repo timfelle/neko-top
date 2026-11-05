@@ -308,15 +308,27 @@ contains
   !> Accumulate the sensitivity of the function
   !!
   !! Normalised exactly as `accumulate_value`, so that the sensitivity stays
-  !! consistent with the value it differentiates.
+  !! consistent with the value it differentiates: the running mean is taken
+  !! over the time the value sampled, the step of each sample in the window.
+  !! A term of the sensitivity can enter the time integral with a weight of
+  !! its own, and a sample the value does not have adds no time.
   !! @param this The functional.
   !! @param design The design.
-  !! @param time The current time state.
-  subroutine functional_accumulate_sensitivity(this, design, time)
+  !! @param time The time state of the sample, as the forward run had it.
+  !! Its time is tested against the window and its step is the time the
+  !! sample spans.
+  !! @param weight The weight of the sample in the time integral, `time%dt`
+  !! if absent.
+  !! @param span The time the sample adds to the normalisation, `time%dt` if
+  !! absent.
+  subroutine functional_accumulate_sensitivity(this, design, time, weight, &
+       span)
     class(base_functional_t), intent(inout) :: this
     class(design_t), intent(in) :: design
     type(time_state_t), intent(in) :: time
-    real(kind=xp) :: weight_new, weight_old, dt
+    real(kind=dp), intent(in), optional :: weight
+    real(kind=dp), intent(in), optional :: span
+    real(kind=xp) :: weight_new, weight_old, dt, sampled
     type(vector_t), pointer :: sensitivity_new, sensitivity_old
     integer :: n, idx(2)
 
@@ -333,14 +345,17 @@ contains
 
     ! Compute the weights for the old and new sensitivities.
     dt = real(time%dt, kind=xp)
-    weight_new = dt / (this%sensitivity_weight + dt)
-    weight_old = this%sensitivity_weight / (this%sensitivity_weight + dt)
+    if (present(weight)) dt = real(weight, kind=xp)
+    sampled = real(time%dt, kind=xp)
+    if (present(span)) sampled = real(span, kind=xp)
+    weight_new = dt / (this%sensitivity_weight + sampled)
+    weight_old = this%sensitivity_weight / (this%sensitivity_weight + sampled)
 
     ! Rectangle rule; could potentially use higher order trapezoidal/Simpson
     ! etc, but this should suffice.
     call vector_add3s2(this%sensitivity, &
          sensitivity_new, sensitivity_old, weight_new, weight_old)
-    this%sensitivity_weight = this%sensitivity_weight + dt
+    this%sensitivity_weight = this%sensitivity_weight + sampled
 
     nullify(sensitivity_new)
     nullify(sensitivity_old)

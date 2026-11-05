@@ -57,7 +57,8 @@ module problem
   use vector_math, only: vector_add2, vector_cfill
   use time_step_controller, only: time_step_controller_t
   use simulation_adjoint, only: simulation_adjoint_init, &
-       simulation_adjoint_step, simulation_adjoint_finalize
+       simulation_adjoint_step, simulation_adjoint_finalize, &
+       simulation_adjoint_set_start_dt
   use simulation, only: simulation_init, simulation_step, simulation_finalize
   use mpi_f08, only: MPI_WTIME
   use profiler, only: profiler_start_region, profiler_end_region
@@ -174,6 +175,10 @@ module problem
      !> Accumulate the constraint sensitivities.
      procedure, pass(this) :: accumulate_constraint_sensitivities => &
           problem_accumulate_constraint_sensitivities
+     !> Accumulate the objective sensitivities of a restored forward state of
+     !! an unsteady run.
+     procedure, pass(this) :: accumulate_sensitivity_sample => &
+          problem_accumulate_sensitivity_sample
 
      ! ----------------------------------------------------------------------- !
      ! Public Getters
@@ -583,6 +588,16 @@ contains
   end subroutine problem_check_objective_windows
 
   !> Run the adjoint backwards
+  !! @details The adjoint replays the time grid of the forward run in
+  !! reverse: it steps back over forward step \f$ i \f$ with that step's
+  !! \f$ \Delta t_i \f$, using the default time-step controller, which keeps
+  !! the time step it is given. Its time-step history starts saturated with
+  !! the last forward step, as the forward's starts with the first. At a fixed
+  !! time step this is the adjoint run as it always was.
+  !! @param this The problem.
+  !! @param simulation The simulation, whose state recovery holds the forward
+  !! run.
+  !! @param design The design.
   subroutine problem_run_backward_unsteady(this, simulation, design)
     class(problem_t), intent(inout) :: this
     class(simulation_t), intent(inout) :: simulation
@@ -591,11 +606,15 @@ contains
     real(kind=dp) :: loop_start
     real(kind=rp) :: cfl
     real(kind=rp) :: total_time
-    integer :: i
-    type(time_state_t) :: accumulation_time
+    integer :: i, n
 
-    call simulation%init_dt_controller(dt_controller)
+    if (.not. allocated(simulation%state_recover)) then
+       call neko_error("State recovery not initialized.")
+    end if
+    n = simulation%n_timesteps
 
+    call simulation_adjoint_set_start_dt(simulation%adjoint_case, &
+         simulation%state_recover%get_dt(n))
     call simulation_adjoint_init(simulation%adjoint_case, dt_controller)
 
     ! Reset the sensitivity value to zero
@@ -605,32 +624,76 @@ contains
          simulation%adjoint_case%time%dt)
     loop_start = MPI_WTIME()
 
-    if (.not. allocated(simulation%state_recover)) then
-       call neko_error("State recovery not initialized.")
-    end if
-
     ! Total time of the forward simulation
-    total_time = simulation%n_timesteps * simulation%adjoint_case%time%dt
+    total_time = real(simulation%state_recover%get_end_time() - &
+         simulation%state_recover%get_time(0), kind=rp)
 
     call profiler_start_region("Adjoint simulation")
 
-    do i = simulation%n_timesteps, 1, -1
+    do i = n, 1, -1
        ! restore primal field
        call simulation%state_recover%restore(i)
        ! accumulate objective sensitivity
-       accumulation_time = simulation%adjoint_case%time
-       accumulation_time%t = total_time - simulation%adjoint_case%time%t
-       call this%accumulate_objective_sensitivities(design, accumulation_time)
-       ! step the adjoint backwards
+       call this%accumulate_sensitivity_sample(design, simulation, i)
+       ! step the adjoint backwards over forward step i
+       simulation%adjoint_case%time%dt = simulation%state_recover%get_dt(i)
        call simulation_adjoint_step(simulation%adjoint_case, dt_controller, &
             cfl, loop_start, total_time)
     end do
 
     call profiler_end_region("Adjoint simulation")
 
-    call simulation_adjoint_finalize(simulation%adjoint_case)
+    call simulation_adjoint_finalize(simulation%adjoint_case, n)
 
   end subroutine problem_run_backward_unsteady
+
+  !> Accumulate the objective sensitivities of a restored forward state of an
+  !! unsteady run.
+  !! @details This is the one place that decides how the sensitivity of an
+  !! unsteady run is integrated in time. With the forward state \f$ u_i \f$
+  !! restored and the adjoint at \f$ \lambda_{i+1} \f$, before the adjoint
+  !! steps back over forward step \f$ i \f$:
+  !! - the explicit sensitivity of an objective at \f$ u_i \f$ is weighted by
+  !!   \f$ \Delta t_i \f$, as its value was;
+  !! - the coupling term \f$ (u_i, \lambda_{i+1}) \f$ of the augmented
+  !!   Lagrangian is weighted by the step the adjoint took to
+  !!   \f$ \lambda_{i+1} \f$, \f$ \Delta t_{i+1} \f$, and at \f$ i = N \f$,
+  !!   where \f$ \lambda_{N+1} \f$ is the terminal condition, by the step the
+  !!   adjoint starts from, \f$ \Delta t_N \f$.
+  !!
+  !! The time \f$ t_i \f$ and the steps are those the forward run recorded.
+  !! Every sample spans \f$ \Delta t_i \f$ of the normalisation, so that the
+  !! sensitivity is normalised by the same time as the value.
+  !! @param this The problem.
+  !! @param design The design.
+  !! @param simulation The simulation, whose state recovery holds the time
+  !! grid of the forward run.
+  !! @param i Index of the restored forward state.
+  subroutine problem_accumulate_sensitivity_sample(this, design, simulation, &
+       i)
+    class(problem_t), intent(inout) :: this
+    class(design_t), intent(in) :: design
+    class(simulation_t), intent(inout) :: simulation
+    integer, intent(in) :: i
+    type(time_state_t) :: sample
+    real(kind=dp) :: coupling_weight
+    integer :: j, n
+
+    n = simulation%state_recover%get_n_timesteps()
+    call simulation%state_recover%get_time_state(i, sample)
+    coupling_weight = simulation%state_recover%get_dt(min(i + 1, n))
+
+    do j = 1, this%n_objectives
+       select type (objective => this%objective_list(j)%objective)
+       class is (augmented_lagrangian_objective_t)
+          call objective%accumulate_sensitivity(design, sample, &
+               weight = coupling_weight)
+       class default
+          call objective%accumulate_sensitivity(design, sample)
+       end select
+    end do
+
+  end subroutine problem_accumulate_sensitivity_sample
 
   ! ========================================================================== !
   ! Update the objectives and constraints
