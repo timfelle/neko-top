@@ -45,7 +45,6 @@
 submodule (state_recover_checkpoint) checkpoint_linear
   use num_types, only: dp
   use simulation, only: simulation_step, simulation_restart
-  use time_step_controller, only: time_step_controller_t
   use profiler, only: profiler_start_region, profiler_end_region
 
 contains
@@ -56,7 +55,7 @@ contains
   module subroutine checkpoint_save_linear(this)
     class(state_recover_checkpoint_t), intent(inout) :: this
     integer :: index, tstep, counter, n_total
-    real(kind=rp) :: time, start_time, end_time, dt
+    real(kind=dp) :: time, start_time, end_time, dt
 
     time = this%neko_case%time%t
     dt = this%neko_case%time%dt
@@ -85,7 +84,7 @@ contains
     ! Note: the plus 0.5 is to round up to the next integer, as the division can
     ! be slightly smaller than the actual number of steps due to floating point
     ! errors.
-    n_total = int(((end_time - start_time) / dt) + 0.5_rp)
+    n_total = int(((end_time - start_time) / dt) + 0.5_dp)
     if (tstep .ge. n_total - modulo(n_total, this%n_saves_memory)) then
        call this%save_data(index + 1)
     end if
@@ -96,6 +95,10 @@ contains
   !! If the requested time step is not in memory, we load the nearest
   !! checkpoint from disc and then we step forward in time to fill our cache.
   !! Finally, we copy the requested time step from our cache.
+  !! @details The steps forward replay the recorded time steps with the
+  !! default time-step controller, which keeps the time step it is given.
+  !! The checkpoint file restores the time and its history but not the time
+  !! step, which is set from the record as well.
   module subroutine checkpoint_restore_linear(this, tstep)
     class(state_recover_checkpoint_t), intent(inout) :: this
     integer, intent(in) :: tstep
@@ -130,10 +133,11 @@ contains
        call profiler_end_region("Checkpoint read from disk")
        call simulation_restart(this%neko_case, this%neko_case%chkp)
 
-       ! Initialize the time step controller and set the time step
-       call dt_controller%init(this%neko_case%params)
+       ! Continue from the recorded time step of the checkpoint
+       this%neko_case%time%dt = this%get_dt(previous_save)
        this%neko_case%time%tstep = previous_save
        this%loaded_checkpoint = this%neko_case%time%tstep
+       call check_restart_time(this, previous_save)
 
        call profiler_start_region("Checkpoint recompute")
        ! Step through the simulation and store field states in memory
@@ -141,7 +145,7 @@ contains
 
           ! Do not run simulation step on the first iteration
           if (k .ne. previous_save) then
-             if (this%neko_case%time%is_done()) exit
+             this%neko_case%time%dt = this%get_dt(k)
              call simulation_step(this%neko_case, dt_controller, loop_start)
           end if
 
@@ -156,6 +160,29 @@ contains
     local_idx = modulo(tstep, this%n_saves_memory) + 1
     call this%load_data(local_idx)
   end subroutine checkpoint_restore_linear
+
+  !> Stop with an error if the time state restored from the checkpoint file
+  !! of state `k` is not the recorded one, for instance a file left behind by
+  !! another run in the same directory.
+  !! @param this The checkpoint object, whose case holds the restored time.
+  !! @param k Index of the restored state.
+  subroutine check_restart_time(this, k)
+    class(state_recover_checkpoint_t), intent(in) :: this
+    integer, intent(in) :: k
+    real(kind=dp) :: tol
+    character(len=256) :: msg
+
+    tol = this%neko_case%time%tolerance()
+    if (abs(this%neko_case%time%t - this%get_time(k)) .gt. tol .or. &
+         abs(this%neko_case%time%dtlag(1) - this%get_dt(k)) .gt. tol) then
+       write(msg, '(A,I0,A,3(ES24.16,A),ES24.16)') &
+            "Checkpoint file of step ", k, " has t = ", &
+            this%neko_case%time%t, ", recorded ", this%get_time(k), &
+            ", and dt = ", this%neko_case%time%dtlag(1), ", recorded ", &
+            this%get_dt(k)
+       call neko_error(trim(msg))
+    end if
+  end subroutine check_restart_time
 
   pure function determine_counter(tstep, n_memory, first) result(counter)
     integer, intent(in) :: tstep, n_memory, first
