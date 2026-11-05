@@ -95,7 +95,7 @@
         "path": "checkpoints_variable_timestep/"
     },
     "optimization": {
-        "fd_test_tolerance": 5.0e-3,
+        "fd_test_tolerance": 1.0e-4,
         "design": {
             "type": "brinkman",
             "mapping": [

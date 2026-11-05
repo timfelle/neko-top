@@ -93,7 +93,8 @@ Currently, we have added tests for the following components:
     `case.time.variable_timestep does not support projection_space_size`.
     With `case.adjoint_fluid.velocity_solver.projection_space_size` at 4, a
     run that does not stop gives an error of `-1.54e-2` at the smallest
-    perturbation, against `+2.17e-3` without it.
+    perturbation, against `+2.17e-3` without it, both with the adjoint that
+    replays the steps in reverse.
   - `unsteady_variable_timestep.case` in an MPMD run, two copies of the
     driver launched together with `NEKO_COMM_ID` set to 0 and 1, e.g.
     `mpirun -np 1 -x NEKO_COMM_ID=0 <driver> <case> : -np 1 -x
@@ -136,13 +137,18 @@ Currently, we have added tests for the following components:
   and is fitted to the end time on the way, so the frozen grid holds 15 steps
   of 10 different sizes, from `1e-3` to `3.69e-3`. The driver checks only
   that the grid holds at least two different steps and that its first step
-  is not Neko's placeholder of 1. Under a variable timestep the replayed
-  adjoint is consistent with the forward run, not its exact transpose: the
-  error at the smallest perturbation is `+2.17e-3`, and the tolerance is
-  `5e-3`. An adjoint that takes the mean step instead of replaying the grid
-  gave `+7.39e-2`, and one that weights the coupling term by `dt_(i+1)` at
-  this time order, as at time order 1, `-1.46e-2`. The same case at a fixed
-  step of `2.5e-3` gives `+3.5e-6`.
+  is not Neko's placeholder of 1. The adjoint is the exact transpose of the
+  time scheme of the forward run: the error at the smallest perturbation is
+  `+3.02e-6`, which is first-order truncation (`+3.02e-5` at `1e-3`), and
+  the tolerance is `1e-4`. The adjoint that replays the steps in reverse
+  with the coefficients of its own history, `time_transpose` set to
+  `"reverse"`, gives `+2.17e-3`, and the exact transpose with the implicit
+  solve of that history, its `b_1` instead of the forward step's own,
+  `-6.88e-2`. With the reverse replay, an adjoint that takes the mean step
+  instead of replaying the grid gave `+7.39e-2`, and one that weights the
+  coupling term by `dt_(i+1)` at this time order, as at time order 1,
+  `-1.46e-2`. The same case at a fixed step of `2.5e-3` gave `+3.5e-6`
+  with the reverse replay, which is exact at a fixed step.
 - `brinkman_dissipation_objective_t`, unsteady with a variable timestep that
   the CFL number limits (`unsteady_variable_timestep_cfl_limited.case`) — the
   same case starting at the inflow velocity, with a `target_cfl` of `0.02` and
@@ -151,8 +157,11 @@ Currently, we have added tests for the following components:
   frozen grid holds 39 steps of 3 sizes, from `6.90e-4` down to `4.56e-4`.
   Every run starts its time-step history from equal steps of the step its
   first step takes, which the forward run checks. The error at the smallest
-  perturbation is `-5.14e-4`, and the tolerance is `1.5e-3`. A history
-  started from `timestep` instead gave `-2.55e-3`.
+  perturbation is `+9.87e-6`, which is first-order truncation (`+9.87e-5` at
+  `1e-3`), and the tolerance is `1e-4`. The reverse replay gives
+  `-5.14e-4`, and the exact transpose with the `b_1` of the reverse history
+  `+2.24e-2`. With the reverse replay, a history started from `timestep`
+  instead gave `-2.55e-3`.
 - `brinkman_dissipation_rejection` — checks the invalid mixed-dealias
   configuration directly through Neko's pFUnit error-redirection fixture. A
   mixed setting has no value its sensitivity is the gradient of, so the
