@@ -37,6 +37,7 @@ module augmented_lagrangian_objective
   use num_types, only: rp
   use field, only: field_t
   use field_math, only: field_col3, field_addcol3, field_cmult
+  use registry, only: neko_registry
   use scratch_registry, only: neko_scratch_registry, scratch_registry_t
   use objective, only: objective_t
   use simulation_m, only: simulation_t
@@ -163,13 +164,21 @@ contains
 
     call this%init_base(name, design%size(), weight, mask_name)
 
-    ! Save the simulation and design
+    ! Save the simulation and design. The exact transpose of the time
+    ! scheme pairs a primal state with the combination of the adjoint
+    ! levels that its explicit terms enter.
     this%u => simulation%neko_case%fluid%u
     this%v => simulation%neko_case%fluid%v
     this%w => simulation%neko_case%fluid%w
-    this%adjoint_u => simulation%adjoint_case%fluid_adj%u_adj
-    this%adjoint_v => simulation%adjoint_case%fluid_adj%v_adj
-    this%adjoint_w => simulation%adjoint_case%fluid_adj%w_adj
+    if (simulation%exact_adjoint) then
+       this%adjoint_u => neko_registry%get_field('u_adj_e')
+       this%adjoint_v => neko_registry%get_field('v_adj_e')
+       this%adjoint_w => neko_registry%get_field('w_adj_e')
+    else
+       this%adjoint_u => simulation%adjoint_case%fluid_adj%u_adj
+       this%adjoint_v => simulation%adjoint_case%fluid_adj%v_adj
+       this%adjoint_w => simulation%adjoint_case%fluid_adj%w_adj
+    end if
 
     this%dealias = dealias
     ! GLL

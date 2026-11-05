@@ -51,6 +51,8 @@ module problem
   use json_module, only: json_file
   use json_utils, only: json_extract_item, json_get, json_get_or_default
   use simulation_m, only: simulation_t
+  use adjoint_fluid_pnpn, only: adjoint_fluid_pnpn_t
+  use field_math, only: field_glsc2
   use logger, only: neko_log, LOG_SIZE
   use math, only: copy
   use time_state, only: time_state_t
@@ -662,8 +664,16 @@ contains
   !! reverse: it steps back over forward step \f$ i \f$ with that step's
   !! \f$ \Delta t_i \f$, using the default time-step controller, which keeps
   !! the time step it is given. Its time-step history starts saturated with
-  !! the last forward step, as the forward's starts with the first. At a fixed
-  !! time step this is the adjoint run as it always was.
+  !! the last forward step, as the forward's starts with the first.
+  !!
+  !! The exact transpose of the time scheme, `simulation%exact_adjoint`,
+  !! sets the columns of the adjoint level of state \f$ i \f$ from the
+  !! coefficients the forward run recorded before every step, and the
+  !! adjoint fluid takes them instead of those of its own history. The
+  !! sensitivity of state \f$ i \f$ is sampled after the step, which forms
+  !! the combined adjoint the state is paired with. Otherwise it is sampled
+  !! before the step, with the adjoint's own coefficients, which is exact at
+  !! a fixed time step only.
   !! @param this The problem.
   !! @param simulation The simulation, whose state recovery holds the forward
   !! run.
@@ -673,15 +683,22 @@ contains
     class(simulation_t), intent(inout) :: simulation
     class(design_t), intent(inout) :: design
     type(time_step_controller_t) :: dt_controller
+    type(adjoint_fluid_pnpn_t), pointer :: fluid_adj
     real(kind=dp) :: loop_start
     real(kind=rp) :: cfl
     real(kind=rp) :: total_time
+    real(kind=rp) :: ext_col(4), bdf_col(4)
     integer :: i, n
+    logical :: exact
 
     if (.not. allocated(simulation%state_recover)) then
        call neko_error("State recovery not initialized.")
     end if
     n = simulation%n_timesteps
+
+    exact = simulation%exact_adjoint
+    nullify(fluid_adj)
+    if (exact) call exact_adjoint_fluid(simulation, fluid_adj)
 
     ! The reset starts the adjoint's history from its initial time step,
     ! before the forward run chose its steps. Start it from equal steps of
@@ -708,17 +725,34 @@ contains
     do i = n, 1, -1
        ! restore primal field
        call simulation%state_recover%restore(i)
-       ! accumulate objective sensitivity
-       call this%accumulate_sensitivity_sample(design, simulation, i)
+       if (exact) then
+          call simulation%state_recover%get_adjoint_ext_column(i, ext_col)
+          call simulation%state_recover%get_adjoint_bdf_column(i, bdf_col)
+          call fluid_adj%set_exact_coeffs(ext_col, bdf_col)
+       else
+          ! accumulate objective sensitivity
+          call this%accumulate_sensitivity_sample(design, simulation, i)
+       end if
        ! step the adjoint backwards over forward step i
        simulation%adjoint_case%time%dt = simulation%state_recover%get_dt(i)
        call simulation_adjoint_step(simulation%adjoint_case, dt_controller, &
             cfl, loop_start, total_time)
+       if (exact) then
+          call this%accumulate_sensitivity_sample(design, simulation, i)
+       end if
     end do
 
     ! The initial state, paired with the adjoint state the run ends at
     call simulation%state_recover%restore(0)
+    if (exact) then
+       call simulation%state_recover%get_adjoint_ext_column(0, ext_col)
+       call fluid_adj%combine_adjoint(ext_col)
+    end if
     call this%accumulate_sensitivity_sample(design, simulation, 0)
+    if (exact) then
+       call fluid_adj%clear_exact_coeffs()
+       nullify(fluid_adj)
+    end if
 
     call profiler_end_region("Adjoint simulation")
 
@@ -730,32 +764,37 @@ contains
   !! unsteady run.
   !! @details This is the one place that decides how the sensitivity of an
   !! unsteady run is integrated in time. With the forward state \f$ u_i \f$
-  !! restored and the adjoint at \f$ \lambda_{i+1} \f$, before the adjoint
-  !! steps back over forward step \f$ i \f$:
-  !! - the explicit sensitivity of an objective at \f$ u_i \f$ is weighted by
-  !!   \f$ \Delta t_i \f$, as its value was;
-  !! - the coupling term \f$ (u_i, \lambda_{i+1}) \f$ of the augmented
-  !!   Lagrangian is weighted by \f$ \Delta t_i \f$ too at time order 2 and
-  !!   3, and at time order 1 by the step the adjoint took to
-  !!   \f$ \lambda_{i+1} \f$, \f$ \Delta t_{i+1} \f$, or at \f$ i = N \f$,
-  !!   where \f$ \lambda_{N+1} \f$ is the terminal condition, by the step the
-  !!   adjoint starts from, \f$ \Delta t_N \f$.
+  !! restored, the explicit sensitivity of an objective at \f$ u_i \f$ is
+  !! weighted by \f$ \Delta t_i \f$, as its value was. The coupling term of
+  !! the augmented Lagrangian comes from the explicit terms of the forward
+  !! steps \f$ i + 1 \f$ to \f$ i + 3 \f$, which apply the design to
+  !! \f$ u_i \f$. Its pairing depends on the time transpose of the adjoint:
+  !! - The exact transpose samples after the adjoint step over forward step
+  !!   \f$ i \f$. That step combines the adjoint levels those explicit terms
+  !!   enter, with their EXT column, into \f$ u^\dagger_{e,i} \f$, and the
+  !!   term \f$ (u_i, u^\dagger_{e,i}) \f$ is weighted by \f$ \Delta t_i \f$
+  !!   at every time order. This pairing is exact.
+  !! - The reverse replay samples before that step, with the adjoint at
+  !!   \f$ \lambda_{i+1} \f$. The term \f$ (u_i, \lambda_{i+1}) \f$ is
+  !!   weighted by \f$ \Delta t_i \f$ at time order 2 and 3, and at time
+  !!   order 1 by the step the adjoint took to \f$ \lambda_{i+1} \f$,
+  !!   \f$ \Delta t_{i+1} \f$, or at \f$ i = N \f$, where
+  !!   \f$ \lambda_{N+1} \f$ is the terminal condition, by the step the
+  !!   adjoint starts from, \f$ \Delta t_N \f$. At time order 1 step
+  !!   \f$ i + 1 \f$ alone applies the design to \f$ u_i \f$, so that
+  !!   weight is exact. At time order 2 and 3 no single weight is exact
+  !!   under a variable time step; measured against the exact discrete
+  !!   gradient, \f$ \Delta t_i \f$ is the closer by a constant factor.
   !!
-  !! The coupling term comes from the explicit terms of the forward steps
-  !! that apply the design to \f$ u_i \f$. At time order 1 that is step
-  !! \f$ i + 1 \f$ alone, so \f$ \Delta t_{i+1} \f$ is the exact weight. At
-  !! time order 2 and 3 the extrapolation applies it in the next three steps,
-  !! and no single weight is exact under a variable time step; measured
-  !! against the exact discrete gradient, \f$ \Delta t_i \f$ is the closer by
-  !! a constant factor. At a fixed time step every choice is the same.
-  !!
-  !! The initial state, \f$ i = 0 \f$, has the coupling term
-  !! \f$ (u_0, \lambda_1) \f$ only, weighted by \f$ \Delta t_1 \f$: the
-  !! first forward step applies the design to \f$ u_0 \f$ in its explicit
-  !! terms, but the value has no sample there. The time \f$ t_i \f$ and the
-  !! steps are those the forward run recorded. Every other sample spans
-  !! \f$ \Delta t_i \f$ of the normalisation, so that the sensitivity is
-  !! normalised by the same time as the value.
+  !! The initial state, \f$ i = 0 \f$, has the coupling term only, weighted
+  !! by \f$ \Delta t_1 \f$ and paired with the adjoint the run ends at: the
+  !! combination of the first three levels with the EXT column of the
+  !! initial state in the exact transpose, \f$ \lambda_1 \f$ in the reverse
+  !! replay. The first forward step applies the design to \f$ u_0 \f$ in its
+  !! explicit terms, but the value has no sample there. The time \f$ t_i \f$
+  !! and the steps are those the forward run recorded. Every other sample
+  !! spans \f$ \Delta t_i \f$ of the normalisation, so that the sensitivity
+  !! is normalised by the same time as the value.
   !! @param this The problem.
   !! @param design The design.
   !! @param simulation The simulation, whose state recovery holds the time
@@ -773,10 +812,11 @@ contains
 
     n = simulation%state_recover%get_n_timesteps()
     call simulation%state_recover%get_time_state(i, sample)
-    if (simulation%neko_case%fluid%ext_bdf%diffusion_time_order .eq. 1) then
-       coupling_weight = simulation%state_recover%get_dt(min(i + 1, n))
-    else
+    if (simulation%exact_adjoint .or. &
+         simulation%neko_case%fluid%ext_bdf%diffusion_time_order .ne. 1) then
        coupling_weight = simulation%state_recover%get_dt(max(i, 1))
+    else
+       coupling_weight = simulation%state_recover%get_dt(min(i + 1, n))
     end if
 
     do j = 1, this%n_objectives
@@ -795,6 +835,40 @@ contains
     end do
 
   end subroutine problem_accumulate_sensitivity_sample
+
+  !> The adjoint fluid of the exact transpose of the time scheme, checked
+  !! against what the transpose assumes.
+  !! @details The exact transpose starts from a zero adjoint past the last
+  !! step, which is the terminal condition of a time integral, and every
+  !! step forms the combined adjoint, which a frozen adjoint fluid does not.
+  !! @param simulation The simulation.
+  !! @param fluid_adj The adjoint fluid.
+  subroutine exact_adjoint_fluid(simulation, fluid_adj)
+    class(simulation_t), intent(in) :: simulation
+    type(adjoint_fluid_pnpn_t), pointer, intent(out) :: fluid_adj
+    real(kind=rp) :: terminal
+
+    nullify(fluid_adj)
+    select type (f => simulation%adjoint_fluid)
+    type is (adjoint_fluid_pnpn_t)
+       fluid_adj => f
+    end select
+
+    if (fluid_adj%freeze) then
+       call neko_error("The exact time transpose of the unsteady adjoint " // &
+            "does not support a frozen adjoint fluid, " // &
+            "case.adjoint_fluid.freeze_flow")
+    end if
+
+    terminal = field_glsc2(fluid_adj%u_adj, fluid_adj%u_adj) + &
+         field_glsc2(fluid_adj%v_adj, fluid_adj%v_adj) + &
+         field_glsc2(fluid_adj%w_adj, fluid_adj%w_adj) + &
+         field_glsc2(fluid_adj%p_adj, fluid_adj%p_adj)
+    if (terminal .gt. 0.0_rp) then
+       call neko_error("The exact time transpose of the unsteady adjoint " // &
+            "needs a zero case.adjoint_fluid.initial_condition")
+    end if
+  end subroutine exact_adjoint_fluid
 
   ! ========================================================================== !
   ! Update the objectives and constraints
