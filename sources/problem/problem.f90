@@ -59,9 +59,9 @@ module problem
   use case, only: case_t
   use simcomp_executor, only: neko_simcomps
   use simulation_adjoint, only: simulation_adjoint_init, &
-       simulation_adjoint_step, simulation_adjoint_finalize, &
-       simulation_adjoint_set_start_dt
+       simulation_adjoint_step, simulation_adjoint_finalize
   use simulation, only: simulation_init, simulation_step, simulation_finalize
+  use neko_ext, only: start_time_history
   use mpi_f08, only: MPI_WTIME
   use profiler, only: profiler_start_region, profiler_end_region
   use utils, only: neko_error
@@ -634,21 +634,6 @@ contains
 
   end subroutine forward_first_dt
 
-  !> Start the time-step history of a time state from equal steps.
-  !! @param time The time state, before its first step.
-  !! @param dt The time step of the history.
-  subroutine start_time_history(time, dt)
-    type(time_state_t), intent(inout) :: time
-    real(kind=dp), intent(in) :: dt
-    integer :: i
-
-    time%dtlag = dt
-    do i = 1, size(time%tlag)
-       time%tlag(i) = time%t - i * dt
-    end do
-
-  end subroutine start_time_history
-
   !> Warn about objectives whose time window never overlapped the run.
   !!
   !! Such an objective accumulates nothing and reports zero, which is easy to
@@ -696,7 +681,12 @@ contains
     end if
     n = simulation%n_timesteps
 
-    call simulation_adjoint_set_start_dt(simulation%adjoint_case, &
+    ! The reset starts the adjoint's history from its initial time step,
+    ! before the forward run chose its steps. Start it from equal steps of
+    ! the last forward step instead, which the adjoint takes first, so that
+    ! the history is saturated with equal steps at both ends of the run.
+    simulation%adjoint_case%time%dt = simulation%state_recover%get_dt(n)
+    call start_time_history(simulation%adjoint_case%time, &
          simulation%state_recover%get_dt(n))
     call simulation_adjoint_init(simulation%adjoint_case, dt_controller)
 

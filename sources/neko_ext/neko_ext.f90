@@ -43,8 +43,9 @@ module neko_ext
   use case, only: case_t
   use adjoint_case, only: adjoint_case_t
   use json_utils, only: json_get, json_get_or_default
-  use num_types, only: rp
+  use num_types, only: rp, dp
   use simcomp_executor, only: neko_simcomps
+  use time_state, only: time_state_t
   use flow_ic, only: set_flow_ic
   use scalar_ic, only: set_scalar_ic
   use field, only: field_t
@@ -72,7 +73,7 @@ module neko_ext
   ! ========================================================================= !
   private
   public :: reset, reset_adjoint, field_to_vector, vector_to_field, &
-       get_scalar_indicies
+       get_scalar_indicies, start_time_history
 
 contains
 
@@ -546,6 +547,26 @@ contains
     end if
 
   end subroutine get_scalar_indicies
+
+  !> Start the time-step history of a time state from equal steps.
+  !! @details A reset starts the time scheme at full order, so the first
+  !! step uses the whole history. With equal steps of the step a run starts
+  !! with, its first step is the one of a run at that fixed step. The forward
+  !! of an unsteady problem starts from its first step, and the adjoint,
+  !! replaying the forward steps in reverse, from the last.
+  !! @param time The time state, before its first step.
+  !! @param dt The time step of the history.
+  subroutine start_time_history(time, dt)
+    type(time_state_t), intent(inout) :: time
+    real(kind=dp), intent(in) :: dt
+    integer :: i
+
+    time%dtlag = dt
+    do i = 1, size(time%tlag)
+       time%tlag(i) = time%t - i * dt
+    end do
+
+  end subroutine start_time_history
 
   ! ========================================================================= !
   ! Private routines
