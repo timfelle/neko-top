@@ -34,7 +34,6 @@
 !
 !> @brief Checkpoint-based state recovery for adjoint runs.
 module state_recover_checkpoint
-  use num_types, only: rp
   use case, only: case_t
   use json_file_module, only: json_file
   use json_utils, only: json_get, json_get_or_default
