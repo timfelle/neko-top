@@ -56,6 +56,8 @@ module problem
   use time_state, only: time_state_t
   use vector_math, only: vector_add2, vector_cfill
   use time_step_controller, only: time_step_controller_t
+  use case, only: case_t
+  use simcomp_executor, only: neko_simcomps
   use simulation_adjoint, only: simulation_adjoint_init, &
        simulation_adjoint_step, simulation_adjoint_finalize, &
        simulation_adjoint_set_start_dt
@@ -521,7 +523,7 @@ contains
     class(simulation_t), intent(inout) :: simulation
     class(design_t), intent(inout) :: design
     type(time_step_controller_t) :: dt_controller
-    real(kind=dp) :: loop_start
+    real(kind=dp) :: loop_start, dt_first
     logical :: replay
 
     if (.not. allocated(simulation%state_recover)) then
@@ -535,7 +537,19 @@ contains
     if (.not. replay) call simulation%init_dt_controller(dt_controller)
 
     call simulation%reset()
+    if (replay) then
+       simulation%neko_case%time%dt = &
+            simulation%state_recover%get_prescribed_dt(1)
+    end if
     call simulation_init(simulation%neko_case, dt_controller)
+
+    ! The reset starts the time scheme at full order, so the first step uses
+    ! the whole time-step history. Start it from equal steps of the first
+    ! step, the same in a replay as in the run that recorded the grid.
+    if (replay .or. dt_controller%is_variable_dt) then
+       call forward_first_dt(simulation%neko_case, dt_controller, dt_first)
+       call start_time_history(simulation%neko_case%time, dt_first)
+    end if
 
     ! Reset the objective value to zero
     call this%reset_objectives()
@@ -566,6 +580,53 @@ contains
     call simulation_finalize(simulation%neko_case)
 
   end subroutine problem_run_forward_unsteady
+
+  !> The time step the first step of a forward run is going to take.
+  !! @details Computed on copies of the time-step controller and the time
+  !! state, the way `simulation_step` computes it: the step the controller
+  !! chooses, fitted to the next output time or to the end time with
+  !! `exact_output_time`. The case holds the fields and the time the first
+  !! step starts from, so the step then takes the same time step. With the
+  !! default controller, as in a replay, it is the time step the time state
+  !! holds.
+  !! @param neko_case The case, about to take its first step.
+  !! @param dt_controller The time-step controller of the run.
+  !! @param dt The time step of the first step.
+  subroutine forward_first_dt(neko_case, dt_controller, dt)
+    type(case_t), intent(inout) :: neko_case
+    type(time_step_controller_t), intent(in) :: dt_controller
+    real(kind=dp), intent(out) :: dt
+    type(time_step_controller_t) :: controller
+    type(time_state_t) :: time
+    real(kind=dp) :: cfl
+
+    controller = dt_controller
+    time = neko_case%time
+    cfl = neko_case%fluid%compute_cfl(time%dt)
+    call controller%set_dt(time, cfl)
+    if (controller%exact_output_time) then
+       call controller%land(time, &
+            min(neko_case%output_controller%time_to_next(time), &
+            neko_simcomps%time_to_next(time)))
+    end if
+    dt = time%dt
+
+  end subroutine forward_first_dt
+
+  !> Start the time-step history of a time state from equal steps.
+  !! @param time The time state, before its first step.
+  !! @param dt The time step of the history.
+  subroutine start_time_history(time, dt)
+    type(time_state_t), intent(inout) :: time
+    real(kind=dp), intent(in) :: dt
+    integer :: i
+
+    time%dtlag = dt
+    do i = 1, size(time%tlag)
+       time%tlag(i) = time%t - i * dt
+    end do
+
+  end subroutine start_time_history
 
   !> Warn about objectives whose time window never overlapped the run.
   !!
