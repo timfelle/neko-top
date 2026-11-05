@@ -206,6 +206,19 @@ Currently, we have added tests for the following components:
   and the tolerance is `5e-3`, as for the case without a window. With the
   forcing scaled but not gated the error was `-1.54e-1`; with the forcing
   neither gated nor scaled, `+3.62e-2`.
+- `brinkman_dissipation_objective_t`, unsteady with a variable timestep and a
+  strong convection (`unsteady_variable_timestep_convection.case`) — the
+  variable-timestep case with an inflow of `2.0`, `mu` of `5e-4` and `rho` of
+  `1.7`, on the same grid of 15 steps of 10 sizes. It gates how the exact
+  transpose applies the adjoint convection, which depends on the forward state
+  of the level: once, to the combined adjoint velocity at the restored forward
+  state, scaled by `rho`. The error at the smallest perturbation is
+  `+3.05e-6`, which is first-order truncation (`+3.04e-5` at `1e-3`), and the
+  tolerance is `1e-4`. With the convection left in the extrapolation of the
+  other explicit terms, as the reverse replay has it, the error was
+  `+1.12e-3`, against `-1.80e-4` for `unsteady_variable_timestep.case`; with
+  the convection added without `rho`, which no case with a `rho` of 1 sees,
+  `+5.17e-4`. The reverse replay gives `+1.89e-3`.
 - `brinkman_dissipation_rejection` — checks the invalid mixed-dealias
   configuration directly through Neko's pFUnit error-redirection fixture. A
   mixed setting has no value its sensitivity is the gradient of, so the
