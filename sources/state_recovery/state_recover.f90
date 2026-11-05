@@ -136,6 +136,14 @@ module state_recover
      !! state.
      procedure, pass(this), public, non_overridable :: get_scheme_orders => &
           state_recover_get_scheme_orders
+     !> BDF coefficients of the exact transpose of the forward run for the
+     !! adjoint of a recorded state.
+     procedure, pass(this), public, non_overridable :: &
+          get_adjoint_bdf_column => state_recover_get_adjoint_bdf_column
+     !> EXT coefficients of the exact transpose of the forward run for the
+     !! adjoint of a recorded state.
+     procedure, pass(this), public, non_overridable :: &
+          get_adjoint_ext_column => state_recover_get_adjoint_ext_column
      !> Time state as Neko had it after a recorded step.
      procedure, pass(this), public, non_overridable :: get_time_state => &
           state_recover_get_time_state
@@ -466,6 +474,67 @@ contains
     ndiff = this%order_hist(1, i)
     nadv = this%order_hist(2, i)
   end subroutine state_recover_get_scheme_orders
+
+  !> BDF coefficients of the exact transpose of the forward run for the
+  !! adjoint of a recorded state.
+  !! @details The adjoint of state \f$ m \f$ is the adjoint unknown paired
+  !! with \f$ u_m \f$. Step \f$ m \f$ solves for \f$ u_m \f$ with its own
+  !! \f$ b_1^{(m)} / \Delta t_m \f$, and the BDF histories of steps
+  !! \f$ m + 1 \f$ to \f$ m + 3 \f$ weight \f$ u_m \f$ by their
+  !! \f$ b_2 \f$, \f$ b_3 \f$ and \f$ b_4 \f$, the coefficients of
+  !! `get_bdf_coeffs`. The column is
+  !! \f$ (b_1^{(m)}, b_2^{(m+1)}, b_3^{(m+2)}, b_4^{(m+3)}) \f$, with 0 for a
+  !! step past the last one. Divided by the adjoint's \f$ \Delta t_m \f$
+  !! alone, as Neko's BDF terms are, it is the exact transpose, because the
+  !! adjoint is scaled by \f$ 1 / \Delta t_m \f$, which cancels the
+  !! \f$ \Delta t_{m+j} \f$ of each step.
+  !! @param[in] this State recovery instance.
+  !! @param[in] m Index of the state, from 1.
+  !! @param[out] col The column, \f$ b_{j+1}^{(m+j)} \f$ in element
+  !! \f$ j + 1 \f$.
+  subroutine state_recover_get_adjoint_bdf_column(this, m, col)
+    class(state_recover_t), intent(in) :: this
+    integer, intent(in) :: m
+    real(kind=rp), intent(out) :: col(4)
+    integer :: j
+
+    call state_recover_check_index(this, m, 1)
+    col = 0.0_rp
+    col(1) = this%bdf_hist(1, m)
+    do j = 1, 3
+       if (m + j .le. this%n_timesteps) col(j + 1) = this%bdf_hist(j + 1, m + j)
+    end do
+  end subroutine state_recover_get_adjoint_bdf_column
+
+  !> EXT coefficients of the exact transpose of the forward run for the
+  !! adjoint of a recorded state.
+  !! @details The explicit terms of steps \f$ m + 1 \f$ to \f$ m + 3 \f$
+  !! extrapolate those evaluated at \f$ u_m \f$ with their \f$ a_1 \f$,
+  !! \f$ a_2 \f$ and \f$ a_3 \f$, the coefficients of `get_ext_coeffs`.
+  !! In the adjoint scaled by \f$ 1 / \Delta t_m \f$ these become
+  !! \f$ a_j^{(m+j)} \Delta t_{m+j} / \Delta t_m \f$, with 0 for a step past
+  !! the last one. The initial state, \f$ m = 0 \f$, was produced by no
+  !! step, and \f$ \Delta t_1 \f$ takes the place of \f$ \Delta t_m \f$.
+  !! @param[in] this State recovery instance.
+  !! @param[in] m Index of the state, 0 for the initial state.
+  !! @param[out] col The column, \f$ a_j^{(m+j)} \Delta t_{m+j} /
+  !! \Delta t_m \f$ in element \f$ j \f$ and 0 in element 4.
+  subroutine state_recover_get_adjoint_ext_column(this, m, col)
+    class(state_recover_t), intent(in) :: this
+    integer, intent(in) :: m
+    real(kind=rp), intent(out) :: col(4)
+    real(kind=dp) :: dt_m
+    integer :: j
+
+    call state_recover_check_index(this, m, 0)
+    col = 0.0_rp
+    do j = 1, 3
+       if (m + j .gt. this%n_timesteps) exit
+       dt_m = this%dt_hist(max(m, 1))
+       col(j) = real(real(this%ext_hist(j, m + j), dp) * &
+            this%dt_hist(m + j) / dt_m, rp)
+    end do
+  end subroutine state_recover_get_adjoint_ext_column
 
   !> Time state as Neko had it after a recorded step.
   !! @details Fills `t`, `dt`, `tstep` and the histories `dtlag` and `tlag`

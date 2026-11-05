@@ -128,6 +128,15 @@ add_pfunit_ctest(state_recover_time_grid
     MAX_PES 2
 )
 
+# The column coefficients of the exact transpose, gathered from a recorded
+# time grid. It needs no case and runs on one rank.
+add_pfunit_ctest(state_recover_adjoint_columns
+    TEST_SOURCES
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_state_recover_adjoint_columns.pf
+    LINK_LIBRARIES Neko-TOP::neko-top
+    MAX_PES 1
+)
+
 set(CHECKPOINT_RESTORE_ENV
     "NEKO_LOG_FILE=checkpoint_restore_consistency.log;OMP_NUM_THREADS=1")
 set(CHECKPOINT_GATING_ENV
@@ -136,6 +145,8 @@ set(CHECKPOINT_VARIABLE_DT_ENV
     "NEKO_LOG_FILE=checkpoint_restore_consistency_variable_dt.log;OMP_NUM_THREADS=1")
 set(TIME_GRID_ENV
     "NEKO_LOG_FILE=state_recover_time_grid.log;OMP_NUM_THREADS=1")
+set(ADJOINT_COLUMNS_ENV
+    "NEKO_LOG_FILE=state_recover_adjoint_columns.log;OMP_NUM_THREADS=1")
 
 set_tests_properties(checkpoint_restore_consistency PROPERTIES
     LABELS "unit;checkpointing"
@@ -162,10 +173,17 @@ set_tests_properties(state_recover_time_grid PROPERTIES
     TIMEOUT 300
 )
 
+set_tests_properties(state_recover_adjoint_columns PROPERTIES
+    LABELS "unit;checkpointing"
+    ENVIRONMENT "${ADJOINT_COLUMNS_ENV}"
+    TIMEOUT 120
+)
+
 add_dependencies(Unit checkpoint_restore_consistency)
 add_dependencies(Unit checkpoint_end_of_run_gating)
 add_dependencies(Unit checkpoint_restore_consistency_variable_dt)
 add_dependencies(Unit state_recover_time_grid)
+add_dependencies(Unit state_recover_adjoint_columns)
 
 add_dependencies(checkpoint_restore_consistency
     checkpointing_case
@@ -200,6 +218,9 @@ if (CMAKE_Fortran_COMPILER_ID STREQUAL "GNU")
         $<$<COMPILE_LANGUAGE:Fortran>:-Wno-unused-variable>
     )
     target_compile_options(state_recover_time_grid PRIVATE
+        $<$<COMPILE_LANGUAGE:Fortran>:-Wno-unused-variable>
+    )
+    target_compile_options(state_recover_adjoint_columns PRIVATE
         $<$<COMPILE_LANGUAGE:Fortran>:-Wno-unused-variable>
     )
 endif()
