@@ -47,10 +47,11 @@ changes the step, which a replayed step, and every adjoint step, does not do.
 Nor is an MPMD run, in which the controller agrees every step with the
 coupled simulations.
 
-At a fixed time step the adjoint is the exact discrete adjoint of the forward
-run. Under a variable time step it is consistent with the forward run, but not
-its exact transpose, and the difference grows with how much the time step
-changes from one step to the next; see [the adjoint under a variable time
+At a fixed time step, and for an objective without a time window, the adjoint
+is the exact discrete adjoint of the forward run. Under a variable time step it
+is consistent with the forward run, but not its exact transpose, and the
+difference grows with how much the time step changes from one step to the
+next; see [the adjoint under a variable time
 step](@ref adjoint-variable-time-step).
 
 The sensitivity is the gradient on the time grid of the forward run: how the

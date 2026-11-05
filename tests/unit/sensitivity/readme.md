@@ -134,14 +134,15 @@ Currently, we have added tests for the following components:
   (`unsteady_variable_timestep.case`) — time order 3, starting at rest, with
   `exact_output_time`. The step ramps from `timestep` towards `max_timestep`
   and is fitted to the end time on the way, so the frozen grid holds 15 steps
-  of 10 different sizes, from `1e-3` to `3.69e-3`. The driver checks that it
-  does. Under a variable timestep the replayed adjoint is consistent with
-  the forward run, not its exact transpose: the error at the smallest
-  perturbation is `+2.17e-3`, and the tolerance is `5e-3`. An adjoint that
-  takes the mean step instead of replaying the grid gave `+7.39e-2`, and one
-  that weights the coupling term by `dt_(i+1)` at this time order, as at
-  time order 1, `-1.46e-2`. The same case at a fixed step of `2.5e-3` gives
-  `+3.5e-6`.
+  of 10 different sizes, from `1e-3` to `3.69e-3`. The driver checks only
+  that the grid holds at least two different steps and that its first step
+  is not Neko's placeholder of 1. Under a variable timestep the replayed
+  adjoint is consistent with the forward run, not its exact transpose: the
+  error at the smallest perturbation is `+2.17e-3`, and the tolerance is
+  `5e-3`. An adjoint that takes the mean step instead of replaying the grid
+  gave `+7.39e-2`, and one that weights the coupling term by `dt_(i+1)` at
+  this time order, as at time order 1, `-1.46e-2`. The same case at a fixed
+  step of `2.5e-3` gives `+3.5e-6`.
 - `brinkman_dissipation_objective_t`, unsteady with a variable timestep that
   the CFL number limits (`unsteady_variable_timestep_cfl_limited.case`) — the
   same case starting at the inflow velocity, with a `target_cfl` of `0.02` and
