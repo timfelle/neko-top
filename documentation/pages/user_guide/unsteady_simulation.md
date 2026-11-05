@@ -35,13 +35,14 @@ With `"unsteady": true`, a variable time step needs
 
 - `case.time.exact_output_time` set to `true`, so that every run ends exactly
   at the end time, and
-- `case.time.timestep` or `case.time.max_timestep`, which sets the step every
-  run starts from.
+- `case.time.timestep` or `case.time.max_timestep`, which caps the first step
+  of every run.
 
 A case without them stops with an error. Krylov projection spaces,
 `projection_space_size`, are not supported with a variable time step in an
 unsteady problem: they are cleared when the time-step controller changes the
-step, which a replayed step does not do.
+step, which a replayed step does not do. Nor is an MPMD run, in which the
+controller agrees every step with the coupled simulations.
 
 At a fixed time step the adjoint is the exact discrete adjoint of the forward
 run. Under a variable time step it is consistent with the forward run, but not

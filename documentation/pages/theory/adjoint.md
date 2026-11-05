@@ -274,10 +274,21 @@ With a variable time step, forward step \f$n\f$ advances from
 recovery records every \f$t_n\f$ and \f$\Delta t_n\f$, and the adjoint
 replays them in reverse: the adjoint step that goes back over forward step
 \f$n\f$ takes \f$\Delta t_n\f$, with the BDF and EXT coefficients of the
-adjoint's own history of steps, and every term of the gradient takes its time
-and its weight from the record. Its history starts from equal steps of
-\f$\Delta t_N\f$, the way the forward's starts from equal steps of its
-initial time step.
+adjoint's own history of steps. Its history starts from equal steps of
+\f$\Delta t_N\f$, the way the forward's starts from equal steps of
+\f$\Delta t_1\f$.
+
+The implementation forms the gradient as a time integral, with the adjoint
+velocity of the time-continuous adjoint equation and a weight for every term
+that it takes, with the time, from the record. The explicit derivative of
+\f$f\f$ at \f$\mathbf{u}_n\f$ is weighted by \f$\Delta t_n\f$, as
+\f$F\f$ samples it. The coupling of \f$\mathbf{u}_n\f$ with
+\f$\mathbf{u}_{n+1}^{\dagger}\f$ is weighted by \f$\Delta t_{n+1}\f$ at
+time order 1, where forward step \f$n+1\f$ alone applies \f$\chi\f$ to
+\f$\mathbf{u}_n\f$, and by \f$\Delta t_n\f$ at time order 2 and 3, where
+the extrapolation applies it in three steps, no single weight is exact, and
+\f$\Delta t_n\f$ is the closer one. At a constant time step every weight is
+the step of the run.
 
 At a constant time step the forward and the reversed stencils are the same,
 and the replayed adjoint, with the \f$n = 0\f$ term above, is the exact
