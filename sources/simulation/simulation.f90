@@ -156,7 +156,7 @@ contains
     integer :: i, n_scalars
     character(len=:), allocatable :: output_directory, precision_s, file_format
     integer :: precision
-    logical :: unsteady, subdivide, variable_dt, found
+    logical :: unsteady, subdivide
 
     ! initialize the primal Neko objects
     call this%neko_case%init(parameters)
@@ -278,17 +278,6 @@ contains
 
     ! State recovery is only needed for unsteady runs.
     if (this%unsteady) then
-       ! The unsteady adjoint restores the forward states one step at a
-       ! time and assumes every step had the same dt. The flag is read
-       ! directly: a time-step controller would first reject a missing
-       ! `timestep`, which is beside the point here.
-       variable_dt = .false.
-       call parameters%get('case.time.variable_timestep', variable_dt, found)
-       if (found .and. variable_dt) then
-          call neko_error("case.time.variable_timestep is not supported " // &
-               "for unsteady problems")
-       end if
-
        call simulation_init_unsteady_time(this)
 
        call json_get(parameters, 'state_recovery', state_recovery_params)
