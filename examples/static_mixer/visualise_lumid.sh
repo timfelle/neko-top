@@ -51,28 +51,20 @@ result_root=results/static_mixer
 gifmaker=scripts/python/gif_maker.py
 visualiser=examples/static_mixer/visualise.py
 
-experiments=(
-    petsc/128_re_1000_pe_1000
-    petsc/128_re_1500_pe_1500
-    petsc/64_re_1000_pe_1000
-    petsc/128_re_3000_pe_3000
-    petsc/64_re_1500_pe_1500
-    petsc/64_re_3000_pe_3000
-    petsc_phmg/128_re_1000_pe_1000
-    petsc_phmg/128_re_1500_pe_1500
-    petsc_phmg/128_re_3000_pe_3000
-    petsc_phmg/64_re_1000_pe_1000
-    petsc_phmg/64_re_1500_pe_1500
-    petsc_phmg/64_re_3000_pe_3000
-)
+experiments=$(find $result_root -type d | sort)
+
 colors=(
     black
     white
 )
 
 for exp in "${experiments[@]}"; do
+    exp=${exp##$result_root/}
     if [[ ! -d "$result_root/$exp" ]]; then
         echo "Results for experiment $exp not found. Skipping visualization."
+        continue
+    elif [[ ! -f "$result_root/$exp/brinkman_0.vtkhdf" ]]; then
+        echo "Required file brinkman_0.vtkhdf for experiment $exp not found. Skipping visualization."
         continue
     else
         echo "Visualizing results for experiment $exp."
