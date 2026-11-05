@@ -841,17 +841,25 @@ contains
   !! @details The exact transpose starts from a zero adjoint past the last
   !! step, which is the terminal condition of a time integral, and every
   !! step forms the combined adjoint, which a frozen adjoint fluid does not.
+  !! It takes every coefficient from the record of the forward run, and it
+  !! is verified for forward steps at the time orders of the case, which the
+  !! reset of the forward run gives every step from the first. A recorded
+  !! step of other orders stops the run.
   !! @param simulation The simulation.
   !! @param fluid_adj The adjoint fluid.
   subroutine exact_adjoint_fluid(simulation, fluid_adj)
     class(simulation_t), intent(in) :: simulation
     type(adjoint_fluid_pnpn_t), pointer, intent(out) :: fluid_adj
+    character(len=256) :: msg
     real(kind=rp) :: terminal
+    integer :: i, ndiff, nadv
 
     nullify(fluid_adj)
     select type (f => simulation%adjoint_fluid)
     type is (adjoint_fluid_pnpn_t)
        fluid_adj => f
+    class default
+       call neko_error("The exact time transpose needs adjoint_fluid_pnpn_t")
     end select
 
     if (fluid_adj%freeze) then
@@ -866,8 +874,23 @@ contains
          field_glsc2(fluid_adj%p_adj, fluid_adj%p_adj)
     if (terminal .gt. 0.0_rp) then
        call neko_error("The exact time transpose of the unsteady adjoint " // &
-            "needs a zero case.adjoint_fluid.initial_condition")
+            "needs a zero case.adjoint_fluid.initial_condition, or set " // &
+            "case.adjoint_fluid.time_transpose to ""reverse""")
     end if
+
+    do i = 1, simulation%state_recover%get_n_timesteps()
+       call simulation%state_recover%get_scheme_orders(i, ndiff, nadv)
+       if (ndiff .ne. fluid_adj%ext_bdf%diffusion_time_order .or. &
+            nadv .ne. fluid_adj%ext_bdf%advection_time_order) then
+          write(msg, '(A,I0,A,I0,A,I0,A,I0,A,I0)') "The exact time " // &
+               "transpose of the unsteady adjoint is verified for BDF ", &
+               fluid_adj%ext_bdf%diffusion_time_order, " and EXT ", &
+               fluid_adj%ext_bdf%advection_time_order, &
+               " in every step, but forward step ", i, " took BDF ", &
+               ndiff, " and EXT ", nadv
+          call neko_error(trim(msg))
+       end if
+    end do
   end subroutine exact_adjoint_fluid
 
   ! ========================================================================== !
