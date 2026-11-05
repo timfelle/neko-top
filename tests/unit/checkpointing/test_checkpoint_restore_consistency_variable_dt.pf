@@ -126,13 +126,13 @@ contains
     n = 0
     call take_snapshot(sim, n, p_fields, u_fields, v_fields, w_fields)
     live(n) = sim%neko_case%time
-    call chkp%save(dt_controller)
+    call chkp%save()
     do while (.not. sim%neko_case%time%is_done() .and. n .lt. max_states - 1)
        n = n + 1
        call simulation_step(sim%neko_case, dt_controller)
        call take_snapshot(sim, n, p_fields, u_fields, v_fields, w_fields)
        live(n) = sim%neko_case%time
-       call chkp%save(dt_controller)
+       call chkp%save()
     end do
     call simulation_finalize(sim%neko_case)
 

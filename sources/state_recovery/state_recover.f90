@@ -49,7 +49,6 @@ module state_recover
   use case, only: case_t
   use json_file_module, only: json_file
   use time_state, only: time_state_t
-  use time_step_controller, only: time_step_controller_t, LANDING_TOL
   use utils, only: neko_error
   implicit none
   private
@@ -77,9 +76,6 @@ module state_recover
      !> Time steps that produced the recorded states, \f$ \Delta t_1 \f$ to
      !! \f$ \Delta t_N \f$.
      real(kind=dp), allocatable :: dt_hist(:)
-     !> Whether the time step changed at each step, as the time-step
-     !! controller flags it for the Krylov projection spaces.
-     logical, allocatable :: dt_changed(:)
      !> The time step of the time state before the first step.
      real(kind=dp) :: dt0 = 0.0_dp
      !> The time-step history before the first step, as the first step
@@ -116,9 +112,6 @@ module state_recover
      !> Time step that produced a recorded state.
      procedure, pass(this), public, non_overridable :: get_dt => &
           state_recover_get_dt
-     !> Whether the time step changed at a recorded step.
-     procedure, pass(this), public, non_overridable :: get_dt_changed => &
-          state_recover_get_dt_changed
      !> Time of the last recorded state.
      procedure, pass(this), public, non_overridable :: get_end_time => &
           state_recover_get_end_time
@@ -173,12 +166,9 @@ module state_recover
      !! the initial condition, restored as state 0. Saved after a step, it is
      !! the next state. Either way its time is recorded.
      !! @param[inout] this State recovery instance.
-     !! @param[in] dt_controller Time-step controller of the run, whose flag
-     !! for a change of the time step is recorded. Optional.
-     subroutine state_recover_save(this, dt_controller)
-       import state_recover_t, time_step_controller_t
+     subroutine state_recover_save(this)
+       import state_recover_t
        class(state_recover_t), intent(inout) :: this
-       type(time_step_controller_t), intent(in), optional :: dt_controller
      end subroutine state_recover_save
 
      !> Restore forward state for adjoint.
@@ -233,7 +223,6 @@ contains
 
     if (allocated(this%t_hist)) deallocate(this%t_hist)
     if (allocated(this%dt_hist)) deallocate(this%dt_hist)
-    if (allocated(this%dt_changed)) deallocate(this%dt_changed)
     if (allocated(this%prescribed_dt)) deallocate(this%prescribed_dt)
 
     this%n_timesteps = 0
@@ -268,16 +257,10 @@ contains
   !! from order zero.
   !! @param[inout] this State recovery instance.
   !! @param[in] time The time state of the run.
-  !! @param[in] dt_controller Time-step controller of the run. Its flag for a
-  !! change of the time step is recorded if it varies the time step;
-  !! otherwise, and without it, a step counts as a change if it differs
-  !! from the previous one by more than Neko's landing tolerance. Optional.
-  subroutine state_recover_record_time(this, time, dt_controller)
+  subroutine state_recover_record_time(this, time)
     class(state_recover_t), intent(inout) :: this
     type(time_state_t), intent(in) :: time
-    type(time_step_controller_t), intent(in), optional :: dt_controller
     integer :: n
-    logical :: flagged
 
     n = this%n_timesteps
     call state_recover_ensure_capacity(this, n)
@@ -297,22 +280,6 @@ contains
        this%dtlag0(1:9) = time%dtlag(2:10)
        this%tlag0(1:9) = time%tlag(2:10)
     end if
-
-    flagged = .false.
-    if (present(dt_controller)) then
-       if (dt_controller%is_variable_dt) then
-          this%dt_changed(n) = dt_controller%dt_last_change .eq. 0
-          flagged = .true.
-       end if
-    end if
-    if (.not. flagged) then
-       if (n .eq. 1) then
-          this%dt_changed(n) = .true.
-       else
-          this%dt_changed(n) = abs(this%dt_hist(n) - this%dt_hist(n - 1)) &
-               .gt. LANDING_TOL * abs(this%dt_hist(n - 1))
-       end if
-    end if
   end subroutine state_recover_record_time
 
   !> Make room in the time grid for state `n`, doubling the capacity.
@@ -322,17 +289,14 @@ contains
     class(state_recover_t), intent(inout) :: this
     integer, intent(in) :: n
     real(kind=dp), allocatable :: t_tmp(:), dt_tmp(:)
-    logical, allocatable :: changed_tmp(:)
     integer :: capacity, old_capacity
 
     if (.not. allocated(this%dt_hist)) then
        capacity = max(TIME_GRID_INITIAL_CAPACITY, n)
        allocate(this%t_hist(0:capacity))
        allocate(this%dt_hist(capacity))
-       allocate(this%dt_changed(capacity))
        this%t_hist = 0.0_dp
        this%dt_hist = 0.0_dp
-       this%dt_changed = .false.
        return
     end if
 
@@ -342,16 +306,12 @@ contains
     capacity = max(2 * old_capacity, n)
     allocate(t_tmp(0:capacity))
     allocate(dt_tmp(capacity))
-    allocate(changed_tmp(capacity))
     t_tmp = 0.0_dp
     dt_tmp = 0.0_dp
-    changed_tmp = .false.
     t_tmp(0:old_capacity) = this%t_hist
     dt_tmp(1:old_capacity) = this%dt_hist
-    changed_tmp(1:old_capacity) = this%dt_changed
     call move_alloc(t_tmp, this%t_hist)
     call move_alloc(dt_tmp, this%dt_hist)
-    call move_alloc(changed_tmp, this%dt_changed)
   end subroutine state_recover_ensure_capacity
 
   !> Stop with an error if state `i` has no recorded time.
@@ -400,19 +360,6 @@ contains
     call state_recover_check_index(this, i, 1)
     dt = this%dt_hist(i)
   end function state_recover_get_dt
-
-  !> Whether the time step changed at a recorded step, as the time-step
-  !! controller flagged it for the Krylov projection spaces.
-  !! @param[in] this State recovery instance.
-  !! @param[in] i Index of the step, from 1.
-  function state_recover_get_dt_changed(this, i) result(changed)
-    class(state_recover_t), intent(in) :: this
-    integer, intent(in) :: i
-    logical :: changed
-
-    call state_recover_check_index(this, i, 1)
-    changed = this%dt_changed(i)
-  end function state_recover_get_dt_changed
 
   !> Time of the last recorded state.
   !! @param[in] this State recovery instance.

@@ -567,7 +567,7 @@ contains
     simulation%n_timesteps = 0
     this%run_time = 0.0_xp
     ! save the initial state
-    call simulation%state_recover%save(dt_controller)
+    call simulation%state_recover%save()
     do while (.not. simulation%neko_case%time%is_done())
        simulation%n_timesteps = simulation%n_timesteps + 1
        if (replay) then
@@ -592,7 +592,7 @@ contains
        ! accumulate objective value
        call this%accumulate_objectives(design, simulation%neko_case%time)
        ! save a checkpoint
-       call simulation%state_recover%save(dt_controller)
+       call simulation%state_recover%save()
     end do
     call profiler_end_region("Forward simulation")
 
