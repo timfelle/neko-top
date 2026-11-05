@@ -72,11 +72,9 @@ Currently, we have added tests for the following components:
   `chi * dt` below 20/21, and `chi` reaches 100 here. The driver also
   checks that the adjoint's clock did stop short, so that the check cannot
   pass vacuously.
-- The guards against a variable timestep in an unsteady problem
-  (`unsteady_variable_timestep.case`) and against a variable timestep
-  without the `timestep` that caps its first step
-  (`variable_timestep_without_timestep.case`). They are not in `test_list`:
-  each passes only if the run stops with its error.
+- The guard against a variable timestep without the `timestep` that caps its
+  first step (`variable_timestep_without_timestep.case`). It is not in
+  `test_list`: it passes only if the run stops with its error.
 - `brinkman_dissipation_objective_t`, unsteady
   (`unsteady_brinkman_dissipation.case`) — 20 time steps at polynomial order
   3, with a PDE filter and the objective's default over-integration. It checks
@@ -108,6 +106,17 @@ Currently, we have added tests for the following components:
   smallest perturbation was `-4.34e-2`; with it, it is `-1.72e-5`, which is
   first-order truncation (`-1.71e-4` at `1e-3`). The tolerance of `1e-4` lies
   between the two. From rest the sample is zero, so no other case sees it.
+- `brinkman_dissipation_objective_t`, unsteady with a variable timestep
+  (`unsteady_variable_timestep.case`) — time order 3, starting at rest, with
+  `exact_output_time`. The step ramps from `timestep` towards `max_timestep`
+  and is fitted to the end time on the way, so the frozen grid holds 15 steps
+  of 10 different sizes, from `1e-3` to `3.69e-3`. The driver checks that it
+  does. It is not in `test_list`. The error at the smallest perturbation is
+  `-1.46e-2`: under a variable timestep the replayed adjoint is consistent
+  with the forward run, not its exact transpose. Time order 1 on the same
+  grid gives `-3.65e-3`, an adjoint that takes the mean step instead of
+  replaying the grid `+7.39e-2`, and the same case at a fixed step of
+  `2.5e-3` `+3.5e-6`.
 - `brinkman_dissipation_rejection` — checks the invalid mixed-dealias
   configuration directly through Neko's pFUnit error-redirection fixture. A
   mixed setting has no value its sensitivity is the gradient of, so the
