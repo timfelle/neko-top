@@ -222,6 +222,11 @@ contains
          this%c_Xh, this%volume, forcing_start, forcing_end, &
          this%forcing_scale)
 
+    ! The exact transpose of the time scheme adds the forcing of every
+    ! sample to its own adjoint level, without extrapolation. The handler
+    ! copies the term when it is added, so the flag is set before.
+    adjoint_forcing%extrapolate = .not. simulation%exact_adjoint
+
     ! append adjoint forcing term based on objective function
     select type (f => simulation%adjoint_fluid)
     type is (adjoint_fluid_pnpn_t)
