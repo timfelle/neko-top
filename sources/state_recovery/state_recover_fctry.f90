@@ -36,7 +36,6 @@
 submodule (state_recover) state_recover_fctry
   use json_utils, only: json_get_or_default
   use state_recover_checkpoint, only: state_recover_checkpoint_t
-  use utils, only: neko_error
   implicit none
 
 contains
