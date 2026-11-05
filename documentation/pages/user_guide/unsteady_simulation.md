@@ -25,8 +25,9 @@ problem from stored checkpoints.
 
 An unsteady problem may vary its time step, `case.time.variable_timestep`.
 The state recovery records the time grid of the forward run, the time and the
-time step of every state, and the adjoint replays it in reverse: it steps back
-over each forward step with that step's time step, and every sample of the
+time step of every state and the coefficients of the time scheme of the step
+that produced it, and the adjoint replays it in reverse: it steps back over
+each forward step with that step's time step, and every sample of the
 sensitivity takes its time and its weight from the record. A state that is
 recomputed from a checkpoint on disc is stepped with the recorded time steps
 too.
@@ -51,12 +52,21 @@ changes the step, which a replayed step, and every adjoint step, does not do.
 Nor is an MPMD run, in which the controller agrees every step with the
 coupled simulations.
 
-At a fixed time step, and for an objective without a time window, the adjoint
-is the exact discrete adjoint of the forward run. Under a variable time step it
-is consistent with the forward run, but not its exact transpose, and the
-difference grows with how much the time step changes from one step to the
-next; see [the adjoint under a variable time
-step](@ref adjoint-variable-time-step).
+For an objective without a time window, the adjoint is the exact discrete
+transpose of the time scheme of the forward run, at a fixed and at a variable
+time step alike: it combines the coefficients the forward steps used, as the
+state recovery recorded them; see [the adjoint under a variable time
+step](@ref adjoint-variable-time-step). The time transpose is selected in
+`case.adjoint_fluid`:
+
+| Parameter        | Type     | Default   | Description |
+| ---------------- | -------- | --------- | ----------- |
+| `time_transpose` | `string` | `"exact"` | How the unsteady adjoint transposes the time scheme of the forward run. `"exact"` is its exact discrete transpose. `"reverse"` replays the forward steps in reverse with the coefficients of the adjoint's own history of steps, which is exact at a fixed time step only; under a variable time step it is consistent with the forward run, but the difference grows with how much the time step changes from one step to the next. |
+
+The exact transpose needs a zero `case.adjoint_fluid.initial_condition` and an
+adjoint fluid that is not frozen, and stops with an error otherwise. The
+adjoint scalars have no exact transpose yet: with them the adjoint takes the
+reverse one, and says so in the log.
 
 The sensitivity is the gradient on the time grid of the forward run: how the
 grid itself depends on the design is not part of it. With `exact_output_time`

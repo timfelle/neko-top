@@ -416,23 +416,40 @@ contains
 
   end subroutine simulation_init_unsteady_time
 
-  !> Select the time transpose of the unsteady adjoint.
-  !! @details The adjoint fluid is the exact discrete transpose of the
-  !! variable-step BDF/EXT scheme of the forward run, built from the
-  !! coefficients the state recovery records. The adjoint scalars have no
-  !! exact transpose, and the adjoint couples them to the fluid, so with
-  !! them the adjoint replays the forward steps in reverse with its own
-  !! coefficients instead, which is exact at a fixed time step only.
+  !> Select the time transpose of the unsteady adjoint,
+  !! `case.adjoint_fluid.time_transpose`.
+  !! @details With `"exact"`, the default, the adjoint fluid is the exact
+  !! discrete transpose of the variable-step BDF/EXT scheme of the forward
+  !! run, built from the coefficients the state recovery records. With
+  !! `"reverse"` the adjoint replays the forward steps in reverse with the
+  !! coefficients of its own time-step history, which is exact at a fixed
+  !! time step only. The adjoint scalars have no exact transpose, and the
+  !! adjoint couples them to the fluid, so with them the adjoint takes the
+  !! reverse one.
   !! @param this The simulation object.
   subroutine simulation_init_time_transpose(this)
     class(simulation_t), intent(inout) :: this
+    character(len=:), allocatable :: time_transpose
 
-    this%exact_adjoint = .not. allocated(this%adjoint_case%adjoint_scalars)
-    if (.not. this%exact_adjoint) then
-       call neko_log%message("The unsteady adjoint has adjoint scalars, " // &
-            "which have no exact time transpose: it replays the forward " // &
-            "steps in reverse, which is exact at a fixed time step only")
-    end if
+    call json_get_or_default(this%neko_case%params, &
+         'case.adjoint_fluid.time_transpose', time_transpose, 'exact')
+
+    select case (trim(time_transpose))
+    case ('exact')
+       this%exact_adjoint = &
+            .not. allocated(this%adjoint_case%adjoint_scalars)
+       if (.not. this%exact_adjoint) then
+          call neko_log%message("The unsteady adjoint has adjoint " // &
+               "scalars, which have no exact time transpose: it replays " // &
+               "the forward steps in reverse, which is exact at a fixed " // &
+               "time step only")
+       end if
+    case ('reverse')
+       this%exact_adjoint = .false.
+    case default
+       call neko_error("case.adjoint_fluid.time_transpose must be " // &
+            "'exact' or 'reverse', not '" // trim(time_transpose) // "'")
+    end select
 
   end subroutine simulation_init_time_transpose
 
