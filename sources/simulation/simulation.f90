@@ -61,6 +61,7 @@ module simulation_m
   use state_recover, only: state_recover_t, state_recover_factory
   use runtime_stats, only: neko_rt_stats
   use utils, only: neko_error
+  use comm, only: is_mpmd
   implicit none
   private
 
@@ -104,8 +105,6 @@ module simulation_m
      !> The forward time step as initialised from the case file. A variable
      !! timestep changes `neko_case%time%dt` during a run, and `reset` starts
      !! the next run's time-step history from it, so it is restored first.
-     !! For an unsteady problem with a variable time step it is the step the
-     !! controller takes from rest, see `simulation_init_unsteady_time`.
      real(kind=dp) :: forward_init_dt = 0.0_dp
      !> The adjoint time step as initialised from the case file, restored on
      !! `reset` for the same reason as `forward_init_dt`.
@@ -331,20 +330,16 @@ contains
 
   end subroutine simulation_free
 
-  !> Check the time settings of an unsteady problem, and choose the time step
-  !! its runs start their time-step history from.
+  !> Check the time settings of an unsteady problem.
   !! @details With a variable time step, every run has to end exactly at the
-  !! end time, so that the objective is a smooth function of the design. The
-  !! time-step history a run starts from has to be known before the run, so
-  !! that a run replaying a recorded time grid takes its first step with the
-  !! same coefficients as the run that recorded the grid. Neko's time state
-  !! starts a variable time step from a placeholder of 1, which `reset`
-  !! would copy into the whole history; the history starts from the step the
-  !! controller takes from rest instead, `timestep` limited by `min_timestep`
-  !! and `max_timestep`. The Krylov projection spaces are cleared when the
-  !! controller flags a change of the time step, which neither a replay of a
-  !! recorded grid nor the recompute of the state recovery does, so they are
-  !! not supported with a variable time step.
+  !! end time, so that the objective is a smooth function of the design, and
+  !! needs `timestep` or `max_timestep` for its first step. The Krylov
+  !! projection spaces are cleared when the controller flags a change of the
+  !! time step, which neither a replay of a recorded grid nor the recompute
+  !! of the state recovery does, so they are not supported with a variable
+  !! time step. Nor is an MPMD run: there the controller agrees every step
+  !! with the coupled simulations, which a replay and the adjoint, keeping
+  !! the step they are given, do not.
   !! @param this The simulation object.
   subroutine simulation_init_unsteady_time(this)
     class(simulation_t), intent(inout) :: this
@@ -385,8 +380,10 @@ contains
             "projection_space_size in an unsteady problem")
     end if
 
-    this%forward_init_dt = max(min(dt_controller%init_dt, &
-         dt_controller%max_dt), dt_controller%min_dt)
+    if (is_mpmd()) then
+       call neko_error("case.time.variable_timestep in an unsteady " // &
+            "problem is not supported in an MPMD run")
+    end if
 
   end subroutine simulation_init_unsteady_time
 
