@@ -339,8 +339,11 @@ contains
   !! of the state recovery, nor the adjoint, replaying the forward steps,
   !! does, so they are not supported with a variable time step, in the
   !! forward or in the adjoint. Nor is an MPMD run: there the controller
-  !! agrees every step with the coupled simulations, which a replay and the
-  !! adjoint, keeping the step they are given, do not.
+  !! takes an `MPI_Allreduce` over the coupled simulations in `init`,
+  !! `set_dt` and `land`, and the prediction of the first step, a replay
+  !! and the adjoint, keeping the step they are given, call these where the
+  !! coupled simulations do not, or skip them where they do. The unmatched
+  !! collectives would deadlock the coupled simulations.
   !! @param this The simulation object.
   subroutine simulation_init_unsteady_time(this)
     class(simulation_t), intent(inout) :: this

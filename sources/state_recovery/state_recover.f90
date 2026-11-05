@@ -413,6 +413,7 @@ contains
 
   !> Number of steps the time grid has room for before it grows.
   !! @param[in] this State recovery instance.
+  !! @return The number of steps, 0 before the first state is recorded.
   pure function state_recover_time_grid_capacity(this) result(capacity)
     class(state_recover_t), intent(in) :: this
     integer :: capacity
@@ -446,6 +447,7 @@ contains
 
   !> Whether a prescribed grid is set.
   !! @param[in] this State recovery instance.
+  !! @return `.true.` from `freeze_time_grid` until `unfreeze_time_grid`.
   pure function state_recover_has_prescribed_grid(this) result(has_grid)
     class(state_recover_t), intent(in) :: this
     logical :: has_grid
@@ -456,6 +458,7 @@ contains
   !> Time step of a step of the prescribed grid.
   !! @param[in] this State recovery instance.
   !! @param[in] n Index of the step, from 1.
+  !! @return \f$ \Delta t_n \f$ of the frozen grid.
   function state_recover_get_prescribed_dt(this, n) result(dt)
     class(state_recover_t), intent(in) :: this
     integer, intent(in) :: n
