@@ -46,7 +46,6 @@ module state_recover_checkpoint
   use host_array, only: host_array_t
   use profiler, only: profiler_start_region, profiler_end_region
   use state_recover, only: state_recover_t
-  use time_step_controller, only: time_step_controller_t
   use comm, only: pe_rank, NEKO_COMM
   use neko_config, only: NEKO_BCKND_DEVICE
   use device, only: device_memcpy, DEVICE_TO_HOST, HOST_TO_DEVICE
@@ -373,11 +372,8 @@ contains
   !! After a step, the state is saved by the checkpointing algorithm. The
   !! time of the state is recorded either way.
   !! @param[inout] this Checkpointing implementation.
-  !! @param[in] dt_controller Time-step controller of the run, whose flag
-  !! for a change of the time step is recorded. Optional.
-  subroutine checkpoint_save(this, dt_controller)
+  subroutine checkpoint_save(this)
     class(state_recover_checkpoint_t), intent(inout) :: this
-    type(time_step_controller_t), intent(in), optional :: dt_controller
 
     call profiler_start_region("Checkpoint save")
 
@@ -385,7 +381,7 @@ contains
        if (this%get_n_timesteps() .ne. 0) then
           call neko_error("The initial state is saved before the first step")
        end if
-       call this%record_time(this%neko_case%time, dt_controller)
+       call this%record_time(this%neko_case%time)
        call this%save_data(0, 0)
        call profiler_end_region("Checkpoint save")
        return
@@ -393,7 +389,7 @@ contains
 
     ! Update the number of recorded timesteps
     call this%set_n_timesteps(this%get_n_timesteps() + 1)
-    call this%record_time(this%neko_case%time, dt_controller)
+    call this%record_time(this%neko_case%time)
 
     select case (this%algorithm_id)
     case (CHECKPOINT_LINEAR)

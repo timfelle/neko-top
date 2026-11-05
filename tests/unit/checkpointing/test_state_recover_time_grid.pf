@@ -100,12 +100,12 @@ contains
     call sim%init_dt_controller(dt_controller)
     call simulation_init(sim%neko_case, dt_controller)
     live(0) = sim%neko_case%time
-    call chkp%save(dt_controller)
+    call chkp%save()
     do i = 1, n_steps
        call simulation_step(sim%neko_case, dt_controller)
        live(i) = sim%neko_case%time
        call take_snapshot(sim, i, p_fields, u_fields, v_fields, w_fields)
-       call chkp%save(dt_controller)
+       call chkp%save()
     end do
     call simulation_finalize(sim%neko_case)
 
@@ -145,7 +145,7 @@ contains
     if (frozen_ok) then
        call sim%reset()
        call simulation_init(sim%neko_case, fixed_controller)
-       call chkp%save(fixed_controller)
+       call chkp%save()
        do i = 1, n_steps
           sim%neko_case%time%dt = chkp%get_prescribed_dt(i)
           call simulation_step(sim%neko_case, fixed_controller)
@@ -154,7 +154,7 @@ contains
                v_fields, w_fields)) then
              if (replay_fail .lt. 0) replay_fail = i
           end if
-          call chkp%save(fixed_controller)
+          call chkp%save()
        end do
        call simulation_finalize(sim%neko_case)
        do i = 1, n_steps

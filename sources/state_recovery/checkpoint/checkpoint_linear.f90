@@ -45,6 +45,7 @@
 submodule (state_recover_checkpoint) checkpoint_linear
   use num_types, only: dp
   use simulation, only: simulation_step, simulation_restart
+  use time_step_controller, only: time_step_controller_t
   use profiler, only: profiler_start_region, profiler_end_region
 
 contains
