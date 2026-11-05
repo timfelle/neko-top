@@ -517,7 +517,13 @@ contains
     call objective_sensitivity%free()
   end subroutine problem_compute_sensitivity
 
-  !> Run the forward backwards
+  !> Run the unsteady forward simulation and save its states for the adjoint.
+  !! @details A time grid frozen in the state recovery is replayed step by
+  !! step; otherwise the time-step controller of the case sets the steps.
+  !! @param this The problem, whose objectives are accumulated over the run.
+  !! @param simulation The simulation to run. Its state recovery is handed
+  !! the initial state and the state after every step.
+  !! @param design The design the objectives are evaluated for.
   subroutine problem_run_forward_unsteady(this, simulation, design)
     class(problem_t), intent(inout) :: this
     class(simulation_t), intent(inout) :: simulation
@@ -525,6 +531,7 @@ contains
     type(time_step_controller_t) :: dt_controller
     real(kind=dp) :: loop_start, dt_first
     logical :: replay, seeded
+    character(len=LOG_SIZE) :: log_buf
 
     if (.not. allocated(simulation%state_recover)) then
        call neko_error("State recovery not initialized.")
@@ -575,6 +582,12 @@ contains
        if (seeded .and. simulation%n_timesteps .eq. 1) then
           if (.not. (abs(simulation%neko_case%time%dt - dt_first) .le. &
                0.0_dp)) then
+             write (log_buf, '(A,ES24.16)') "First forward time step: ", &
+                  simulation%neko_case%time%dt
+             call neko_log%message(log_buf)
+             write (log_buf, '(A,ES24.16)') "Predicted time step:     ", &
+                  dt_first
+             call neko_log%message(log_buf)
              call neko_error("The first forward step did not take the " // &
                   "time step forward_first_dt predicted for it")
           end if

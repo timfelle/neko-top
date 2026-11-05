@@ -40,6 +40,8 @@ module simulation_m
   use adjoint_case, only: adjoint_case_t
   use fluid_scheme_incompressible, only: fluid_scheme_incompressible_t
   use adjoint_fluid_scheme, only: adjoint_fluid_scheme_t
+  use adjoint_fluid_scheme_incompressible, only: &
+       adjoint_fluid_scheme_incompressible_t
   use adjoint_fluid_pnpn, only: adjoint_fluid_pnpn_t
   use adjoint_scalars, only: adjoint_scalars_t
   use scalars, only: scalars_t
@@ -383,7 +385,7 @@ contains
     ! keys or by the primal ones, and replays the forward steps with the
     ! default controller, so it never clears them either.
     select type (fluid_adj => this%adjoint_case%fluid_adj)
-    type is (adjoint_fluid_pnpn_t)
+    class is (adjoint_fluid_scheme_incompressible_t)
        projection = projection .or. fluid_adj%vel_projection_dim .gt. 0 &
             .or. fluid_adj%pr_projection_dim .gt. 0
     end select
