@@ -68,6 +68,19 @@ adjoint fluid that is not frozen, and stops with an error otherwise. The
 adjoint scalars have no exact transpose yet: with them the adjoint takes the
 reverse one, and says so in the log.
 
+The source terms of the adjoint fluid in the case file,
+`case.adjoint_fluid.source_term`, including those that call the user file, are
+always extrapolated in time. The exact transpose therefore treats them as
+explicit operators on the adjoint velocity, combined over the next levels with
+the EXT column like the Brinkman term. That is right for a term that acts on
+the adjoint velocity, such as a Brinkman term. It is wrong for a forcing, a term
+that does not depend on the adjoint velocity, such as the derivative of an
+objective: the exact transpose adds the forcing of each sample at its own
+level, while an extrapolated forcing is combined from the next levels instead.
+Over the last levels of the run, where the column is truncated, that
+combination is not even consistent, and the last level gets no forcing at all.
+An objective whose adjoint forcing is such a source term needs `"reverse"`.
+
 The sensitivity is the gradient on the time grid of the forward run: how the
 grid itself depends on the design is not part of it. With `exact_output_time`
 the time steps depend on the design only through the number of steps fitted
