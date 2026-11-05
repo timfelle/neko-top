@@ -684,10 +684,19 @@ contains
   !! - the explicit sensitivity of an objective at \f$ u_i \f$ is weighted by
   !!   \f$ \Delta t_i \f$, as its value was;
   !! - the coupling term \f$ (u_i, \lambda_{i+1}) \f$ of the augmented
-  !!   Lagrangian is weighted by the step the adjoint took to
-  !!   \f$ \lambda_{i+1} \f$, \f$ \Delta t_{i+1} \f$, and at \f$ i = N \f$,
+  !!   Lagrangian is weighted by \f$ \Delta t_i \f$ too at time order 2 and
+  !!   3, and at time order 1 by the step the adjoint took to
+  !!   \f$ \lambda_{i+1} \f$, \f$ \Delta t_{i+1} \f$, or at \f$ i = N \f$,
   !!   where \f$ \lambda_{N+1} \f$ is the terminal condition, by the step the
   !!   adjoint starts from, \f$ \Delta t_N \f$.
+  !!
+  !! The coupling term comes from the explicit terms of the forward steps
+  !! that apply the design to \f$ u_i \f$. At time order 1 that is step
+  !! \f$ i + 1 \f$ alone, so \f$ \Delta t_{i+1} \f$ is the exact weight. At
+  !! time order 2 and 3 the extrapolation applies it in the next three steps,
+  !! and no single weight is exact under a variable time step; measured
+  !! against the exact discrete gradient, \f$ \Delta t_i \f$ is the closer by
+  !! a constant factor. At a fixed time step every choice is the same.
   !!
   !! The initial state, \f$ i = 0 \f$, has the coupling term
   !! \f$ (u_0, \lambda_1) \f$ only, weighted by \f$ \Delta t_1 \f$: the
@@ -713,7 +722,11 @@ contains
 
     n = simulation%state_recover%get_n_timesteps()
     call simulation%state_recover%get_time_state(i, sample)
-    coupling_weight = simulation%state_recover%get_dt(min(i + 1, n))
+    if (simulation%neko_case%fluid%ext_bdf%diffusion_time_order .eq. 1) then
+       coupling_weight = simulation%state_recover%get_dt(min(i + 1, n))
+    else
+       coupling_weight = simulation%state_recover%get_dt(max(i, 1))
+    end if
 
     do j = 1, this%n_objectives
        select type (objective => this%objective_list(j)%objective)
