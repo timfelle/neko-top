@@ -335,11 +335,12 @@ contains
   !! end time, so that the objective is a smooth function of the design, and
   !! needs `timestep` or `max_timestep` for its first step. The Krylov
   !! projection spaces are cleared when the controller flags a change of the
-  !! time step, which neither a replay of a recorded grid nor the recompute
-  !! of the state recovery does, so they are not supported with a variable
-  !! time step. Nor is an MPMD run: there the controller agrees every step
-  !! with the coupled simulations, which a replay and the adjoint, keeping
-  !! the step they are given, do not.
+  !! time step, which neither a replay of a recorded grid, nor the recompute
+  !! of the state recovery, nor the adjoint, replaying the forward steps,
+  !! does, so they are not supported with a variable time step, in the
+  !! forward or in the adjoint. Nor is an MPMD run: there the controller
+  !! agrees every step with the coupled simulations, which a replay and the
+  !! adjoint, keeping the step they are given, do not.
   !! @param this The simulation object.
   subroutine simulation_init_unsteady_time(this)
     class(simulation_t), intent(inout) :: this
@@ -375,9 +376,25 @@ contains
                .gt. 0
        end do
     end if
+    ! The adjoint has projection spaces of its own, sized by the adjoint
+    ! keys or by the primal ones, and replays the forward steps with the
+    ! default controller, so it never clears them either.
+    select type (fluid_adj => this%adjoint_case%fluid_adj)
+    type is (adjoint_fluid_pnpn_t)
+       projection = projection .or. fluid_adj%vel_projection_dim .gt. 0 &
+            .or. fluid_adj%pr_projection_dim .gt. 0
+    end select
+    if (allocated(this%adjoint_case%adjoint_scalars)) then
+       do i = 1, &
+            size(this%adjoint_case%adjoint_scalars%adjoint_scalar_fields)
+          projection = projection .or. this%adjoint_case%adjoint_scalars% &
+               adjoint_scalar_fields(i)%projection_dim .gt. 0
+       end do
+    end if
     if (projection) then
        call neko_error("case.time.variable_timestep does not support " // &
-            "projection_space_size in an unsteady problem")
+            "projection_space_size, of the fluid, the scalars or their " // &
+            "adjoints, in an unsteady problem")
     end if
 
     if (is_mpmd()) then

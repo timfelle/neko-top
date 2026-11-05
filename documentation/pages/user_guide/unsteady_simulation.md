@@ -40,9 +40,12 @@ With `"unsteady": true`, a variable time step needs
 
 A case without them stops with an error. Krylov projection spaces,
 `projection_space_size`, are not supported with a variable time step in an
-unsteady problem: they are cleared when the time-step controller changes the
-step, which a replayed step does not do. Nor is an MPMD run, in which the
-controller agrees every step with the coupled simulations.
+unsteady problem, neither for the fluid and the scalars nor for their
+adjoints, which take the primal setting unless `case.adjoint_fluid` or the
+adjoint scalar sets its own: they are cleared when the time-step controller
+changes the step, which a replayed step, and every adjoint step, does not do.
+Nor is an MPMD run, in which the controller agrees every step with the
+coupled simulations.
 
 At a fixed time step the adjoint is the exact discrete adjoint of the forward
 run. Under a variable time step it is consistent with the forward run, but not
