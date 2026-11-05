@@ -641,6 +641,10 @@ contains
             cfl, loop_start, total_time)
     end do
 
+    ! The initial state, paired with the adjoint state the run ends at
+    call simulation%state_recover%restore(0)
+    call this%accumulate_sensitivity_sample(design, simulation, 0)
+
     call profiler_end_region("Adjoint simulation")
 
     call simulation_adjoint_finalize(simulation%adjoint_case, n)
@@ -661,14 +665,18 @@ contains
   !!   where \f$ \lambda_{N+1} \f$ is the terminal condition, by the step the
   !!   adjoint starts from, \f$ \Delta t_N \f$.
   !!
-  !! The time \f$ t_i \f$ and the steps are those the forward run recorded.
-  !! Every sample spans \f$ \Delta t_i \f$ of the normalisation, so that the
-  !! sensitivity is normalised by the same time as the value.
+  !! The initial state, \f$ i = 0 \f$, has the coupling term
+  !! \f$ (u_0, \lambda_1) \f$ only, weighted by \f$ \Delta t_1 \f$: the
+  !! first forward step applies the design to \f$ u_0 \f$ in its explicit
+  !! terms, but the value has no sample there. The time \f$ t_i \f$ and the
+  !! steps are those the forward run recorded. Every other sample spans
+  !! \f$ \Delta t_i \f$ of the normalisation, so that the sensitivity is
+  !! normalised by the same time as the value.
   !! @param this The problem.
   !! @param design The design.
   !! @param simulation The simulation, whose state recovery holds the time
   !! grid of the forward run.
-  !! @param i Index of the restored forward state.
+  !! @param i Index of the restored forward state, 0 for the initial state.
   subroutine problem_accumulate_sensitivity_sample(this, design, simulation, &
        i)
     class(problem_t), intent(inout) :: this
@@ -686,10 +694,15 @@ contains
     do j = 1, this%n_objectives
        select type (objective => this%objective_list(j)%objective)
        class is (augmented_lagrangian_objective_t)
-          call objective%accumulate_sensitivity(design, sample, &
-               weight = coupling_weight)
+          if (i .eq. 0) then
+             call objective%accumulate_sensitivity(design, sample, &
+                  weight = coupling_weight, span = 0.0_dp)
+          else
+             call objective%accumulate_sensitivity(design, sample, &
+                  weight = coupling_weight)
+          end if
        class default
-          call objective%accumulate_sensitivity(design, sample)
+          if (i .gt. 0) call objective%accumulate_sensitivity(design, sample)
        end select
     end do
 

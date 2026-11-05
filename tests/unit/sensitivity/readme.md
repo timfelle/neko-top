@@ -98,6 +98,16 @@ Currently, we have added tests for the following components:
   the mask only while its probe stays that close to the boundary. Whenever the
   case or the driver's probe selection changes, confirm again that the test
   fails with the mask removed from `update_sensitivity`.
+- `brinkman_dissipation_objective_t`, unsteady from a moving start
+  (`unsteady_brinkman_dissipation_moving_start.case`) — the unsteady case with
+  the flow starting at the inflow velocity instead of at rest, 10 time steps
+  and 4 states in RAM, so that the adjoint also recomputes states from disk.
+  The first forward step applies the Brinkman term to the initial velocity,
+  which gives the sensitivity a sample at the initial state, paired with the
+  adjoint state the adjoint run ends at. Without that sample the error at the
+  smallest perturbation was `-4.34e-2`; with it, it is `-1.72e-5`, which is
+  first-order truncation (`-1.71e-4` at `1e-3`). The tolerance of `1e-4` lies
+  between the two. From rest the sample is zero, so no other case sees it.
 - `brinkman_dissipation_rejection` — checks the invalid mixed-dealias
   configuration directly through Neko's pFUnit error-redirection fixture. A
   mixed setting has no value its sensitivity is the gradient of, so the
