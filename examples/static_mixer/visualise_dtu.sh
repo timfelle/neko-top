@@ -49,11 +49,11 @@ export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
 source ~/Software/load.sh
 cd ~/Projects/neko-top
 
-result_root=results/static_mixer
+RESULT_ROOT=${RESULT_ROOT:-results/static_mixer}
 gifmaker=scripts/python/gif_maker.py
 visualiser=examples/static_mixer/visualise.py
 
-experiments=$(find $result_root -type d | sort)
+experiments=$(find $RESULT_ROOT -type d | sort)
 
 colors=(
     black
@@ -61,11 +61,11 @@ colors=(
 )
 
 for exp in "${experiments[@]}"; do
-    exp=${exp##$result_root/}
-    if [[ ! -d "$result_root/$exp" ]]; then
+    exp=${exp##$RESULT_ROOT/}
+    if [[ ! -d "$RESULT_ROOT/$exp" ]]; then
         echo "Results for experiment $exp not found. Skipping visualization."
         continue
-    elif [[ ! -f "$result_root/$exp/brinkman_0.vtkhdf" ]]; then
+    elif [[ ! -f "$RESULT_ROOT/$exp/brinkman_0.vtkhdf" ]]; then
         echo "Required file brinkman_0.vtkhdf for experiment $exp not found. Skipping visualization."
         continue
     else
@@ -73,12 +73,12 @@ for exp in "${experiments[@]}"; do
     fi
 
     for color in "${colors[@]}"; do
-        Temp_gif=$result_root/$exp/visualisation/Temperature_${color}.gif
-        Vel_gif=$result_root/$exp/visualisation/Velocity_${color}.gif
+        Temp_gif=$RESULT_ROOT/$exp/visualisation/Temperature_${color}.gif
+        Vel_gif=$RESULT_ROOT/$exp/visualisation/Velocity_${color}.gif
         if [[ ! -f "$Temp_gif" || ! -f "$Vel_gif" ]]; then
 
             # Run the ParaView visualizer.
-            pvbatch $visualiser --text-color=$color $result_root/$exp/
+            pvbatch $visualiser --text-color=$color $RESULT_ROOT/$exp/
 
             # If the srun was cancelled, skip the gif creation to avoid errors
             if [[ $? -ne 0 ]]; then
@@ -88,9 +88,9 @@ for exp in "${experiments[@]}"; do
 
             # Create the gifs from the generated png files.
             python $gifmaker --pattern Temperature_[0-9]*.png --fps 25 \
-                --quality high $result_root/$exp/visualisation/${color}/
+                --quality high $RESULT_ROOT/$exp/visualisation/${color}/
             python $gifmaker --pattern Velocity_[0-9]*.png --fps 25 \
-                --quality high $result_root/$exp/visualisation/${color}/
+                --quality high $RESULT_ROOT/$exp/visualisation/${color}/
         fi
     done
 done
