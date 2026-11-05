@@ -324,8 +324,8 @@ contains
 
     ! Free the RAM Checkpoints
     if (allocated(this%state_storage)) then
-       do i = 0, this%n_saves_memory
-          do j = 1, this%state_list%size()
+       do i = lbound(this%state_storage, 1), ubound(this%state_storage, 1)
+          do j = 1, size(this%state_storage, 2)
              call this%state_storage(i, j)%free()
           end do
        end do
