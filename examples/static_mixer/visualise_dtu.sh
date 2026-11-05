@@ -53,7 +53,7 @@ RESULT_ROOT=${RESULT_ROOT:-results/static_mixer}
 gifmaker=scripts/python/gif_maker.py
 visualiser=examples/static_mixer/visualise.py
 
-experiments=$(find $RESULT_ROOT -type d | sort)
+mapfile -t experiments < <(find "$RESULT_ROOT" -type d | sort)
 
 colors=(
     black
@@ -78,10 +78,30 @@ for exp in "${experiments[@]}"; do
         if [[ ! -f "$Temp_gif" || ! -f "$Vel_gif" ]]; then
 
             # Run the ParaView visualizer.
-            pvbatch $visualiser --text-color=$color $RESULT_ROOT/$exp/
+            mapfile -t CHUNK_FILES < <(
+                find "$RESULT_ROOT/$exp" -type f \
+                    -name 'field_0_steps_*.vtkhdf' | sort)
+            visualization_failed=0
+            if [[ ${#CHUNK_FILES[@]} -eq 0 ]]; then
+                echo "Processing experiment $exp with color $color."
+                if ! pvbatch "$visualiser" "$RESULT_ROOT/$exp/" \
+                    --text-color="$color"; then
+                    visualization_failed=1
+                fi
+            else
+                for FILE in "${CHUNK_FILES[@]}"; do
+                    CHUNK=${FILE##*_steps_}
+                    CHUNK=${CHUNK%.vtkhdf}
+                    echo "Processing chunk $CHUNK of $exp with color $color."
+                    if ! pvbatch "$visualiser" "$RESULT_ROOT/$exp" \
+                        --text-color="$color" --chunk="$CHUNK"; then
+                        visualization_failed=1
+                    fi
+                done
+            fi
 
-            # If the srun was cancelled, skip the gif creation to avoid errors
-            if [[ $? -ne 0 ]]; then
+            # If any visualization failed, skip gif creation to avoid errors.
+            if [[ $visualization_failed -ne 0 ]]; then
                 echo "Visualization for $exp with color $color was cancelled."
                 continue
             fi
