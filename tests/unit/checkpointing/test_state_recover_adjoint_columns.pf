@@ -1,0 +1,254 @@
+!> Unit tests for the column coefficients of the exact transpose of the
+!! forward run, which the time grid of the state recovery gathers from the
+!! time-scheme coefficients it records with every step.
+!!
+!! The time scheme of the fluid is driven as an unsteady forward run drives
+!! it: started at full order from equal steps of the first step, then set
+!! once per step and recorded right after it. The columns are compared with
+!! the values of the python model of the exact transpose, `ext_column` and
+!! `bdf_column` of `neko_exact.py`, on a constant grid and on a ramp with a
+!! cut. Both include the last three states, whose columns reach past the
+!! last step, and the initial state. Only the ramp sees the ratios of the
+!! time steps in the EXT column.
+module test_state_recover_adjoint_columns
+  use mpi
+  use pfunit
+  use num_types, only: rp, dp
+  use neko, only: neko_init
+  use case, only: case_t
+  use json_file_module, only: json_file
+  use time_state, only: time_state_t
+  use time_scheme_controller, only: time_scheme_controller_t
+  use state_recover, only: state_recover_t
+  implicit none
+
+  @TestCase
+  type, extends(MPITestCase) :: adjoint_columns_case
+   contains
+     procedure :: setUp
+     procedure :: tearDown
+  end type adjoint_columns_case
+
+  !> A state recovery that keeps no states, only the time grid of its base
+  !! type.
+  type, extends(state_recover_t) :: time_grid_only_t
+   contains
+     procedure, pass(this) :: init => time_grid_only_init
+     procedure, pass(this) :: free => time_grid_only_free
+     procedure, pass(this) :: reset => time_grid_only_reset
+     procedure, pass(this) :: save => time_grid_only_save
+     procedure, pass(this) :: restore => time_grid_only_restore
+  end type time_grid_only_t
+
+  !> Number of steps of the test grids.
+  integer, parameter :: n_steps = 6
+  !> Order of the time scheme.
+  integer, parameter :: time_order = 3
+
+  logical :: initialized = .false.
+
+contains
+
+  subroutine setUp(this)
+    class(adjoint_columns_case), intent(inout) :: this
+
+    if (initialized) return
+    initialized = .true.
+    call neko_init()
+  end subroutine setUp
+
+  subroutine tearDown(this)
+    class(adjoint_columns_case), intent(inout) :: this
+  end subroutine tearDown
+
+  ! ========================================================================== !
+  ! The state recovery without states: every deferred binding but `free`
+  ! is a no-op.
+
+  subroutine time_grid_only_init(this, neko_case, params)
+    class(time_grid_only_t), intent(inout) :: this
+    class(case_t), target, intent(inout) :: neko_case
+    type(json_file), intent(inout) :: params
+  end subroutine time_grid_only_init
+
+  subroutine time_grid_only_free(this)
+    class(time_grid_only_t), intent(inout) :: this
+
+    call this%free_base()
+  end subroutine time_grid_only_free
+
+  subroutine time_grid_only_reset(this)
+    class(time_grid_only_t), intent(inout) :: this
+  end subroutine time_grid_only_reset
+
+  subroutine time_grid_only_save(this)
+    class(time_grid_only_t), intent(inout) :: this
+  end subroutine time_grid_only_save
+
+  subroutine time_grid_only_restore(this, tstep)
+    class(time_grid_only_t), intent(inout) :: this
+    integer, intent(in) :: tstep
+  end subroutine time_grid_only_restore
+
+  ! ========================================================================== !
+  ! Tests
+
+  !> A constant time step: the columns are the coefficients of the scheme,
+  !! cut off past the last step.
+  @test(npes=[1])
+  subroutine constant_grid(this)
+    class(adjoint_columns_case), intent(inout) :: this
+    real(kind=dp) :: dts(n_steps)
+    real(kind=rp) :: ext_ref(4, 0:n_steps), bdf_ref(4, n_steps)
+
+    dts = 0.01_dp
+
+    ! Reference values of neko_exact.py
+    ext_ref = reshape([ &
+         3.0000000000000000e+00_rp, -3.0000000000000000e+00_rp, &
+         1.0000000000000000e+00_rp, 0.0_rp, &
+         3.0000000000000000e+00_rp, -3.0000000000000000e+00_rp, &
+         1.0000000000000000e+00_rp, 0.0_rp, &
+         3.0000000000000000e+00_rp, -3.0000000000000000e+00_rp, &
+         1.0000000000000000e+00_rp, 0.0_rp, &
+         3.0000000000000000e+00_rp, -3.0000000000000000e+00_rp, &
+         1.0000000000000000e+00_rp, 0.0_rp, &
+         3.0000000000000000e+00_rp, -3.0000000000000000e+00_rp, &
+         0.0_rp, 0.0_rp, &
+         3.0000000000000000e+00_rp, 0.0_rp, &
+         0.0_rp, 0.0_rp, &
+         0.0_rp, 0.0_rp, &
+         0.0_rp, 0.0_rp &
+         ], [4, 7])
+    bdf_ref = reshape([ &
+         1.8333333333333333e+00_rp, 2.9999999999999996e+00_rp, &
+         -1.4999999999999998e+00_rp, 3.3333333333333337e-01_rp, &
+         1.8333333333333333e+00_rp, 2.9999999999999996e+00_rp, &
+         -1.4999999999999998e+00_rp, 3.3333333333333337e-01_rp, &
+         1.8333333333333333e+00_rp, 2.9999999999999996e+00_rp, &
+         -1.4999999999999998e+00_rp, 3.3333333333333337e-01_rp, &
+         1.8333333333333333e+00_rp, 2.9999999999999996e+00_rp, &
+         -1.4999999999999998e+00_rp, 0.0_rp, &
+         1.8333333333333333e+00_rp, 2.9999999999999996e+00_rp, &
+         0.0_rp, 0.0_rp, &
+         1.8333333333333333e+00_rp, 0.0_rp, &
+         0.0_rp, 0.0_rp &
+         ], [4, 6])
+
+    call check_columns(dts, ext_ref, bdf_ref)
+  end subroutine constant_grid
+
+  !> A time step that grows by 1.2 per step, is cut to about half and
+  !! grows again.
+  @test(npes=[1])
+  subroutine variable_grid(this)
+    class(adjoint_columns_case), intent(inout) :: this
+    real(kind=dp) :: dts(n_steps)
+    real(kind=rp) :: ext_ref(4, 0:n_steps), bdf_ref(4, n_steps)
+
+    dts = [0.01_dp, 0.012_dp, 0.0144_dp, 0.01728_dp, 0.009_dp, 0.0108_dp]
+
+    ! Reference values of neko_exact.py
+    ext_ref = reshape([ &
+         3.0000000000000000e+00_rp, -4.6079999999999997e+00_rp, &
+         2.4883199999999999e+00_rp, 0.0_rp, &
+         4.2240000000000002e+00_rp, -6.2899200000000004e+00_rp, &
+         2.9859839999999997e+00_rp, 0.0_rp, &
+         4.3680000000000003e+00_rp, -6.2899200000000004e+00_rp, &
+         3.8884943181818177e-01_rp, 0.0_rp, &
+         4.3680000000000012e+00_rp, -9.1959635416666652e-01_rp, &
+         3.5316780821917815e-01_rp, 0.0_rp, &
+         1.0171293008207070e+00_rp, -1.6093750000000002e+00_rp, &
+         0.0_rp, 0.0_rp, &
+         3.7249315068493161e+00_rp, 0.0_rp, &
+         0.0_rp, 0.0_rp, &
+         0.0_rp, 0.0_rp, &
+         0.0_rp, 0.0_rp &
+         ], [4, 7])
+    bdf_ref = reshape([ &
+         1.8333333333333333e+00_rp, 3.5200000000000000e+00_rp, &
+         -2.3825454545454541e+00_rp, 6.8360439560439579e-01_rp, &
+         1.9204545454545454e+00_rp, 3.6400000000000001e+00_rp, &
+         -2.3825454545454550e+00_rp, 1.1470484714400643e-01_rp, &
+         1.9410589410589416e+00_rp, 3.6400000000000001e+00_rp, &
+         -5.0388841324200906e-01_rp, 1.3715254688123421e-01_rp, &
+         1.9410589410589407e+00_rp, 1.9528882575757569e+00_rp, &
+         -1.4045454545454550e+00_rp, 0.0_rp, &
+         1.5637046914777541e+00_rp, 3.1041095890410957e+00_rp, &
+         0.0_rp, 0.0_rp, &
+         1.8367166813768747e+00_rp, 0.0_rp, &
+         0.0_rp, 0.0_rp &
+         ], [4, 6])
+
+    call check_columns(dts, ext_ref, bdf_ref)
+  end subroutine variable_grid
+
+  !> Record a run on a grid and compare its columns with the references.
+  !! @param dts The time steps of the run.
+  !! @param ext_ref The EXT columns of the states 0 to `n_steps`.
+  !! @param bdf_ref The BDF columns of the states 1 to `n_steps`.
+  subroutine check_columns(dts, ext_ref, bdf_ref)
+    real(kind=dp), intent(in) :: dts(n_steps)
+    real(kind=rp), intent(in) :: ext_ref(4, 0:n_steps), bdf_ref(4, n_steps)
+    type(time_grid_only_t) :: grid
+    type(time_scheme_controller_t) :: ext_bdf
+    type(time_state_t) :: time
+    real(kind=rp) :: dtlag(10), bd(4, n_steps), ab(4, n_steps), col(4)
+    real(kind=rp) :: tol
+    integer :: i, m, ndiff, nadv
+    logical :: recorded
+    character(len=128) :: msg
+
+    tol = 100.0_rp * epsilon(1.0_rp)
+
+    ! Start at full order from equal steps of the first step, as the reset
+    ! of an unsteady run does, and record the initial state
+    call ext_bdf%init(time_order)
+    dtlag = real(dts(1), rp)
+    do i = 1, size(dtlag)
+       call ext_bdf%set_coeffs(dtlag)
+    end do
+    time%dt = dts(1)
+    call grid%record_time(time, ext_bdf)
+
+    ! Take the steps and record each, keeping the coefficients it used
+    do i = 1, n_steps
+       dtlag(2:10) = dtlag(1:9)
+       dtlag(1) = real(dts(i), rp)
+       call ext_bdf%set_coeffs(dtlag)
+       bd(:, i) = ext_bdf%diffusion_coeffs%x(1:4)
+       ab(:, i) = ext_bdf%advection_coeffs%x(1:4)
+       time%tlag(1) = time%t
+       time%t = time%t + dts(i)
+       time%dt = dts(i)
+       call grid%set_n_timesteps(i)
+       call grid%record_time(time, ext_bdf)
+    end do
+
+    ! The record holds what the time scheme held after each step
+    recorded = .true.
+    do i = 1, n_steps
+       call grid%get_scheme_orders(i, ndiff, nadv)
+       recorded = recorded .and. ndiff .eq. time_order .and. &
+            nadv .eq. time_order .and. &
+            all(abs(grid%get_bdf_coeffs(i) - bd(:, i)) .le. 0.0_rp) .and. &
+            all(abs(grid%get_ext_coeffs(i) - ab(:, i)) .le. 0.0_rp)
+    end do
+    @assertTrue(recorded, 'The record differs from the time scheme')
+
+    do m = 0, n_steps
+       call grid%get_adjoint_ext_column(m, col)
+       write(msg, '(A,I0)') 'EXT column of state ', m
+       @assertEqual(ext_ref(:, m), col, tol, trim(msg))
+    end do
+    do m = 1, n_steps
+       call grid%get_adjoint_bdf_column(m, col)
+       write(msg, '(A,I0)') 'BDF column of state ', m
+       @assertEqual(bdf_ref(:, m), col, tol, trim(msg))
+    end do
+
+    call ext_bdf%free()
+    call grid%free()
+  end subroutine check_columns
+
+end module test_state_recover_adjoint_columns
