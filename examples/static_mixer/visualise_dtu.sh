@@ -27,8 +27,8 @@
 # Memory specifications. Amount we need and when to kill the
 # program using too much memory.
 
-#BSUB -R "rusage[mem=4GB]"
-#BSUB -M 4GB
+#BSUB -R "rusage[mem=16GB]"
+#BSUB -M 16GB
 
 # Time specifications (hh:mm)
 #BSUB -W 02:00
@@ -47,10 +47,10 @@
 # ============================================================================ #
 # Determine if the script is run on the HPC or locally
 
-export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
+export OMP_NUM_THREADS=4
 
-source ~/Software/load.sh
-cd ~/Projects/neko-top
+#source ~/Software/load.sh
+#cd ~/Projects/neko-top
 
 RESULT_ROOT=${RESULT_ROOT:-results/static_mixer}
 gifmaker=scripts/python/gif_maker.py
@@ -91,7 +91,7 @@ for exp in "${experiments[@]}"; do
             visualization_failed=0
             if [[ ${#CHUNK_FILES[@]} -eq 0 ]]; then
                 echo "Processing experiment $exp with color $color."
-                if ! pvbatch "$visualiser" "$RESULT_ROOT/$exp/" \
+                if ! /appl9/paraview/6.1.0-skylake-gcc-14.3.0/bin/pvbatch "$visualiser" "$RESULT_ROOT/$exp/" \
                     --text-color="$color"; then
                     visualization_failed=1
                 fi
@@ -100,7 +100,7 @@ for exp in "${experiments[@]}"; do
                     CHUNK=${FILE##*_steps_}
                     CHUNK=${CHUNK%.vtkhdf}
                     echo "Processing chunk $CHUNK of $exp with color $color."
-                    if ! pvbatch "$visualiser" "$RESULT_ROOT/$exp" \
+                    if ! /appl9/paraview/6.1.0-skylake-gcc-14.3.0/bin/pvbatch "$visualiser" "$RESULT_ROOT/$exp" \
                         --text-color="$color" --chunk="$CHUNK"; then
                         visualization_failed=1
                     fi
