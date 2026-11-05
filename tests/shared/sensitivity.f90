@@ -16,11 +16,16 @@
 !! wrong sign, wrong weighting) as a non-vanishing floor. Linear functionals
 !! (e.g. the volume constraint) hit that floor at round-off; PDE-coupled
 !! objectives hit a discretisation/steady-state floor set by the case.
+!!
+!! An unsteady problem is differentiated on a frozen time grid:
+!! `freeze_time_grid` freezes the grid of the baseline run, which every
+!! perturbed run then replays, and `unfreeze_time_grid` drops it again.
 module sensitivity
   use simulation_m, only: simulation_t
   use design, only: design_t
   use utils, only: neko_error
-  use num_types, only: rp
+  use num_types, only: rp, dp
+  use time_step_controller, only: time_step_controller_t, LANDING_TOL
   use math, only: abscmp, NEKO_EPS, glsum
   use vector, only: vector_t
   use neko_config, only: NEKO_BCKND_DEVICE
@@ -229,6 +234,66 @@ contains
             list(i), perturbations, tolerance, file_name, is_objective)
     end do
   end subroutine compute_sensitivity_list
+
+  !> Freeze the time grid of the baseline run of an unsteady problem, so that
+  !! every perturbed run replays it.
+  !! @details The adjoint of an unsteady problem differentiates the objective
+  !! on the time grid of the forward run, so the finite differences have to
+  !! compare runs on that grid too. A case with a variable time step has to
+  !! vary it, or it tests nothing a fixed time step does not: its frozen grid
+  !! must hold at least two different time steps, and the first one must not
+  !! be the placeholder of 1 of Neko's time state. Call it after the baseline
+  !! run, before the simulation is reset. A steady problem keeps no time
+  !! grid and is left alone.
+  !! @param sim The simulation, after its baseline run.
+  subroutine freeze_time_grid(sim)
+    type(simulation_t), intent(inout) :: sim
+    type(time_step_controller_t) :: dt_controller
+    real(kind=dp), allocatable :: distinct(:)
+    real(kind=dp) :: dt
+    integer :: n, n_distinct, k
+
+    if (.not. sim%unsteady) return
+
+    call sim%state_recover%freeze_time_grid()
+
+    call sim%init_dt_controller(dt_controller)
+    if (.not. dt_controller%is_variable_dt) return
+
+    n = sim%state_recover%get_n_timesteps()
+    allocate(distinct(n))
+    n_distinct = 0
+    do k = 1, n
+       dt = sim%state_recover%get_prescribed_dt(k)
+       if (any(abs(distinct(1:n_distinct) - dt) .le. LANDING_TOL * dt)) cycle
+       n_distinct = n_distinct + 1
+       distinct(n_distinct) = dt
+    end do
+
+    if (pe_rank .eq. 0) then
+       write(*, '(A,I0,A,I0,A)') 'Frozen time grid: ', n, ' steps, ', &
+            n_distinct, ' distinct time steps'
+       write(*, '(4X,ES24.16)') distinct(1:n_distinct)
+    end if
+
+    if (n_distinct .lt. 2 .or. &
+         abscmp(sim%state_recover%get_prescribed_dt(1), 1.0_dp)) then
+       call neko_error('The case varies the time step, but its time ' // &
+            'grid holds a single time step or starts from the ' // &
+            'placeholder of 1')
+    end if
+
+    deallocate(distinct)
+  end subroutine freeze_time_grid
+
+  !> Drop the time grid frozen by `freeze_time_grid`.
+  !! @param sim The simulation.
+  subroutine unfreeze_time_grid(sim)
+    type(simulation_t), intent(inout) :: sim
+
+    if (.not. sim%unsteady) return
+    call sim%state_recover%unfreeze_time_grid()
+  end subroutine unfreeze_time_grid
 
   !> Computes the relative difference between two numbers
   !! \f$ \frac{a - b}{|b|} \f$

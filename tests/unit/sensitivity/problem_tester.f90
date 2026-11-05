@@ -21,7 +21,8 @@ program problem_tester
   use matrix, only: matrix_t
   use math, only: abscmp, copy
   use device_math, only: device_copy
-  use sensitivity, only: compute_sensitivity
+  use sensitivity, only: compute_sensitivity, freeze_time_grid, &
+       unfreeze_time_grid
   implicit none
 
   ! JSON related arguments
@@ -100,6 +101,8 @@ program problem_tester
   ! Compute the sensitivity with our method
 
   call prob%compute(des, sim)
+  ! Every perturbed run replays the time grid of this one
+  call freeze_time_grid(sim)
   call prob%compute_sensitivity(des, sim)
   if (is_objective) then
      call sensitivities%init(des%size())
@@ -138,6 +141,8 @@ program problem_tester
 
   call compute_sensitivity(prob, sim, des, sensitivities, &
        i_max, perturbations, tolerance, trim(parameter_file), is_objective)
+
+  call unfreeze_time_grid(sim)
 
   ! -------------------------------------------------------------------------- !
   ! Clean up the components
