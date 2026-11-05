@@ -21,10 +21,42 @@ top level of the case file:
 The available implementation is `checkpoint`, which restarts the forward
 problem from stored checkpoints.
 
-Unsteady problems need a fixed timestep. The adjoint restores the forward
-states one step at a time and assumes every step had the same `dt`, so a case
-that sets `case.time.variable_timestep` together with `"unsteady": true` stops
-with an error.
+## Variable time step
+
+An unsteady problem may vary its time step, `case.time.variable_timestep`.
+The state recovery records the time grid of the forward run, the time and the
+time step of every state, and the adjoint replays it in reverse: it steps back
+over each forward step with that step's time step, and every sample of the
+sensitivity takes its time and its weight from the record. A state that is
+recomputed from a checkpoint on disc is stepped with the recorded time steps
+too.
+
+With `"unsteady": true`, a variable time step needs
+
+- `case.time.exact_output_time` set to `true`, so that every run ends exactly
+  at the end time, and
+- `case.time.timestep` or `case.time.max_timestep`, which sets the step every
+  run starts from.
+
+A case without them stops with an error. Krylov projection spaces,
+`projection_space_size`, are not supported with a variable time step in an
+unsteady problem: they are cleared when the time-step controller changes the
+step, which a replayed step does not do.
+
+At a fixed time step the adjoint is the exact discrete adjoint of the forward
+run. Under a variable time step it is consistent with the forward run, but not
+its exact transpose, and the difference grows with how much the time step
+changes from one step to the next; see [the adjoint under a variable time
+step](@ref adjoint-variable-time-step).
+
+The sensitivity is the gradient on the time grid of the forward run: how the
+grid itself depends on the design is not part of it. With `exact_output_time`
+the time steps depend on the design only through the number of steps fitted
+to the time left, so wherever that number does not change, the gradient on the
+recorded grid is the gradient of the objective. A finite-difference check of
+the sensitivity therefore freezes the time grid of its baseline run with
+`freeze_time_grid` of the state recovery, and every perturbed run replays it.
+The sensitivity test drivers do so for every unsteady case.
 
 ## Checkpoint based state recovery
 
