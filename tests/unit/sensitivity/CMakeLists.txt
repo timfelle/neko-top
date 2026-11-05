@@ -12,6 +12,7 @@ set(test_list
     "unsteady_brinkman_dissipation.case"
     "unsteady_brinkman_dissipation_masked.case"
     "unsteady_brinkman_dissipation_moving_start.case"
+    "unsteady_variable_timestep.case"
 )
 
 # Path to the common driver source
