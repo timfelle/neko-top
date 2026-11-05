@@ -307,11 +307,14 @@ the combined adjoint velocity,
 normalised by the same time as the objective. The initial state takes the
 column \f$c_j^0 = a_j^{(j)} \Delta t_j / \Delta t_1\f$ and adds no time to
 the normalisation. At a constant time step the columns are the constant
-coefficients, \f$\mathbf{u}^\dagger_{e,m}\f$ is the adjoint velocity
-\f$\mathbf{u}^\dagger_{m+1}\f$ above, and the two forms agree. The
-coefficients are recorded rather than rebuilt from the time steps, because
-those of the first steps also depend on how the history of the forward run
-was started.
+coefficients and the two forms agree: \f$\mathbf{u}^\dagger_{e,m}\f$ is
+then the adjoint velocity \f$\mathbf{u}^\dagger_{m+1}\f$ above as the
+reverse replay below computes it, which at time order 2 and 3 is itself a
+combination of the levels the exact transpose solves for. It is not the adjoint
+velocity of level \f$m+1\f$ of the exact transpose, from which it differs at
+time order 2 and 3. The coefficients are recorded rather than rebuilt from the
+time steps, because those of the first steps also depend on how the history of
+the forward run was started.
 
 This is the default, `case.adjoint_fluid.time_transpose` set to `"exact"`.
 With `"reverse"`, and with adjoint scalars, which have no exact transpose
