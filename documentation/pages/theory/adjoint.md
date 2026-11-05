@@ -270,35 +270,62 @@ adjoint velocity used in the sensitivity accumulation.
 ### Variable time step {#adjoint-variable-time-step}
 With a variable time step, forward step \f$n\f$ advances from
 \f$t_{n-1}\f$ to \f$t_n = t_{n-1} + \Delta t_n\f$ and the objective is
-\f$F \approx \sum_{n=1}^{N} \Delta t_n f(\mathbf{u}_n)\f$. The state
-recovery records every \f$t_n\f$ and \f$\Delta t_n\f$, and the adjoint
-replays them in reverse: the adjoint step that goes back over forward step
-\f$n\f$ takes \f$\Delta t_n\f$, with the BDF and EXT coefficients of the
-adjoint's own history of steps. Its history starts from equal steps of
-\f$\Delta t_N\f$, the way the forward's starts from equal steps of
-\f$\Delta t_1\f$.
+\f$F \approx \sum_{n=1}^{N} \Delta t_n f(\mathbf{u}_n)\f$. Step \f$n\f$
+takes the BDF coefficients \f$b_j^{(n)}\f$ and the EXT coefficients
+\f$a_j^{(n)}\f$ of its own history of steps: it solves with
+\f$b_1^{(n)} / \Delta t_n\f$, weights \f$\mathbf{u}_{n-j}\f$ in its BDF
+history by \f$b_{j+1}^{(n)} / \Delta t_n\f$, and extrapolates the explicit
+terms evaluated at \f$\mathbf{u}_{n-j}\f$ with \f$a_j^{(n)}\f$, for
+\f$j = 1, 2, 3\f$. The state recovery records every \f$t_n\f$,
+\f$\Delta t_n\f$ and these coefficients, and the adjoint goes back over
+forward step \f$n\f$ with \f$\Delta t_n\f$.
 
-The implementation forms the gradient as a time integral, with the adjoint
-velocity of the time-continuous adjoint equation and a weight for every term
-that it takes, with the time, from the record. The explicit derivative of
-\f$f\f$ at \f$\mathbf{u}_n\f$ is weighted by \f$\Delta t_n\f$, as
-\f$F\f$ samples it. The coupling of \f$\mathbf{u}_n\f$ with
-\f$\mathbf{u}_{n+1}^{\dagger}\f$ is weighted by \f$\Delta t_{n+1}\f$ at
-time order 1, where forward step \f$n+1\f$ alone applies \f$\chi\f$ to
-\f$\mathbf{u}_n\f$, and by \f$\Delta t_n\f$ at time order 2 and 3, where
-the extrapolation applies it in three steps, no single weight is exact, and
-\f$\Delta t_n\f$ is the closer one. At a constant time step every weight is
-the step of the run.
+The exact discrete transpose combines, for every forward state, the
+coefficients of the forward steps that use it. Scaled by
+\f$1 / \Delta t_m\f$, so that its forcing is \f$\nabla f(\mathbf{u}_m)\f$
+itself, the adjoint of \f$\mathbf{u}_m\f$ takes
+- the implicit operator of forward step \f$m\f$, with \f$b_1^{(m)}\f$;
+- the BDF column \f$(b_2^{(m+1)}, b_3^{(m+2)}, b_4^{(m+3)})\f$ on the
+  adjoints of the next three levels, divided by \f$\Delta t_m\f$ alone;
+- the EXT column \f$c_j^m = a_j^{(m+j)} \Delta t_{m+j} / \Delta t_m\f$ on
+  their explicit terms,
 
-At a constant time step the forward and the reversed stencils are the same,
-and the replayed adjoint, with the \f$n = 0\f$ term above, is the exact
-discrete adjoint of the forward scheme. Under a variable time step the exact
-transpose would combine, for every forward state, the coefficients of the
-forward steps that use it, while the replayed adjoint builds its coefficients
-from its own steps in reverse order. The two agree only for equal steps, so
-the replayed adjoint is consistent with the forward run but not its exact
-transpose, and the difference grows with how much the time step changes from
-one step to the next.
+where a step past the last one contributes nothing. The explicit terms whose
+operator does not depend on the forward state, the Brinkman term and the
+curl--curl load of the adjoint pressure, are extrapolated with the EXT column.
+The convection depends on the forward state, so it is applied once, at
+\f$\mathbf{u}_m\f$, to the combined adjoint velocity
+\f$\mathbf{u}^\dagger_{e,m} = \sum_{j=1}^{3} c_j^m
+\mathbf{u}^\dagger_{m+j}\f$. The adjoint forcing of the objective enters at
+its own level, without extrapolation. The gradient pairs every state with
+the combined adjoint velocity,
+\f[
+  \mathrm{d}F(\chi,\delta \chi)
+  = -\sum_{m=0}^{N} \Delta t_{\max(m,1)} \int_\Omega \delta \chi\,
+  \mathbf{u}_{e,m}^{\dagger} \cdot \mathbf{u}_m \, \mathrm{d}\Omega,
+\f]
+normalised by the same time as the objective. The initial state takes the
+column \f$c_j^0 = a_j^{(j)} \Delta t_j / \Delta t_1\f$ and adds no time to
+the normalisation. At a constant time step the columns are the constant
+coefficients, \f$\mathbf{u}^\dagger_{e,m}\f$ is the adjoint velocity
+\f$\mathbf{u}^\dagger_{m+1}\f$ above, and the two forms agree. The
+coefficients are recorded rather than rebuilt from the time steps, because
+those of the first steps also depend on how the history of the forward run
+was started.
+
+This is the default, `case.adjoint_fluid.time_transpose` set to `"exact"`.
+With `"reverse"`, and with adjoint scalars, which have no exact transpose
+yet, the adjoint instead takes the BDF and EXT coefficients of its own
+history of steps, started from equal steps of \f$\Delta t_N\f$, and keeps
+every explicit term in the extrapolation. The coupling of
+\f$\mathbf{u}_n\f$ with \f$\mathbf{u}_{n+1}^{\dagger}\f$ is weighted by
+\f$\Delta t_{n+1}\f$ at time order 1, where forward step \f$n+1\f$ alone
+applies \f$\chi\f$ to \f$\mathbf{u}_n\f$, and by \f$\Delta t_n\f$ at time
+order 2 and 3, where no single weight is exact and \f$\Delta t_n\f$ is the
+closer one. At a constant time step this is the exact discrete adjoint too.
+Under a variable time step it is consistent with the forward run but not its
+exact transpose, and the difference grows with how much the time step
+changes from one step to the next.
 
 ### The curl--curl term {#adjoint-curl-curl}
 The forward pressure equation above contains the curl--curl term
