@@ -381,7 +381,8 @@ contains
        if (this%get_n_timesteps() .ne. 0) then
           call neko_error("The initial state is saved before the first step")
        end if
-       call this%record_time(this%neko_case%time)
+       call this%record_time(this%neko_case%time, &
+            this%neko_case%fluid%ext_bdf)
        call this%save_data(0, 0)
        call profiler_end_region("Checkpoint save")
        return
@@ -389,7 +390,7 @@ contains
 
     ! Update the number of recorded timesteps
     call this%set_n_timesteps(this%get_n_timesteps() + 1)
-    call this%record_time(this%neko_case%time)
+    call this%record_time(this%neko_case%time, this%neko_case%fluid%ext_bdf)
 
     select case (this%algorithm_id)
     case (CHECKPOINT_LINEAR)

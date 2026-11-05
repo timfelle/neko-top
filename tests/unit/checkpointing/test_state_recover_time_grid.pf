@@ -172,7 +172,7 @@ contains
     do i = 1, n_grown
        call synthetic_time_state(i, synthetic)
        call chkp%set_n_timesteps(i)
-       call chkp%record_time(synthetic)
+       call chkp%record_time(synthetic, sim%neko_case%fluid%ext_bdf)
     end do
     growth_ok = chkp%time_grid_capacity() .ge. n_grown .and. &
          chkp%get_n_timesteps() .eq. n_grown .and. &
