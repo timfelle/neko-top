@@ -55,7 +55,8 @@ contains
   !> The recorded grid rebuilds the time state of every step of a live run
   !! with a variable time step, a reset clears it but keeps its capacity and
   !! the frozen grid, a replay of the frozen grid reproduces the live run,
-  !! and the grid grows past its initial capacity.
+  !! and the grid grows past its initial capacity, keeping the time and the
+  !! coefficients of the time scheme of every step.
   @test(npes=[2])
   subroutine time_grid_api(this)
     class(time_grid_case), intent(inout) :: this
@@ -70,8 +71,9 @@ contains
     type(field_array_t) :: p_fields, u_fields, v_fields, w_fields
     type(field_t), pointer :: p, u, v, w
 
+    real(kind=rp), allocatable :: bd_grown(:,:), ab_grown(:,:)
     integer :: i, n_grown, capacity, initial_capacity
-    integer :: rebuild_fail, replay_fail
+    integer :: rebuild_fail, replay_fail, coeffs_fail
     logical :: placeholder_seen, dt_varies, reset_ok, frozen_ok
     logical :: unfrozen_ok, growth_ok
     character(len=512) :: msg
@@ -165,12 +167,18 @@ contains
     call chkp%unfreeze_time_grid()
     unfrozen_ok = .not. chkp%has_prescribed_grid()
 
-    ! Grow the grid past its initial capacity with a synthetic record
+    ! Grow the grid past its initial capacity with a synthetic record. The
+    ! time scheme of the fluid takes the coefficients of the history of
+    ! every step, which differ from step to step
     call chkp%reset()
     initial_capacity = chkp%time_grid_capacity()
     n_grown = 3 * initial_capacity + 1
+    allocate(bd_grown(4, n_grown), ab_grown(4, n_grown))
     do i = 1, n_grown
        call synthetic_time_state(i, synthetic)
+       call sim%neko_case%fluid%ext_bdf%set_coeffs(real(synthetic%dtlag, rp))
+       bd_grown(:, i) = sim%neko_case%fluid%ext_bdf%diffusion_coeffs%x(1:4)
+       ab_grown(:, i) = sim%neko_case%fluid%ext_bdf%advection_coeffs%x(1:4)
        call chkp%set_n_timesteps(i)
        call chkp%record_time(synthetic, sim%neko_case%fluid%ext_bdf)
     end do
@@ -178,12 +186,19 @@ contains
          chkp%get_n_timesteps() .eq. n_grown .and. &
          .not. differs(chkp%get_time(0), 0.0_dp) .and. &
          .not. differs(chkp%get_end_time(), synthetic%t)
+    coeffs_fail = -1
     do i = 1, n_grown
        call synthetic_time_state(i, synthetic)
        growth_ok = growth_ok .and. &
             .not. differs(chkp%get_time(i), synthetic%t) .and. &
             .not. differs(chkp%get_dt(i), synthetic%dt)
+       if (any(.not. (abs(chkp%get_bdf_coeffs(i) - bd_grown(:, i)) .le. &
+            0.0_rp)) .or. any(.not. (abs(chkp%get_ext_coeffs(i) - &
+            ab_grown(:, i)) .le. 0.0_rp))) then
+          if (coeffs_fail .lt. 0) coeffs_fail = i
+       end if
     end do
+    deallocate(bd_grown, ab_grown)
 
     call free_snapshot_fields(p_fields, u_fields, v_fields, w_fields)
     call finalize_case_objects(sim, des, prob, chkp)
@@ -202,9 +217,14 @@ contains
     write(msg, '(A,I0,A,I0)') 'The grid does not grow from ', &
          initial_capacity, ' to ', n_grown
     @assertTrue(growth_ok, trim(msg))
+    write(msg, '(A,I0)') 'The grown grid holds other coefficients of ' // &
+         'the time scheme than recorded at step ', coeffs_fail
+    @assertTrue(coeffs_fail .lt. 0, trim(msg))
   end subroutine time_grid_api
 
   !> A time state of step `i` of a run with a step growing with `i`.
+  !! @details Its history holds the steps before it, which grow the same
+  !! way, so that every step has time-scheme coefficients of its own.
   !! @param i Index of the step.
   !! @param time The time state to fill.
   subroutine synthetic_time_state(i, time)
@@ -219,7 +239,9 @@ contains
        time%t = time%t + 1.0_dp + 1.0e-3_dp * real(k, dp)
     end do
     time%tlag = time%t - time%dt
-    time%dtlag = time%dt
+    do k = 1, size(time%dtlag)
+       time%dtlag(k) = 1.0_dp + 1.0e-3_dp * real(i - k + 1, dp)
+    end do
   end subroutine synthetic_time_state
 
   !> Copy the fluid fields into the snapshots of state `i`.
