@@ -112,10 +112,30 @@ add_pfunit_ctest(checkpoint_end_of_run_gating
     MAX_PES 2
 )
 
+add_pfunit_ctest(checkpoint_restore_consistency_variable_dt
+    TEST_SOURCES
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_checkpoint_restore_consistency_variable_dt.pf
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    LINK_LIBRARIES checkpointing_test_utils Neko-TOP::neko-top
+    MAX_PES 2
+)
+
+add_pfunit_ctest(state_recover_time_grid
+    TEST_SOURCES
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_state_recover_time_grid.pf
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    LINK_LIBRARIES checkpointing_test_utils Neko-TOP::neko-top
+    MAX_PES 2
+)
+
 set(CHECKPOINT_RESTORE_ENV
     "NEKO_LOG_FILE=checkpoint_restore_consistency.log;OMP_NUM_THREADS=1")
 set(CHECKPOINT_GATING_ENV
     "NEKO_LOG_FILE=checkpoint_end_of_run_gating.log;OMP_NUM_THREADS=1")
+set(CHECKPOINT_VARIABLE_DT_ENV
+    "NEKO_LOG_FILE=checkpoint_restore_consistency_variable_dt.log;OMP_NUM_THREADS=1")
+set(TIME_GRID_ENV
+    "NEKO_LOG_FILE=state_recover_time_grid.log;OMP_NUM_THREADS=1")
 
 set_tests_properties(checkpoint_restore_consistency PROPERTIES
     LABELS "unit;checkpointing"
@@ -130,8 +150,22 @@ set_tests_properties(checkpoint_end_of_run_gating PROPERTIES
     TIMEOUT 300
 )
 
+set_tests_properties(checkpoint_restore_consistency_variable_dt PROPERTIES
+    LABELS "unit;checkpointing"
+    ENVIRONMENT "${CHECKPOINT_VARIABLE_DT_ENV}"
+    TIMEOUT 300
+)
+
+set_tests_properties(state_recover_time_grid PROPERTIES
+    LABELS "unit;checkpointing"
+    ENVIRONMENT "${TIME_GRID_ENV}"
+    TIMEOUT 300
+)
+
 add_dependencies(Unit checkpoint_restore_consistency)
 add_dependencies(Unit checkpoint_end_of_run_gating)
+add_dependencies(Unit checkpoint_restore_consistency_variable_dt)
+add_dependencies(Unit state_recover_time_grid)
 
 add_dependencies(checkpoint_restore_consistency
     checkpointing_case
@@ -139,10 +173,19 @@ add_dependencies(checkpoint_restore_consistency
 add_dependencies(checkpoint_end_of_run_gating
     checkpointing_case
 )
+add_dependencies(checkpoint_restore_consistency_variable_dt
+    checkpointing_case
+)
+add_dependencies(state_recover_time_grid
+    checkpointing_case
+)
 
 if (TARGET checkpointing_prepare)
     add_dependencies(checkpoint_restore_consistency checkpointing_prepare)
     add_dependencies(checkpoint_end_of_run_gating checkpointing_prepare)
+    add_dependencies(checkpoint_restore_consistency_variable_dt
+        checkpointing_prepare)
+    add_dependencies(state_recover_time_grid checkpointing_prepare)
 endif()
 
 # Disable treating unused-variable as error for pfunit tests
@@ -151,6 +194,12 @@ if (CMAKE_Fortran_COMPILER_ID STREQUAL "GNU")
         $<$<COMPILE_LANGUAGE:Fortran>:-Wno-unused-variable>
     )
     target_compile_options(checkpoint_end_of_run_gating PRIVATE
+        $<$<COMPILE_LANGUAGE:Fortran>:-Wno-unused-variable>
+    )
+    target_compile_options(checkpoint_restore_consistency_variable_dt PRIVATE
+        $<$<COMPILE_LANGUAGE:Fortran>:-Wno-unused-variable>
+    )
+    target_compile_options(state_recover_time_grid PRIVATE
         $<$<COMPILE_LANGUAGE:Fortran>:-Wno-unused-variable>
     )
 endif()

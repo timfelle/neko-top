@@ -4,7 +4,7 @@ module checkpointing_test_utils
   use design, only: design_t, design_factory
   use problem, only: problem_t
   use neko, only: neko_init
-  use num_types, only: rp
+  use num_types, only: rp, dp
   use json_module, only: json_file
   use json_utils, only: json_get
   use json_utils_ext, only: json_read_file
@@ -21,6 +21,8 @@ module checkpointing_test_utils
 
   public :: initialize_runtime_once
   public :: initialize_case_from_file
+  public :: initialize_case_from_parameters
+  public :: set_variable_time_step
   public :: finalize_case_objects
   public :: cleanup_runtime_state
   public :: allocate_scalar_snapshot_fields
@@ -46,15 +48,55 @@ contains
     type(simulation_t), intent(inout), target :: sim
     class(design_t), allocatable, intent(inout) :: des
     type(problem_t), intent(inout) :: prob
-    type(json_file) :: parameters, design_parameters
+    type(json_file) :: parameters
 
     parameters = json_read_file(trim(parameter_file))
+    call initialize_case_from_parameters(parameters, sim, des, prob)
+  end subroutine initialize_case_from_file
+
+  ! Case bootstrapping from parameters a test has adjusted.
+  subroutine initialize_case_from_parameters(parameters, sim, des, prob)
+    type(json_file), intent(inout) :: parameters
+    type(simulation_t), intent(inout), target :: sim
+    class(design_t), allocatable, intent(inout) :: des
+    type(problem_t), intent(inout) :: prob
+    type(json_file) :: design_parameters
+
     call json_get(parameters, 'optimization.design', design_parameters)
 
     call sim%init(parameters)
     call design_factory(des, design_parameters, sim)
     call prob%init(parameters, des, sim)
-  end subroutine initialize_case_from_file
+  end subroutine initialize_case_from_parameters
+
+  ! Switch the checkpointing case to a variable time step that lands on the
+  ! end time, 1e-2, and on a scheduled time at 9.9e-3, so that a run at the
+  ! largest step of 3e-4 ends with 33 steps of 3e-4 and one landing step of
+  ! 1e-4. A first step `timestep` below 3e-4 makes the run ramp up to it. The
+  ! scheduled time is the compute time of the steady simulation component.
+  ! It freezes the flow once the flow differs from its last sample by no more
+  ! than its tolerance, which a recompute through the scheduled time would
+  ! do with a tolerance of zero, so the tolerance is negative.
+  subroutine set_variable_time_step(parameters, timestep)
+    type(json_file), intent(inout) :: parameters
+    real(kind=dp), intent(in) :: timestep
+    logical :: found
+
+    call parameters%update('case.time.end_time', 1.0e-2_dp, found)
+    call parameters%update('case.time.timestep', timestep, found)
+    call parameters%update('case.time.max_timestep', 3.0e-4_dp, found)
+    call parameters%update('case.time.variable_timestep', .true., found)
+    call parameters%update('case.time.exact_output_time', .true., found)
+    call parameters%update('case.time.min_dt_decrease_factor', 0.2_dp, &
+         found)
+
+    call parameters%update('case.simulation_components(1).tol', -1.0_dp, &
+         found)
+    call parameters%update('case.simulation_components(1).compute_control', &
+         'simulationtime', found)
+    call parameters%update('case.simulation_components(1).compute_value', &
+         9.9e-3_dp, found)
+  end subroutine set_variable_time_step
 
   subroutine cleanup_runtime_state()
     call neko_registry%free()
