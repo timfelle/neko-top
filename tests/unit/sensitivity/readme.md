@@ -118,6 +118,16 @@ Currently, we have added tests for the following components:
   that weights the coupling term by `dt_(i+1)` at this time order, as at
   time order 1, `-1.46e-2`. The same case at a fixed step of `2.5e-3` gives
   `+3.5e-6`.
+- `brinkman_dissipation_objective_t`, unsteady with a variable timestep that
+  the CFL number limits (`unsteady_variable_timestep_cfl_limited.case`) — the
+  same case starting at the inflow velocity, with a `target_cfl` of `0.02` and
+  an end time of `0.02`. The CFL number limits the first step below
+  `timestep`, and the landing on the end time fits it to `6.90e-4`; the
+  frozen grid holds 39 steps of 3 sizes, from `6.90e-4` down to `4.56e-4`.
+  Every run starts its time-step history from equal steps of the step its
+  first step takes, which the forward run checks. The error at the smallest
+  perturbation is `-5.14e-4`, and the tolerance is `1.5e-3`. A history
+  started from `timestep` instead gave `-2.55e-3`.
 - `brinkman_dissipation_rejection` — checks the invalid mixed-dealias
   configuration directly through Neko's pFUnit error-redirection fixture. A
   mixed setting has no value its sensitivity is the gradient of, so the
