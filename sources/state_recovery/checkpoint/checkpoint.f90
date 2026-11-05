@@ -47,6 +47,7 @@ module state_recover_checkpoint
   use host_array, only: host_array_t
   use profiler, only: profiler_start_region, profiler_end_region
   use state_recover, only: state_recover_t
+  use time_step_controller, only: time_step_controller_t
   use comm, only: pe_rank, NEKO_COMM
   use neko_config, only: NEKO_BCKND_DEVICE
   use device, only: device_memcpy, DEVICE_TO_HOST, HOST_TO_DEVICE
@@ -82,9 +83,14 @@ module state_recover_checkpoint
      integer :: n_saves_disc = 0
      integer :: first_valid_timestep = 2
      integer :: loaded_checkpoint = -1
+     !> Whether the initial state, before the first step, has been saved.
+     logical :: initial_saved = .false.
 
      ! Field pointers
      type(field_list_t) :: state_list
+     !> RAM storage of the states, a slot per state and field. Slots 1 to
+     !! `n_saves_memory` are a ring over the time steps, slot 0 holds the
+     !! initial state.
      type(host_array_t), dimension(:,:), allocatable :: state_storage
 
      ! Structures to hold the checkpoint data
@@ -268,9 +274,10 @@ contains
        n_states = n_states + extra_fields%size()
     end if
 
-    ! Allocate the storage for the RAM checkpoints
-    allocate(this%state_storage(this%n_saves_memory, this%state_list%size()))
-    do i = 1, this%n_saves_memory
+    ! Allocate the storage for the RAM checkpoints and the initial state
+    allocate(this%state_storage(0:this%n_saves_memory, &
+         this%state_list%size()))
+    do i = 0, this%n_saves_memory
        do j = 1, this%state_list%size()
           si => this%state_list%get(j)
           call this%state_storage(i, j)%init(si%size())
@@ -318,7 +325,7 @@ contains
 
     ! Free the RAM Checkpoints
     if (allocated(this%state_storage)) then
-       do i = 1, this%n_saves_memory
+       do i = 0, this%n_saves_memory
           do j = 1, this%state_list%size()
              call this%state_storage(i, j)%free()
           end do
@@ -351,26 +358,44 @@ contains
     this%keep_checkpoints = .false.
 
     this%n_saves_disc = 0
-    call this%set_n_timesteps(0)
     this%first_valid_timestep = 2
     this%loaded_checkpoint = -1
-    nullify(this%neko_case)
+    this%initial_saved = .false.
+    call this%free_base()
 
   end subroutine checkpoint_free
 
   ! ========================================================================== !
   ! Saving and Restoring
 
-  !> Save the current state of the simulation to disk
   !> Save forward state.
+  !! @details Before the first step, at time step 0, the initial state is
+  !! copied to a RAM slot of its own, from which `restore(0)` returns it.
+  !! After a step, the state is saved by the checkpointing algorithm. The
+  !! time of the state is recorded either way.
   !! @param[inout] this Checkpointing implementation.
-  subroutine checkpoint_save(this)
+  !! @param[in] dt_controller Time-step controller of the run, whose flag
+  !! for a change of the time step is recorded. Optional.
+  subroutine checkpoint_save(this, dt_controller)
     class(state_recover_checkpoint_t), intent(inout) :: this
+    type(time_step_controller_t), intent(in), optional :: dt_controller
 
     call profiler_start_region("Checkpoint save")
 
+    if (this%neko_case%time%tstep .eq. 0) then
+       if (this%get_n_timesteps() .ne. 0) then
+          call neko_error("The initial state is saved before the first step")
+       end if
+       call this%record_time(this%neko_case%time, dt_controller)
+       call this%save_data(0)
+       this%initial_saved = .true.
+       call profiler_end_region("Checkpoint save")
+       return
+    end if
+
     ! Update the number of recorded timesteps
     call this%set_n_timesteps(this%get_n_timesteps() + 1)
+    call this%record_time(this%neko_case%time, dt_controller)
 
     select case (this%algorithm_id)
     case (CHECKPOINT_LINEAR)
@@ -382,10 +407,9 @@ contains
     call profiler_end_region("Checkpoint save")
   end subroutine checkpoint_save
 
-  !> Restore the forward simulation state
   !> Restore forward state for adjoint.
   !! @param[inout] this Checkpointing implementation.
-  !! @param[in] tstep Timestep to restore.
+  !! @param[in] tstep Timestep to restore, 0 for the initial condition.
   subroutine checkpoint_restore(this, tstep)
     class(state_recover_checkpoint_t), intent(inout) :: this
     integer, intent(in) :: tstep
@@ -393,10 +417,19 @@ contains
 
     call profiler_start_region("Checkpoint restore")
 
-    if (tstep .lt. 1 .or. tstep .gt. this%get_n_timesteps()) then
+    if (tstep .lt. 0 .or. tstep .gt. this%get_n_timesteps()) then
        write(msg, '(A,I0,A,I0,A)') "Requested timestep ", tstep, &
-            " is out of range [1, ", this%get_n_timesteps(), "]"
+            " is out of range [0, ", this%get_n_timesteps(), "]"
        call neko_error(trim(msg))
+    end if
+
+    if (tstep .eq. 0) then
+       if (.not. this%initial_saved) then
+          call neko_error("The initial state was not saved")
+       end if
+       call this%load_data(0)
+       call profiler_end_region("Checkpoint restore")
+       return
     end if
 
     select case (this%algorithm_id)
@@ -411,7 +444,8 @@ contains
 
   !> Save current data to the RAM checkpoint at the specified index.
   !! @param this The checkpoint object.
-  !! @param index The index in the RAM checkpoint to save to.
+  !! @param index The index in the RAM checkpoint to save to, 0 for the
+  !! initial state.
   subroutine checkpoint_save_data(this, index)
     class(state_recover_checkpoint_t), intent(inout) :: this
     integer, intent(in) :: index
@@ -419,9 +453,9 @@ contains
     integer :: i
     character(len=1024) :: msg
 
-    if (index .lt. 1 .or. index .gt. this%n_saves_memory) then
+    if (index .lt. 0 .or. index .gt. this%n_saves_memory) then
        write(msg, '(A,I0,A,I0,A)') "Checkpoint save index ", index, &
-            " is out of range [1, ", this%n_saves_memory, "]"
+            " is out of range [0, ", this%n_saves_memory, "]"
        call neko_error(trim(msg))
     end if
 
@@ -453,7 +487,8 @@ contains
   !> Restore data from the RAM checkpoint at the specified index to the current
   !! state.
   !! @param this The checkpoint object.
-  !! @param index The index in the RAM checkpoint to restore from.
+  !! @param index The index in the RAM checkpoint to restore from, 0 for the
+  !! initial state.
   subroutine checkpoint_load_data(this, index)
     class(state_recover_checkpoint_t), intent(inout) :: this
     integer, intent(in) :: index
@@ -461,9 +496,9 @@ contains
     character(len=1024) :: msg
     integer :: i
 
-    if (index .lt. 1 .or. index .gt. this%n_saves_memory) then
+    if (index .lt. 0 .or. index .gt. this%n_saves_memory) then
        write(msg, '(A,I0,A,I0,A)') "Checkpoint save index ", index, &
-            " is out of range [1, ", this%n_saves_memory, "]"
+            " is out of range [0, ", this%n_saves_memory, "]"
        call neko_error(trim(msg))
     end if
 
@@ -496,11 +531,13 @@ contains
     ! Reset our checkpoints
     this%loaded_checkpoint = -1
     this%n_saves_disc = 0
-    call this%set_n_timesteps(0)
+    this%initial_saved = .false.
+    call this%reset_base()
 
-    do i = 1, size(this%state_storage, 1)
+    do i = lbound(this%state_storage, 1), ubound(this%state_storage, 1)
        do j = 1, size(this%state_storage, 2)
-          call rzero(this%state_storage(i, j)%x, this%state_storage(i, j)%size())
+          call rzero(this%state_storage(i, j)%x, &
+               this%state_storage(i, j)%size())
        end do
     end do
 
