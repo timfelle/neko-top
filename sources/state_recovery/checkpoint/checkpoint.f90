@@ -370,12 +370,18 @@ contains
   !! @details Before the first step, at time step 0, the initial state is
   !! copied to a RAM slot of its own, from which `restore(0)` returns it.
   !! After a step, the state is saved by the checkpointing algorithm. The
-  !! time of the state is recorded either way.
+  !! time of the state, and the coefficients of the time scheme of the
+  !! fluid, are recorded either way.
   !! @param[inout] this Checkpointing implementation.
   subroutine checkpoint_save(this)
     class(state_recover_checkpoint_t), intent(inout) :: this
 
     call profiler_start_region("Checkpoint save")
+
+    if (.not. allocated(this%neko_case%fluid%ext_bdf)) then
+       call neko_error("The state recovery records the time scheme of " // &
+            "the fluid, which has none")
+    end if
 
     if (this%neko_case%time%tstep .eq. 0) then
        if (this%get_n_timesteps() .ne. 0) then
