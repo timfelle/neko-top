@@ -80,7 +80,7 @@ module adjoint_fluid_pnpn
        segregated_vector_bc_projector_t
   use zero_dirichlet, only: zero_dirichlet_t
   use utils, only: neko_error
-  use field_math, only: field_add2, field_copy
+  use field_math, only: field_add2, field_add2s2, field_copy
   use bc, only: bc_t, BC_DIRICHLET
   use file, only: file_t
   use operators, only: ortho
@@ -193,6 +193,17 @@ module adjoint_fluid_pnpn
      !> Whether to use the full formulation of the viscous stress term
      logical :: full_stress_formulation = .false.
 
+     !> Whether a step is the exact discrete transpose of the forward step it
+     !! goes back over, with the coefficients set by `set_exact_coeffs`
+     !! rather than those of the adjoint's own time-step history.
+     logical :: exact_transpose = .false.
+     !> EXT column of the adjoint level of the step, see
+     !! `state_recover_t%get_adjoint_ext_column`.
+     real(kind=rp) :: ext_col(4) = 0.0_rp
+     !> BDF column of the adjoint level of the step, see
+     !! `state_recover_t%get_adjoint_bdf_column`.
+     real(kind=rp) :: bdf_col(4) = 0.0_rp
+
      ! ======================================================================= !
      ! Addressable attributes
 
@@ -228,6 +239,15 @@ module adjoint_fluid_pnpn
      !> Write a field with boundary condition specifications.
      procedure, pass(this) :: write_boundary_conditions => &
           adjoint_fluid_pnpn_write_boundary_conditions
+     !> Make the next step the exact transpose of a forward step.
+     procedure, pass(this) :: set_exact_coeffs => &
+          adjoint_fluid_pnpn_set_exact_coeffs
+     !> Return to the coefficients of the adjoint's own time-step history.
+     procedure, pass(this) :: clear_exact_coeffs => &
+          adjoint_fluid_pnpn_clear_exact_coeffs
+     !> Combine the adjoint velocity and its history with an EXT column.
+     procedure, pass(this) :: combine_adjoint => &
+          adjoint_fluid_pnpn_combine_adjoint
 
      !> Compute the power_iterations field.
      procedure, public, pass(this) :: PW_compute_ => power_iterations_compute
@@ -657,11 +677,22 @@ contains
        deallocate(this%ext_bdf)
     end if
 
+    call this%clear_exact_coeffs()
+
     ! call this%vol_flow%free()
 
   end subroutine adjoint_fluid_pnpn_free
 
   !> Advance fluid simulation in time.
+  !! @details With `exact_transpose` the step is the exact discrete
+  !! transpose of the forward step it goes back over. It takes the EXT and
+  !! BDF columns of `set_exact_coeffs` instead of the coefficients of the
+  !! adjoint's own time-step history, solves with the forward step's own
+  !! \f$ b_1 / \Delta t \f$, and combines the adjoint velocity and its
+  !! history into `u_adj_e` first. The convection depends on the primal
+  !! state of the level, so it is applied once, to `u_adj_e` at the restored
+  !! primal state, after the extrapolation of the other explicit terms
+  !! rather than into their history.
   !! @param this The fluid simulation object.
   !! @param time The time state object.
   !! @param dt_controller timestep controller
@@ -675,8 +706,13 @@ contains
     type(ksp_monitor_t) :: ksp_results(4)
     type(field_t), pointer :: dx_p_adj, dy_p_adj, dz_p_adj
     type(field_t), pointer :: cc_x, cc_y, cc_z, work1, work2, work3, work4
+    type(field_t), pointer :: cv_x, cv_y, cv_z
     integer :: temp_indices(3)
     integer :: cc_indices(7)
+    integer :: cv_indices(3)
+    ! Coefficients of the time scheme and their orders
+    real(kind=rp) :: ab(4), bd(4)
+    integer :: nab, nbd
 
     if (this%freeze) return
 
@@ -705,9 +741,21 @@ contains
          t => time%t, tstep => time%tstep, dt => time%dt, &
          ext_bdf => this%ext_bdf, event => glb_cmd_event)
 
+      if (this%exact_transpose) then
+         ab = this%ext_col
+         bd = this%bdf_col
+         nab = 3
+         nbd = 3
+      else
+         ab = ext_bdf%advection_coeffs%x
+         bd = ext_bdf%diffusion_coeffs%x
+         nab = ext_bdf%nadv
+         nbd = ext_bdf%ndiff
+      end if
+
       ! Extrapolate the velocity if it's not done in nut_field estimation
       call sumab%compute_fluid(u_e, v_e, w_e, u, v, w, &
-           ulag, vlag, wlag, ext_bdf%advection_coeffs%x, ext_bdf%nadv)
+           ulag, vlag, wlag, ab, nab)
 
       ! Compute the source terms that are extrapolated in time below
       call this%source_term%compute(time, extrapolate = .true.)
@@ -741,6 +789,32 @@ contains
       if (oifs) then
          call neko_error("OIFS not implemented for adjoint")
 
+      else if (this%exact_transpose) then
+         ! Extrapolate the explicit terms that do not depend on the primal
+         ! state of the level.
+         call makeabf%compute_fluid(this%abx1, this%aby1, this%abz1,&
+              this%abx2, this%aby2, this%abz2, &
+              f_x%x, f_y%x, f_z%x, &
+              rho%x(1,1,1,1), ab, n)
+
+         ! Add the advection operator of the restored primal state, applied
+         ! to the combined adjoint velocity and scaled like the other
+         ! explicit terms.
+         call neko_scratch_registry%request_field(cv_x, cv_indices(1), .true.)
+         call neko_scratch_registry%request_field(cv_y, cv_indices(2), .true.)
+         call neko_scratch_registry%request_field(cv_z, cv_indices(3), .true.)
+         call this%adv%compute_adjoint(u_e, v_e, w_e, u_b, v_b, w_b, &
+              cv_x, cv_y, cv_z, &
+              Xh, this%c_Xh, dm_Xh%size())
+         call field_add2s2(f_x, cv_x, rho%x(1,1,1,1), n)
+         call field_add2s2(f_y, cv_y, rho%x(1,1,1,1), n)
+         call field_add2s2(f_z, cv_z, rho%x(1,1,1,1), n)
+         call neko_scratch_registry%relinquish_field(cv_indices)
+
+         ! Add the RHS contributions coming from the BDF scheme.
+         call makebdf%compute_fluid(ulag, vlag, wlag, f_x%x, f_y%x, f_z%x, &
+              u, v, w, c_Xh%B, c_Xh%Blag, c_Xh%Blaglag, rho%x(1,1,1,1), dt, &
+              bd, nbd, n)
       else
          ! Add the advection operators to the right-hand-side.
          call this%adv%compute_adjoint(u, v, w, u_b, v_b, w_b, &
@@ -754,12 +828,12 @@ contains
          call makeabf%compute_fluid(this%abx1, this%aby1, this%abz1,&
               this%abx2, this%aby2, this%abz2, &
               f_x%x, f_y%x, f_z%x, &
-              rho%x(1,1,1,1), ext_bdf%advection_coeffs%x, n)
+              rho%x(1,1,1,1), ab, n)
 
          ! Add the RHS contributions coming from the BDF scheme.
          call makebdf%compute_fluid(ulag, vlag, wlag, f_x%x, f_y%x, f_z%x, &
               u, v, w, c_Xh%B, c_Xh%Blag, c_Xh%Blaglag, rho%x(1,1,1,1), dt, &
-              ext_bdf%diffusion_coeffs%x, ext_bdf%ndiff, n)
+              bd, nbd, n)
       end if
 
       ! Source terms that must not be extrapolated in time are added as
@@ -786,7 +860,7 @@ contains
            p, &
            f_x, f_y, f_z, &
            c_Xh, msh, Xh, &
-           mu, rho, ext_bdf%diffusion_coeffs%x(1), &
+           mu, rho, bd(1), &
            dt, dm_Xh%size())
 
       call gs_Xh%op(u_res, GS_OP_ADD, event)
@@ -839,7 +913,7 @@ contains
            f_x, f_y, f_z, &
            c_Xh, gs_Xh, &
            this%bc_prs_surface, this%bc_sym_surface, &
-           Ax_prs, ext_bdf%diffusion_coeffs%x(1), dt, &
+           Ax_prs, bd(1), dt, &
            mu, rho, event)
 
       ! De-mean the pressure residual when no strong pressure boundaries present
@@ -946,6 +1020,47 @@ contains
     call profiler_end_region('Adjoint')
 
   end subroutine adjoint_fluid_pnpn_step
+
+  !> Make the next step the exact transpose of a forward step.
+  !! @details The step goes back over the forward step that produced the
+  !! primal state of its adjoint level, the state the step pairs with. Set
+  !! the columns of that level before every step.
+  !! @param this The adjoint scheme.
+  !! @param ext_col The EXT column of the level, see
+  !! `state_recover_t%get_adjoint_ext_column`.
+  !! @param bdf_col The BDF column of the level, see
+  !! `state_recover_t%get_adjoint_bdf_column`.
+  subroutine adjoint_fluid_pnpn_set_exact_coeffs(this, ext_col, bdf_col)
+    class(adjoint_fluid_pnpn_t), intent(inout) :: this
+    real(kind=rp), intent(in) :: ext_col(4), bdf_col(4)
+
+    this%exact_transpose = .true.
+    this%ext_col = ext_col
+    this%bdf_col = bdf_col
+  end subroutine adjoint_fluid_pnpn_set_exact_coeffs
+
+  !> Return to the coefficients of the adjoint's own time-step history.
+  !! @param this The adjoint scheme.
+  subroutine adjoint_fluid_pnpn_clear_exact_coeffs(this)
+    class(adjoint_fluid_pnpn_t), intent(inout) :: this
+
+    this%exact_transpose = .false.
+    this%ext_col = 0.0_rp
+    this%bdf_col = 0.0_rp
+  end subroutine adjoint_fluid_pnpn_clear_exact_coeffs
+
+  !> Combine the adjoint velocity and its history with an EXT column,
+  !! into `u_adj_e`, as the exact transpose does at the start of a step.
+  !! @param this The adjoint scheme.
+  !! @param ext_col The EXT column, applied to `u_adj` and its two lags.
+  subroutine adjoint_fluid_pnpn_combine_adjoint(this, ext_col)
+    class(adjoint_fluid_pnpn_t), intent(inout) :: this
+    real(kind=rp), intent(in) :: ext_col(4)
+
+    call this%sumab%compute_fluid(this%u_adj_e, this%v_adj_e, &
+         this%w_adj_e, this%u_adj, this%v_adj, this%w_adj, &
+         this%ulag, this%vlag, this%wlag, ext_col, 3)
+  end subroutine adjoint_fluid_pnpn_combine_adjoint
 
   !> Sets up the boundary condition for the scheme.
   !! @param this The fluid simulation object.
