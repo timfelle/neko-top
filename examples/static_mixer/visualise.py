@@ -126,16 +126,30 @@ args = parser.parse_args()
 input_dir = os.path.realpath(args.input_dir)
 design_file = os.path.join(input_dir, 'brinkman_0.vtkhdf')
 field_file = os.path.join(input_dir, 'fields/field_0.vtkhdf')
+frame_start = 0
 if args.chunk:
+    frame_start = int(args.chunk.split('-', maxsplit=1)[0])
     base_name, ext = os.path.splitext(field_file or "")
     field_file = f"{base_name}_steps_{args.chunk}{ext}"
-output_dir = os.path.join(input_dir, args.output_dir, args.text_color)
+if args.output_dir.startswith('/'):
+    output_dir = os.path.join(args.output_dir, args.text_color)
+else:
+    output_dir = os.path.join(input_dir, args.output_dir, args.text_color)
 stride = args.stride
 brinkman_clip_value = args.brinkman_clip
 text_color = [1.0, 1.0, 1.0] if args.text_color == 'white' else [0.0, 0.0, 0.0]
 overwrite = args.overwrite
 
 del args, parser
+
+print(f'Input directory: {input_dir}')
+print(f'Output directory: {output_dir}')
+print(f'Brinkman clip value: {brinkman_clip_value}')
+print(f'Text color: {text_color}')
+print(f'Stride: {stride}')
+print(f'Overwrite existing frames: {overwrite}')
+print(f'Brinkman file: {design_file}')
+print(f'Field file: {field_file}')
 
 # state file generated using paraview version 6.1.0
 
@@ -820,23 +834,22 @@ SetActiveSource(None)
 from paraview import servermanager as _sm
 
 mpi_rank = _sm.vtkProcessModule.GetProcessModule().GetPartitionId()
+print(f'Timekeeper timesteps: {timesteps}')
 
-for step_idx, t in enumerate(timesteps[::stride]):
-    # Compute the original (un-strided) timestep index used for file names so
-    # that Velocity_000002.png corresponds to the second raw timestep when
-    # stride=2, making it easy to correlate frames with simulation output.
-    raw_idx = step_idx * stride
-    velocity_output = f'{output_dir}/Velocity_{raw_idx:06d}.png'
-    temperature_output = f'{output_dir}/Temperature_{raw_idx:06d}.png'
+for local_idx, t in enumerate(timesteps):
+    frame_idx = frame_start + local_idx
+    if frame_idx % stride:
+        continue
+
+    velocity_output = f'{output_dir}/Velocity_{frame_idx:06d}.png'
+    temperature_output = f'{output_dir}/Temperature_{frame_idx:06d}.png'
 
     if not overwrite and os.path.exists(velocity_output) and os.path.exists(
             temperature_output):
-        if mpi_rank == 0:
-            print(f'Skipping step {raw_idx} (output files already exist; '
-                  f'use --overwrite to force regeneration)')
+        print(f'Skipping step {frame_idx} (output files already exist; '
+              f'use --overwrite to force regeneration)')
         continue
-    elif mpi_rank == 0:
-        print(f'Processing step {raw_idx} (t={t:.2f})...')
+    print(f'Processing step {frame_idx} (t={t:.2f})...')
 
     animationScene.AnimationTime = t
     SaveScreenshot(
