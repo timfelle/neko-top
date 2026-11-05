@@ -517,8 +517,17 @@ contains
     class(design_t), intent(inout) :: design
     type(time_step_controller_t) :: dt_controller
     real(kind=dp) :: loop_start
+    logical :: replay
 
-    call dt_controller%init(simulation%neko_case%params)
+    if (.not. allocated(simulation%state_recover)) then
+       call neko_error("State recovery not initialized.")
+    end if
+
+    ! A prescribed time grid is replayed with the default controller, which
+    ! keeps the time step, so that neither set_dt nor land changes the
+    ! prescribed step.
+    replay = simulation%state_recover%has_prescribed_grid()
+    if (.not. replay) call simulation%init_dt_controller(dt_controller)
 
     call simulation%reset()
     call simulation_init(simulation%neko_case, dt_controller)
@@ -526,21 +535,24 @@ contains
     ! Reset the objective value to zero
     call this%reset_objectives()
 
-    if (.not. allocated(simulation%state_recover)) then
-       call neko_error("State recovery not initialized.")
-    end if
-
     call profiler_start_region("Forward simulation")
     loop_start = MPI_WTIME()
     simulation%n_timesteps = 0
+    ! save the initial state
+    call simulation%state_recover%save(dt_controller)
     do while (.not. simulation%neko_case%time%is_done())
        simulation%n_timesteps = simulation%n_timesteps + 1
+       if (replay) then
+          simulation%neko_case%time%dt = &
+               simulation%state_recover%get_prescribed_dt( &
+               simulation%n_timesteps)
+       end if
        ! step forward
        call simulation_step(simulation%neko_case, dt_controller, loop_start)
        ! accumulate objective value
        call this%accumulate_objectives(design, simulation%neko_case%time)
        ! save a checkpoint
-       call simulation%state_recover%save()
+       call simulation%state_recover%save(dt_controller)
     end do
     call profiler_end_region("Forward simulation")
 
@@ -582,7 +594,7 @@ contains
     integer :: i
     type(time_state_t) :: accumulation_time
 
-    call dt_controller%init(simulation%neko_case%params)
+    call simulation%init_dt_controller(dt_controller)
 
     call simulation_adjoint_init(simulation%adjoint_case, dt_controller)
 

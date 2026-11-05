@@ -146,7 +146,7 @@ contains
          fmt = 'chkp', &
          keep_checkpoints = .false.)
 
-    call dt_controller%init(sim%neko_case%params)
+    call sim%init_dt_controller(dt_controller)
     call simulation_init(sim%neko_case, dt_controller)
 
     sim%neko_case%time%end_time = end_time_in_steps * sim%neko_case%time%dt
@@ -177,7 +177,7 @@ contains
 
     call simulation_finalize(sim%neko_case)
 
-    call dt_controller%init(sim%neko_case%params)
+    call sim%init_dt_controller(dt_controller)
     call simulation_init(sim%neko_case, dt_controller)
 
     ! Final step restore is checked first to exercise end-of-run RAM save path.
