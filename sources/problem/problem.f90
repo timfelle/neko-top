@@ -865,13 +865,13 @@ contains
   !! @details The exact transpose starts from a zero adjoint past the last
   !! step, which is the terminal condition of a time integral, and every
   !! step forms the combined adjoint, which a frozen adjoint fluid does not.
-  !! It takes every coefficient from the record of the forward run, so a
-  !! forward step may take lower time orders than the case, as a start-up
-  !! ramp does. Its step combines the current adjoint and two lags, with up
-  !! to four BDF coefficients, which holds forward steps of BDF and EXT
-  !! orders 1 to 3, and it takes no forward step of higher orders than the
-  !! adjoint fluid's own. A recorded step outside these orders stops the
-  !! run.
+  !! It takes every coefficient from the record of the forward run. Its
+  !! step combines the current adjoint and two lags, with up to four BDF
+  !! coefficients, so it represents forward steps of BDF and EXT orders 1
+  !! to 3. Lower orders would come from a start-up ramp, which Neko-TOP's
+  !! reset currently prevents by saturating the time scheme. The cap at the
+  !! adjoint fluid's own configured orders is a conservative guard, not a
+  !! requirement of the step: a recorded step outside it stops the run.
   !! @param simulation The simulation.
   !! @param fluid_adj The adjoint fluid.
   subroutine exact_adjoint_fluid(simulation, fluid_adj)
