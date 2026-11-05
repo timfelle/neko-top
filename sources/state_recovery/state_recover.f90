@@ -45,10 +45,11 @@
 !! for initializing it. The allocatable `recover` argument is replaced if it
 !! is already allocated.
 module state_recover
-  use num_types, only: dp
+  use num_types, only: dp, rp
   use case, only: case_t
   use json_file_module, only: json_file
   use time_state, only: time_state_t
+  use time_scheme_controller, only: time_scheme_controller_t
   use utils, only: neko_error
   implicit none
   private
@@ -61,9 +62,10 @@ module state_recover
   !!
   !! @details Besides the states, which the implementations store, the base
   !! type records the time grid of the forward run: the time of every saved
-  !! state and the time step that produced it. The grid is replicated on
-  !! every rank and holds a few scalars per step. A copy of it can be frozen
-  !! as a prescribed grid, which later runs replay step by step and which a
+  !! state, the time step that produced it and the coefficients of the time
+  !! scheme of the fluid in that step. The grid is replicated on every rank
+  !! and holds a few scalars per step. A copy of it can be frozen as a
+  !! prescribed grid, which later runs replay step by step and which a
   !! `reset` leaves in place.
   type, abstract, public :: state_recover_t
      private
@@ -76,6 +78,15 @@ module state_recover
      !> Time steps that produced the recorded states, \f$ \Delta t_1 \f$ to
      !! \f$ \Delta t_N \f$.
      real(kind=dp), allocatable :: dt_hist(:)
+     !> Coefficients of the BDF scheme of the fluid in the steps that
+     !! produced the recorded states, `diffusion_coeffs` of its time scheme.
+     real(kind=rp), allocatable :: bdf_hist(:,:)
+     !> Coefficients of the EXT scheme of the fluid in the steps that
+     !! produced the recorded states, `advection_coeffs` of its time scheme.
+     real(kind=rp), allocatable :: ext_hist(:,:)
+     !> Orders of the BDF and the EXT scheme in the steps that produced the
+     !! recorded states.
+     integer, allocatable :: order_hist(:,:)
      !> The time step of the time state before the first step.
      real(kind=dp) :: dt0 = 0.0_dp
      !> The time-step history before the first step, as the first step
@@ -115,6 +126,16 @@ module state_recover
      !> Time of the last recorded state.
      procedure, pass(this), public, non_overridable :: get_end_time => &
           state_recover_get_end_time
+     !> BDF coefficients of the step that produced a recorded state.
+     procedure, pass(this), public, non_overridable :: get_bdf_coeffs => &
+          state_recover_get_bdf_coeffs
+     !> EXT coefficients of the step that produced a recorded state.
+     procedure, pass(this), public, non_overridable :: get_ext_coeffs => &
+          state_recover_get_ext_coeffs
+     !> Orders of the time schemes of the step that produced a recorded
+     !! state.
+     procedure, pass(this), public, non_overridable :: get_scheme_orders => &
+          state_recover_get_scheme_orders
      !> Time state as Neko had it after a recorded step.
      procedure, pass(this), public, non_overridable :: get_time_state => &
           state_recover_get_time_state
@@ -225,6 +246,9 @@ contains
 
     if (allocated(this%t_hist)) deallocate(this%t_hist)
     if (allocated(this%dt_hist)) deallocate(this%dt_hist)
+    if (allocated(this%bdf_hist)) deallocate(this%bdf_hist)
+    if (allocated(this%ext_hist)) deallocate(this%ext_hist)
+    if (allocated(this%order_hist)) deallocate(this%order_hist)
     if (allocated(this%prescribed_dt)) deallocate(this%prescribed_dt)
 
     this%n_timesteps = 0
@@ -252,16 +276,19 @@ contains
   !! recorded states, 0 for the state before the first step.
   !! @details State \f$ i \f$ is recorded right after step \f$ i \f$, when
   !! `time` holds \f$ t_i \f$ and the step \f$ \Delta t_i \f$ that produced
-  !! it. State 0 is recorded before the first step, with the time state the
+  !! it, and the time scheme of the fluid the coefficients that step used.
+  !! State 0 is recorded before the first step, with the time state the
   !! run starts from. The history the first step used is taken from the
   !! time state after it, which is the history before it except that Neko
   !! replaces the second entry by the first step when the time scheme starts
   !! from order zero.
   !! @param[inout] this State recovery instance.
   !! @param[in] time The time state of the run.
-  subroutine state_recover_record_time(this, time)
+  !! @param[in] ext_bdf The time scheme of the fluid of the run.
+  subroutine state_recover_record_time(this, time, ext_bdf)
     class(state_recover_t), intent(inout) :: this
     type(time_state_t), intent(in) :: time
+    type(time_scheme_controller_t), intent(in) :: ext_bdf
     integer :: n
 
     n = this%n_timesteps
@@ -277,6 +304,9 @@ contains
     end if
 
     this%dt_hist(n) = time%dt
+    this%bdf_hist(:, n) = ext_bdf%diffusion_coeffs%x(1:4)
+    this%ext_hist(:, n) = ext_bdf%advection_coeffs%x(1:4)
+    this%order_hist(:, n) = [ext_bdf%ndiff, ext_bdf%nadv]
     if (n .eq. 1) then
        this%t_hist(0) = time%tlag(1)
        this%dtlag0(1:9) = time%dtlag(2:10)
@@ -291,14 +321,22 @@ contains
     class(state_recover_t), intent(inout) :: this
     integer, intent(in) :: n
     real(kind=dp), allocatable :: t_tmp(:), dt_tmp(:)
+    real(kind=rp), allocatable :: bdf_tmp(:,:), ext_tmp(:,:)
+    integer, allocatable :: order_tmp(:,:)
     integer :: capacity, old_capacity
 
     if (.not. allocated(this%dt_hist)) then
        capacity = max(TIME_GRID_INITIAL_CAPACITY, n)
        allocate(this%t_hist(0:capacity))
        allocate(this%dt_hist(capacity))
+       allocate(this%bdf_hist(4, capacity))
+       allocate(this%ext_hist(4, capacity))
+       allocate(this%order_hist(2, capacity))
        this%t_hist = 0.0_dp
        this%dt_hist = 0.0_dp
+       this%bdf_hist = 0.0_rp
+       this%ext_hist = 0.0_rp
+       this%order_hist = 0
        return
     end if
 
@@ -308,12 +346,24 @@ contains
     capacity = max(2 * old_capacity, n)
     allocate(t_tmp(0:capacity))
     allocate(dt_tmp(capacity))
+    allocate(bdf_tmp(4, capacity))
+    allocate(ext_tmp(4, capacity))
+    allocate(order_tmp(2, capacity))
     t_tmp = 0.0_dp
     dt_tmp = 0.0_dp
+    bdf_tmp = 0.0_rp
+    ext_tmp = 0.0_rp
+    order_tmp = 0
     t_tmp(0:old_capacity) = this%t_hist
     dt_tmp(1:old_capacity) = this%dt_hist
+    bdf_tmp(:, 1:old_capacity) = this%bdf_hist
+    ext_tmp(:, 1:old_capacity) = this%ext_hist
+    order_tmp(:, 1:old_capacity) = this%order_hist
     call move_alloc(t_tmp, this%t_hist)
     call move_alloc(dt_tmp, this%dt_hist)
+    call move_alloc(bdf_tmp, this%bdf_hist)
+    call move_alloc(ext_tmp, this%ext_hist)
+    call move_alloc(order_tmp, this%order_hist)
   end subroutine state_recover_ensure_capacity
 
   !> Stop with an error if state `i` has no recorded time.
@@ -372,6 +422,50 @@ contains
 
     t = this%get_time(this%n_timesteps)
   end function state_recover_get_end_time
+
+  !> BDF coefficients of the step that produced a recorded state.
+  !! @param[in] this State recovery instance.
+  !! @param[in] i Index of the state, from 1.
+  !! @return `diffusion_coeffs` of the time scheme of the fluid in step
+  !! \f$ i \f$, \f$ \Delta t_i \f$ times the coefficients of its BDF
+  !! scheme, 0 past its order.
+  function state_recover_get_bdf_coeffs(this, i) result(bd)
+    class(state_recover_t), intent(in) :: this
+    integer, intent(in) :: i
+    real(kind=rp) :: bd(4)
+
+    call state_recover_check_index(this, i, 1)
+    bd = this%bdf_hist(:, i)
+  end function state_recover_get_bdf_coeffs
+
+  !> EXT coefficients of the step that produced a recorded state.
+  !! @param[in] this State recovery instance.
+  !! @param[in] i Index of the state, from 1.
+  !! @return `advection_coeffs` of the time scheme of the fluid in step
+  !! \f$ i \f$, 0 past its order.
+  function state_recover_get_ext_coeffs(this, i) result(ab)
+    class(state_recover_t), intent(in) :: this
+    integer, intent(in) :: i
+    real(kind=rp) :: ab(4)
+
+    call state_recover_check_index(this, i, 1)
+    ab = this%ext_hist(:, i)
+  end function state_recover_get_ext_coeffs
+
+  !> Orders of the time schemes of the step that produced a recorded state.
+  !! @param[in] this State recovery instance.
+  !! @param[in] i Index of the state, from 1.
+  !! @param[out] ndiff Order of the BDF scheme in step \f$ i \f$.
+  !! @param[out] nadv Order of the EXT scheme in step \f$ i \f$.
+  subroutine state_recover_get_scheme_orders(this, i, ndiff, nadv)
+    class(state_recover_t), intent(in) :: this
+    integer, intent(in) :: i
+    integer, intent(out) :: ndiff, nadv
+
+    call state_recover_check_index(this, i, 1)
+    ndiff = this%order_hist(1, i)
+    nadv = this%order_hist(2, i)
+  end subroutine state_recover_get_scheme_orders
 
   !> Time state as Neko had it after a recorded step.
   !! @details Fills `t`, `dt`, `tstep` and the histories `dtlag` and `tlag`
