@@ -196,6 +196,8 @@ contains
 
   !> Get the number of states recorded by this recovery strategy.
   !! @param[in] this State recovery instance.
+  !! @return \f$ N \f$, the index of the last recorded state, 0 until the
+  !! first step is recorded.
   pure function state_recover_get_n_timesteps(this) result(n)
     class(state_recover_t), intent(in) :: this
     integer :: n

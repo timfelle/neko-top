@@ -320,8 +320,9 @@ contains
   !! @param weight The weight of the sample in the time integral, `time%dt`
   !! if absent.
   !! @param span The time the sample adds to the normalisation, `time%dt` if
-  !! absent. A span of 0 needs an earlier sample in the window, whose time
-  !! normalises it; without one the run stops with an error.
+  !! absent. A span of 0 is normalised by the time of the samples already
+  !! accumulated in the window. Without any, the value it differentiates was
+  !! never sampled and its gradient is 0, so the sample is skipped.
   subroutine functional_accumulate_sensitivity(this, design, time, weight, &
        span)
     class(base_functional_t), intent(inout) :: this
@@ -335,12 +336,10 @@ contains
 
     if (.not. this%in_window(time)) return
 
-    ! A sample that adds no time cannot start the running mean
+    ! A sample that adds no time cannot start the running mean; with no
+    ! time in the window the value is 0 and so is its gradient.
     if (present(span)) then
-       if (this%sensitivity_weight + real(span, kind=xp) .le. 0.0_xp) then
-          call neko_error("A sensitivity sample that adds no time " // &
-               "needs an earlier sample in the time window")
-       end if
+       if (this%sensitivity_weight + real(span, kind=xp) .le. 0.0_xp) return
     end if
 
     n = this%sensitivity%size()
