@@ -16,6 +16,7 @@ set(test_list
     "unsteady_brinkman_dissipation_window.case"
     "unsteady_brinkman_dissipation_window_end.case"
     "unsteady_brinkman_dissipation_moving_start.case"
+    "unsteady_brinkman_dissipation_moving_start_reverse.case"
     "unsteady_variable_timestep.case"
     "unsteady_variable_timestep_cfl_limited.case"
     "unsteady_variable_timestep_window.case"
