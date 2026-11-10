@@ -10,22 +10,84 @@ Usage:
 Additional arguments:
     --resolution H: Set the height of the output images (default: 360)
     --frames START END: Export only frames from START to END (inclusive)
+    --index-source FILE: Chunked VTKHDF file that defines global frame indices
     --overwrite: Overwrite existing files in the output directory
 """
 
 import argparse
 import os
+import re
 import runpy
+import subprocess
+from pathlib import Path
 
-from paraview import __version__ as paraview_version
 from paraview.simple import (
     GetActiveViewOrCreate,
     GetAnimationScene,
     LoadState,
     LoadPlugin,
-    SaveAnimation,
     SaveScreenshot,
 )
+
+
+def global_frame_range(index_source, data_directory):
+    index_path = Path(index_source)
+    if not index_path.is_absolute():
+        index_path = Path(data_directory) / index_path
+    if index_path.suffix.lower() != ".vtkhdf":
+        raise ValueError(
+            f"--index-source must point to a .vtkhdf file: {index_path}")
+    if not index_path.is_file():
+        raise ValueError(f"Unable to read index source {index_path}")
+
+    try:
+        import h5py
+    except ImportError:
+        try:
+            result = subprocess.run(
+                ["h5dump", "--attribute", "/source_steps",
+                 str(index_path)],
+                capture_output=True,
+                check=False,
+                text=True,
+            )
+        except FileNotFoundError as error:
+            raise RuntimeError(
+                "--index-source requires h5py or h5dump") from error
+        if result.returncode:
+            raise ValueError(
+                f"--index-source is not a chunked VTKHDF file: {index_path}")
+        source_steps_match = re.search(
+            r"DATA\s*\{\s*(?:\(\d+\):\s*)?(-?\d+)\s*,\s*(-?\d+)",
+            result.stdout,
+            flags=re.DOTALL,
+        )
+        if source_steps_match is None:
+            raise ValueError(f"Invalid source_steps metadata in {index_path}")
+        source_steps = source_steps_match.groups()
+    else:
+        try:
+            with h5py.File(index_path, "r") as index_file:
+                source_steps = index_file.attrs.get("source_steps")
+        except OSError as error:
+            raise ValueError(
+                f"Unable to read index source {index_path}") from error
+
+    if source_steps is None:
+        raise ValueError(
+            f"--index-source is not a chunked VTKHDF file: {index_path}")
+
+    try:
+        start_frame, end_frame = source_steps
+        start_frame = int(start_frame)
+        end_frame = int(end_frame)
+    except (TypeError, ValueError) as error:
+        raise ValueError(
+            f"Invalid source_steps metadata in {index_path}") from error
+
+    if start_frame < 0 or end_frame < start_frame:
+        raise ValueError(f"Invalid source_steps metadata in {index_path}")
+    return start_frame, end_frame
 
 
 def main():
@@ -47,6 +109,11 @@ def main():
                         type=int,
                         default=None,
                         metavar=("START", "END"))
+    parser.add_argument(
+        "--index-source",
+        help=("Path to a chunked .vtkhdf file used to map local frames to "
+              "global frame indices; relative paths use data_dir"),
+    )
     parser.add_argument("--overwrite",
                         action="store_true",
                         help="Overwrite existing files")
@@ -64,6 +131,8 @@ def main():
 
     if not os.path.isdir(args.data_dir):
         raise NotADirectoryError(args.data_dir)
+    if args.data_dir[-1] != os.sep:
+        args.data_dir += os.sep
 
     # Add our visualisation modules to the Python path so we can import them.
     visualisation_dir = os.path.join(os.path.dirname(__file__),
@@ -119,15 +188,31 @@ def main():
     # Set the frame index range to export.
     timestep_values = list(scene.TimeKeeper.TimestepValues)
     frame_count = len(timestep_values)
+    if frame_count == 0:
+        raise ValueError("No animation frames are available")
+
+    if args.index_source:
+        global_start, global_end = global_frame_range(args.index_source,
+                                                      args.data_dir)
+        if global_end - global_start + 1 != frame_count:
+            raise ValueError(
+                f"Index source covers frames {global_start}-{global_end}, "
+                f"but the animation has {frame_count} frames")
+    else:
+        global_start, global_end = 0, frame_count - 1
+
     if args.frames:
-        if args.frames[0] < 0 or args.frames[1] >= frame_count:
-            raise ValueError(f"Frame range {args.frames} is out of bounds " +
-                             f"for available frames 0-{frame_count - 1}")
-        start_frame, end_frame = args.frames
+        if (args.frames[0] > args.frames[1] or args.frames[0] < global_start
+                or args.frames[1] > global_end):
+            raise ValueError(
+                f"Frame range {args.frames} is out of bounds " +
+                f"for available frames {global_start}-{global_end}")
+        start_frame = args.frames[0] - global_start
+        end_frame = args.frames[1] - global_start
     else:
         start_frame, end_frame = 0, frame_count - 1
 
-    # Determine the output location and ensure the directory exists
+    # Determine the output location and ensure the directory exists.
     state_name = os.path.splitext(os.path.basename(args.state))[0]
     if args.output_dir:
         output_dir = args.output_dir
@@ -135,63 +220,32 @@ def main():
         output_dir = os.path.join(args.data_dir, "visualisations", state_name)
     os.makedirs(output_dir, exist_ok=True)
 
-    if args.state == "design_evolution":
-        for frame_index in range(start_frame, end_frame + 1):
-            timestep = timestep_values[frame_index]
+    for frame_index in range(start_frame, end_frame + 1):
+        timestep = timestep_values[frame_index]
+        global_frame = global_start + frame_index
+        if args.state == "design_evolution":
             iteration = int(timestep)
             if timestep != iteration:
                 raise ValueError(
                     "design_evolution timestep values must be integer design iterations"
                 )
-
             frame_file = os.path.join(output_dir, f"{iteration:04d}.png")
-            if not args.overwrite and os.path.isfile(frame_file):
-                continue
+            frame_label = f"design iteration {iteration}"
+        else:
+            frame_file = os.path.join(output_dir, f"{global_frame:04d}.png")
+            frame_label = f"frame {global_frame}"
 
-            print(f"Exporting design iteration {iteration}")
-            scene.AnimationTime = timestep
-            scene.TimeKeeper.Time = timestep
-            SaveScreenshot(
-                frame_file,
-                view,
-                ImageResolution=output_resolution,
-                CompressionLevel=0,
-            )
-        return
+        if not args.overwrite and os.path.isfile(frame_file):
+            continue
 
-    # Define the output file path for the animation frames and detect existing
-    # frames
-    animation_file = os.path.join(output_dir, ".png")
-    if not args.overwrite:
-        frame_list = list(range(start_frame, end_frame + 1))
-        frame_windows = []
-        window_start = frame_list[0]
-        for frame_index in frame_list:
-            if os.path.isfile(
-                    os.path.join(output_dir, f"{frame_index:04d}.png")):
-                if window_start < frame_index:
-                    frame_windows.append((window_start, frame_index - 1))
-                window_start = frame_index + 1
-        if window_start <= frame_list[-1]:
-            frame_windows.append((window_start, frame_list[-1]))
-    else:
-        frame_windows = [(start_frame, end_frame)]
-
-    if paraview_version < "6.1":
-        SuffixFormat = "%04d"
-    else:
-        SuffixFormat = "{:04d}"
-
-    # Export the animation frames for each frame window
-    for frame_window in frame_windows:
-        print(f"Exporting frames {frame_window[0]}-{frame_window[1]}")
-        SaveAnimation(
-            animation_file,
+        print(f"Exporting {frame_label}")
+        scene.AnimationTime = timestep
+        scene.TimeKeeper.Time = timestep
+        SaveScreenshot(
+            frame_file,
             view,
-            FrameWindow=(frame_window[0], frame_window[1]),
             ImageResolution=output_resolution,
             CompressionLevel=0,
-            SuffixFormat=SuffixFormat,
         )
 
 
