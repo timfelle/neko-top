@@ -2,7 +2,7 @@
 import paraview
 
 paraview.compatibility.major = 6
-paraview.compatibility.minor = 2
+paraview.compatibility.minor = 0
 
 #### import the simple module from the paraview
 from paraview.simple import *
