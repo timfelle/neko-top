@@ -1,16 +1,20 @@
 #!/usr/bin/env pvpython
-"""Load a ParaView state file (.pvsm) and export an animation of all frames.
+"""Load a ParaView state and export an animation of all frames.
 
 The output frames are stored in a subdirectory of the data directory, named
 after the state file.
 
+A state can be specified either as a .pvsm file or as a string corresponding to
+a Python module in the visualisation directory.
+
 Usage:
-    pvpython paraview_runner.py state.pvsm data_dir
+    pvpython paraview_runner.py state data_dir
 
 Additional arguments:
     --resolution H: Set the height of the output images (default: 360)
-    --frames START END: Export only frames from START to END (inclusive)
-    --index-source FILE: Chunked VTKHDF file that defines global frame indices
+    --frames START END: Export global frames from START to END (inclusive)
+    --chunk START-END: Chunk suffix produced by vtkhdf_extract
+    --input-files FILE [FILE ...]: Input files for the visualization state
     --overwrite: Overwrite existing files in the output directory
 """
 
@@ -18,8 +22,6 @@ import argparse
 import os
 import re
 import runpy
-import subprocess
-from pathlib import Path
 
 from paraview.simple import (
     GetActiveViewOrCreate,
@@ -29,72 +31,38 @@ from paraview.simple import (
     SaveScreenshot,
 )
 
+CHUNK_PATTERN = re.compile(r"^(\d+)-(\d+)$")
 
-def global_frame_range(index_source, data_directory):
-    index_path = Path(index_source)
-    if not index_path.is_absolute():
-        index_path = Path(data_directory) / index_path
-    if index_path.suffix.lower() != ".vtkhdf":
+
+def chunk_frame_range(chunk):
+    if chunk is None:
+        return None
+
+    match = CHUNK_PATTERN.fullmatch(chunk)
+    if match is None:
         raise ValueError(
-            f"--index-source must point to a .vtkhdf file: {index_path}")
-    if not index_path.is_file():
-        raise ValueError(f"Unable to read index source {index_path}")
+            "--chunk must be the START-END suffix produced by vtkhdf_extract")
 
-    try:
-        import h5py
-    except ImportError:
-        try:
-            result = subprocess.run(
-                ["h5dump", "--attribute", "/source_steps",
-                 str(index_path)],
-                capture_output=True,
-                check=False,
-                text=True,
-            )
-        except FileNotFoundError as error:
-            raise RuntimeError(
-                "--index-source requires h5py or h5dump") from error
-        if result.returncode:
-            raise ValueError(
-                f"--index-source is not a chunked VTKHDF file: {index_path}")
-        source_steps_match = re.search(
-            r"DATA\s*\{\s*(?:\(\d+\):\s*)?(-?\d+)\s*,\s*(-?\d+)",
-            result.stdout,
-            flags=re.DOTALL,
-        )
-        if source_steps_match is None:
-            raise ValueError(f"Invalid source_steps metadata in {index_path}")
-        source_steps = source_steps_match.groups()
-    else:
-        try:
-            with h5py.File(index_path, "r") as index_file:
-                source_steps = index_file.attrs.get("source_steps")
-        except OSError as error:
-            raise ValueError(
-                f"Unable to read index source {index_path}") from error
-
-    if source_steps is None:
-        raise ValueError(
-            f"--index-source is not a chunked VTKHDF file: {index_path}")
-
-    try:
-        start_frame, end_frame = source_steps
-        start_frame = int(start_frame)
-        end_frame = int(end_frame)
-    except (TypeError, ValueError) as error:
-        raise ValueError(
-            f"Invalid source_steps metadata in {index_path}") from error
-
-    if start_frame < 0 or end_frame < start_frame:
-        raise ValueError(f"Invalid source_steps metadata in {index_path}")
+    start_frame, end_frame = (int(value) for value in match.groups())
+    if end_frame < start_frame:
+        raise ValueError("--chunk end must not precede its start")
     return start_frame, end_frame
+
+
+def input_file(file_name, chunk):
+    if chunk:
+        base_name, ext = os.path.splitext(file_name or "")
+        return f"{base_name}_steps_{chunk}{ext}"
+    return file_name
 
 
 def main():
     parser = argparse.ArgumentParser(
         description="Run a ParaView animation export.")
     parser.add_argument("state", help="Path to the .pvsm state file")
-    parser.add_argument("data_dir", help="Path to the data directory")
+    parser.add_argument("data_dir",
+                        help="Path to the data directory",
+                        type=str)
     parser.add_argument(
         "--output_dir",
         help=
@@ -108,24 +76,23 @@ def main():
                         nargs=2,
                         type=int,
                         default=None,
-                        metavar=("START", "END"))
-    parser.add_argument(
-        "--index-source",
-        help=("Path to a chunked .vtkhdf file used to map local frames to "
-              "global frame indices; relative paths use data_dir"),
-    )
+                        metavar=("START", "END"),
+                        help="Global frame range to export (inclusive)")
+    parser.add_argument("--chunk",
+                        metavar="START-END",
+                        help=("Chunk suffix produced by vtkhdf_extract, "
+                              "including zero padding"))
     parser.add_argument("--overwrite",
                         action="store_true",
                         help="Overwrite existing files")
     parser.add_argument(
-        "--design-file",
-        default="design_0.vtkhdf",
-        help="Path to the design file (default: design_0.vtkhdf)")
-    parser.add_argument(
-        "--forward-file",
-        default="forward_fields_0.vtkhdf",
-        help=
-        "Path to the forward fields file (default: forward_fields_0.vtkhdf)")
+        "--input-files",
+        nargs="+",
+        default=[],
+        metavar="FILE",
+        help=("Input files for the visualization state; design_evolution "
+              "uses the first as design and the second as forward fields"),
+    )
 
     args = parser.parse_args()
 
@@ -134,13 +101,18 @@ def main():
     if args.data_dir[-1] != os.sep:
         args.data_dir += os.sep
 
+    chunk_range = chunk_frame_range(args.chunk)
+
     # Add our visualisation modules to the Python path so we can import them.
     visualisation_dir = os.path.join(os.path.dirname(__file__),
-                                     "../../visualisation/mixer")
-    print(
-        f"Adding visualisation directory to Python path: {visualisation_dir}")
+                                     "../../visualisation")
     if visualisation_dir not in os.sys.path:
         os.sys.path.append(visualisation_dir)
+
+    for path in os.listdir(visualisation_dir):
+        subdir = os.path.join(visualisation_dir, path)
+        if os.path.isdir(subdir) and subdir not in os.sys.path:
+            os.sys.path.append(subdir)
 
     # Load the VTKm plugin to enable VTKm filters in ParaView
     LoadPlugin("VTKmFilters", remote=True)
@@ -156,11 +128,30 @@ def main():
         # If the state is a string, execute the corresponding visualization
         # module with the data directory available to its top-level code.
         if args.state == "design_evolution":
+            input_files = args.input_files or [
+                "design_0.vtkhdf", "forward_fields_0.vtkhdf"
+            ]
+
+            if len(input_files) != 2:
+                raise ValueError(
+                    "design_evolution requires exactly two --input-files")
+
+            design_file = input_file(input_files[0], args.chunk)
+            forward_file = input_file(input_files[1], args.chunk)
+
+            if not os.path.isfile(os.path.join(args.data_dir, design_file)):
+                raise FileNotFoundError(
+                    f"Design file not found: {design_file} in {args.data_dir}")
+            if not os.path.isfile(os.path.join(args.data_dir, forward_file)):
+                raise FileNotFoundError(
+                    f"Forward fields file not found: {forward_file} in {args.data_dir}"
+                )
+
             runpy.run_module(args.state,
                              init_globals={
                                  "data_directory": args.data_dir,
-                                 "design_file": args.design_file,
-                                 "forward_file": args.forward_file,
+                                 "design_file": design_file,
+                                 "forward_file": forward_file,
                              })
         else:
             raise ValueError(f"Unknown state function: {args.state}")
@@ -191,12 +182,11 @@ def main():
     if frame_count == 0:
         raise ValueError("No animation frames are available")
 
-    if args.index_source:
-        global_start, global_end = global_frame_range(args.index_source,
-                                                      args.data_dir)
+    if chunk_range:
+        global_start, global_end = chunk_range
         if global_end - global_start + 1 != frame_count:
             raise ValueError(
-                f"Index source covers frames {global_start}-{global_end}, "
+                f"Chunk covers frames {global_start}-{global_end}, "
                 f"but the animation has {frame_count} frames")
     else:
         global_start, global_end = 0, frame_count - 1
