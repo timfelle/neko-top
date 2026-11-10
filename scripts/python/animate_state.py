@@ -50,13 +50,21 @@ def main():
                         help="Overwrite existing files")
     args = parser.parse_args()
 
-    if not os.path.isfile(args.state):
-        raise FileNotFoundError(args.state)
+    # if not os.path.isfile(args.state):
+    #     raise FileNotFoundError(args.state)
     # if not os.path.splitext(args.state)[1] == ".pvsm":
     #     raise ValueError(
     #         f"State file must have a .pvsm extension: {args.state}")
     if not os.path.isdir(args.data_dir):
         raise NotADirectoryError(args.data_dir)
+
+    # Add our visualisation modules to the Python path so we can import them.
+    visualisation_dir = os.path.join(os.path.dirname(__file__),
+                                     "../../visualisation/mixer")
+    print(
+        f"Adding visualisation directory to Python path: {visualisation_dir}")
+    if visualisation_dir not in os.sys.path:
+        os.sys.path.append(visualisation_dir)
 
     # Load the VTKm plugin to enable VTKm filters in ParaView
     LoadPlugin("VTKmFilters", remote=True)
@@ -68,11 +76,20 @@ def main():
             data_directory=args.data_dir,
             restrict_to_data_directory=True,
         )
+    elif "." not in args.state:
+        global data_directory
+        data_directory = args.data_dir
+        # If the state is a string, we assume it is a python function name from
+        # our visualization modules. We will call the function to set up the
+        # ParaView state.
+        if args.state == "design_evolution":
+            import design_evolution
+        else:
+            raise ValueError(f"Unknown state function: {args.state}")
     else:
-        # Evaluate the python state script specified
-        with open(args.state, "r") as f:
-            state_script = f.read()
-        exec(state_script, {"data_directory": args.data_dir})
+        raise ValueError(
+            f"State file must have a .pvsm extension or be a function name: {args.state}"
+        )
 
     view = GetActiveViewOrCreate("RenderView")
     scene = GetAnimationScene()
