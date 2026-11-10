@@ -112,7 +112,7 @@ def main():
     else:
         frame_windows = [(start_frame, end_frame)]
 
-    if paraview_version < "6.2":
+    if paraview_version < "6.1":
         SuffixFormat = "%04d"
     else:
         SuffixFormat = "{:04d}"
