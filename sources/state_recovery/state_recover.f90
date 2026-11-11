@@ -144,6 +144,11 @@ module state_recover
      !! adjoint of a recorded state.
      procedure, pass(this), public, non_overridable :: &
           get_adjoint_ext_column => state_recover_get_adjoint_ext_column
+     !> EXT coefficients of the exact transpose of the forward run for the
+     !! coupling of an adjoint scalar to the adjoint of a recorded state.
+     procedure, pass(this), public, non_overridable :: &
+          get_adjoint_scalar_column => &
+          state_recover_get_adjoint_scalar_column
      !> Time state as Neko had it after a recorded step.
      procedure, pass(this), public, non_overridable :: get_time_state => &
           state_recover_get_time_state
@@ -535,6 +540,35 @@ contains
             this%dt_hist(m + j) / dt_m, rp)
     end do
   end subroutine state_recover_get_adjoint_ext_column
+
+  !> EXT coefficients of the exact transpose of the forward run for the
+  !! coupling of an adjoint scalar to the adjoint of a recorded state.
+  !! @details The scalar step of a forward step follows its fluid step, so
+  !! scalar step \f$ m \f$ already advects with \f$ u_m \f$. The explicit
+  !! terms of scalar steps \f$ m \f$ to \f$ m + 2 \f$ extrapolate that
+  !! advection with their \f$ a_1 \f$, \f$ a_2 \f$ and \f$ a_3 \f$. In the
+  !! adjoint scaled by \f$ 1 / \Delta t_m \f$ these become
+  !! \f$ a_{j+1}^{(m+j)} \Delta t_{m+j} / \Delta t_m \f$, \f$ j = 0, 1, 2 \f$,
+  !! with 0 for a step past the last one. The column is one level below the
+  !! one of `get_adjoint_ext_column`, and is not 0 at \f$ m = N \f$.
+  !! @param[in] this State recovery instance.
+  !! @param[in] m Index of the state, from 1.
+  !! @param[out] col The column, \f$ a_{j+1}^{(m+j)} \Delta t_{m+j} /
+  !! \Delta t_m \f$ in element \f$ j + 1 \f$ and 0 in element 4.
+  subroutine state_recover_get_adjoint_scalar_column(this, m, col)
+    class(state_recover_t), intent(in) :: this
+    integer, intent(in) :: m
+    real(kind=rp), intent(out) :: col(4)
+    integer :: j
+
+    call state_recover_check_index(this, m, 1)
+    col = 0.0_rp
+    do j = 0, 2
+       if (m + j .gt. this%n_timesteps) exit
+       col(j + 1) = real(real(this%ext_hist(j + 1, m + j), dp) * &
+            this%dt_hist(m + j) / this%dt_hist(m), rp)
+    end do
+  end subroutine state_recover_get_adjoint_scalar_column
 
   !> Time state as Neko had it after a recorded step.
   !! @details Fills `t`, `dt`, `tstep` and the histories `dtlag` and `tlag`

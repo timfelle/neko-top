@@ -6,10 +6,11 @@
 !! it: started at full order from equal steps of the first step, then set
 !! once per step and recorded right after it. The columns are compared with
 !! the values of the python model of the exact transpose, `ext_column` and
-!! `bdf_column` of `neko_exact.py`, on a constant grid and on a ramp with a
-!! cut. Both include the last three states, whose columns reach past the
-!! last step, and the initial state. Only the ramp sees the ratios of the
-!! time steps in the EXT column.
+!! `bdf_column` of `neko_exact.py` and `scalar_column` of
+!! `neko_exact_scalar.py`, on a constant grid and on a ramp with a cut. All
+!! include the last three states, whose columns reach past the last step,
+!! and the EXT column the initial state. Only the ramp sees the ratios of
+!! the time steps in the EXT and scalar columns.
 module test_state_recover_adjoint_columns
   use mpi
   use pfunit
@@ -100,6 +101,7 @@ contains
     class(adjoint_columns_case), intent(inout) :: this
     real(kind=dp) :: dts(n_steps)
     real(kind=rp) :: ext_ref(4, 0:n_steps), bdf_ref(4, n_steps)
+    real(kind=rp) :: scalar_ref(4, n_steps)
 
     dts = 0.01_dp
 
@@ -134,8 +136,22 @@ contains
          1.8333333333333333e+00_rp, 0.0_rp, &
          0.0_rp, 0.0_rp &
          ], [4, 6])
+    scalar_ref = reshape([ &
+         3.0000000000000000e+00_rp, -3.0000000000000000e+00_rp, &
+         1.0000000000000000e+00_rp, 0.0_rp, &
+         3.0000000000000000e+00_rp, -3.0000000000000000e+00_rp, &
+         1.0000000000000000e+00_rp, 0.0_rp, &
+         3.0000000000000000e+00_rp, -3.0000000000000000e+00_rp, &
+         1.0000000000000000e+00_rp, 0.0_rp, &
+         3.0000000000000000e+00_rp, -3.0000000000000000e+00_rp, &
+         1.0000000000000000e+00_rp, 0.0_rp, &
+         3.0000000000000000e+00_rp, -3.0000000000000000e+00_rp, &
+         0.0_rp, 0.0_rp, &
+         3.0000000000000000e+00_rp, 0.0_rp, &
+         0.0_rp, 0.0_rp &
+         ], [4, 6])
 
-    call check_columns(dts, ext_ref, bdf_ref)
+    call check_columns(dts, ext_ref, bdf_ref, scalar_ref)
   end subroutine constant_grid
 
   !> A time step that grows by 1.2 per step, is cut to about half and
@@ -145,6 +161,7 @@ contains
     class(adjoint_columns_case), intent(inout) :: this
     real(kind=dp) :: dts(n_steps)
     real(kind=rp) :: ext_ref(4, 0:n_steps), bdf_ref(4, n_steps)
+    real(kind=rp) :: scalar_ref(4, n_steps)
 
     dts = [0.01_dp, 0.012_dp, 0.0144_dp, 0.01728_dp, 0.009_dp, 0.0108_dp]
 
@@ -179,17 +196,34 @@ contains
          1.8367166813768747e+00_rp, 0.0_rp, &
          0.0_rp, 0.0_rp &
          ], [4, 6])
+    scalar_ref = reshape([ &
+         3.0000000000000000e+00_rp, -4.6079999999999997e+00_rp, &
+         2.4883199999999999e+00_rp, 0.0_rp, &
+         3.5200000000000000e+00_rp, -5.2416000000000000e+00_rp, &
+         2.4883199999999999e+00_rp, 0.0_rp, &
+         3.6400000000000006e+00_rp, -5.2416000000000009e+00_rp, &
+         3.2404119318181812e-01_rp, 0.0_rp, &
+         3.6400000000000010e+00_rp, -7.6633029513888873e-01_rp, &
+         2.9430650684931509e-01_rp, 0.0_rp, &
+         1.9528882575757573e+00_rp, -3.0900000000000007e+00_rp, &
+         0.0_rp, 0.0_rp, &
+         3.1041095890410961e+00_rp, 0.0_rp, &
+         0.0_rp, 0.0_rp &
+         ], [4, 6])
 
-    call check_columns(dts, ext_ref, bdf_ref)
+    call check_columns(dts, ext_ref, bdf_ref, scalar_ref)
   end subroutine variable_grid
 
   !> Record a run on a grid and compare its columns with the references.
   !! @param dts The time steps of the run.
   !! @param ext_ref The EXT columns of the states 0 to `n_steps`.
   !! @param bdf_ref The BDF columns of the states 1 to `n_steps`.
-  subroutine check_columns(dts, ext_ref, bdf_ref)
+  !! @param scalar_ref The scalar coupling columns of the states 1 to
+  !! `n_steps`.
+  subroutine check_columns(dts, ext_ref, bdf_ref, scalar_ref)
     real(kind=dp), intent(in) :: dts(n_steps)
     real(kind=rp), intent(in) :: ext_ref(4, 0:n_steps), bdf_ref(4, n_steps)
+    real(kind=rp), intent(in) :: scalar_ref(4, n_steps)
     type(time_grid_only_t) :: grid
     type(time_scheme_controller_t) :: ext_bdf
     type(time_state_t) :: time
@@ -245,6 +279,11 @@ contains
        call grid%get_adjoint_bdf_column(m, col)
        write(msg, '(A,I0)') 'BDF column of state ', m
        @assertEqual(bdf_ref(:, m), col, tol, trim(msg))
+    end do
+    do m = 1, n_steps
+       call grid%get_adjoint_scalar_column(m, col)
+       write(msg, '(A,I0)') 'Scalar column of state ', m
+       @assertEqual(scalar_ref(:, m), col, tol, trim(msg))
     end do
 
     call ext_bdf%free()
