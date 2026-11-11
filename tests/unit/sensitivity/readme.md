@@ -115,6 +115,11 @@ Currently, we have added tests for the following components:
     transpose of the unsteady adjoint needs a zero
     case.adjoint_fluid.initial_condition, or set
     case.adjoint_fluid.time_transpose to "reverse"`.
+  - On a copy of `unsteady_scalar_mixing_levels.case`, with a nonzero
+    `case.adjoint_scalar.initial_condition`, e.g. a uniform `1.0`, it stops
+    after the forward run with `The exact time transpose of the unsteady
+    adjoint needs a zero case.adjoint_scalar.initial_condition, or set
+    case.adjoint_fluid.time_transpose to "reverse"`.
 
   With `"reverse"`, the last two run to the end and fail the
   finite-difference check instead.
@@ -155,17 +160,17 @@ Currently, we have added tests for the following components:
   moving-start case with `case.adjoint_fluid.time_transpose` set to
   `"reverse"`: the adjoint replays the forward steps in reverse with the
   coefficients of its own history, which is exact at a fixed step. It is the
-  only registered case on that path of the fluid, which adjoint scalars
-  otherwise take. Its CSV is that of the moving-start case bit for bit: the
-  finite differences come from the same forward runs, and at time order 1 and
-  a fixed step the two transposes compute the same terms and differ only in
-  the order they are summed, which the probed sensitivity does not see. The
-  case therefore guards the reverse path, not the selection of it, which the
-  variable-timestep cases below show with the reverse transpose. With the
-  reverse replay sampling the sensitivity after the adjoint step instead of
-  before, the error at the smallest perturbation was `+3.62e-2`, and without
-  the adjoint convection in the reverse replay `-4.13e-3`; the moving-start
-  case stayed at `-1.72e-5` with both.
+  only registered case on that path of the fluid. Its CSV is that of the
+  moving-start case bit for bit: the finite differences come from the same
+  forward runs, and at time order 1 and a fixed step the two transposes
+  compute the same terms and differ only in the order they are summed, which
+  the probed sensitivity does not see. The case therefore guards the reverse
+  path, not the selection of it, which the variable-timestep cases below show
+  with the reverse transpose. With the reverse replay sampling the sensitivity
+  after the adjoint step instead of before, the error at the smallest
+  perturbation was `+3.62e-2`, and without the adjoint convection in the
+  reverse replay `-4.13e-3`; the moving-start case stayed at `-1.72e-5` with
+  both.
 - `brinkman_dissipation_objective_t`, unsteady with a variable timestep
   (`unsteady_variable_timestep.case`) — time order 3, starting at rest, with
   `exact_output_time`. The step ramps from `timestep` towards `max_timestep`
@@ -228,6 +233,41 @@ Currently, we have added tests for the following components:
   `+1.12e-3`, against `-1.80e-4` for `unsteady_variable_timestep.case`; with
   the convection added without `rho`, which no case with a `rho` of 1 sees,
   `+5.17e-4`. The reverse replay gives `+1.89e-3`.
+- `scalar_mixing_objective_t`, unsteady at a fixed step
+  (`unsteady_scalar_mixing_levels.case`) — 20 steps of `1e-3` at time order 1
+  and polynomial order 3, without over-integration, the flow starting at rest
+  and a block of scalar starting mostly inside the Brinkman design, with 4
+  states in RAM, so that the adjoint also recomputes states from disk. The
+  objective sees the design only through the scalar, so its sensitivity is
+  carried entirely by the term the adjoint scalar adds to the adjoint
+  momentum equation. Forward step `n` advects the scalar of state `n - 1`
+  with the new velocity of state `n`, and the exact transpose takes both at
+  those levels: the adjoint scalar of state `m` is advected with the velocity
+  of state `m + 1`, and its coupling term reads the scalar of state `m - 1`,
+  which the state recovery keeps as the first lag of the scalar. The error at
+  the smallest perturbation is `-3.85e-5`, which is first-order truncation
+  (`-3.83e-4` at `1e-3`), and the tolerance is `1e-4`. The reverse replay,
+  which takes both from the restored state `m`, gives `-2.10e-2` even at this
+  fixed step. With the exact transpose otherwise, the coupling term on the
+  scalar of state `m` gave `-1.71e-2`, the adjoint scalar advected with the
+  velocity of state `m` `-4.06e-3`, and the coupling term combined with the
+  EXT column of the adjoint fluid instead of its own `+5.62e-3`.
+- `scalar_mixing_objective_t`, unsteady with a variable timestep
+  (`unsteady_variable_timestep_scalar.case`) — the scalar case on the time
+  grid of `unsteady_variable_timestep_convection.case`: time order 3, an
+  inflow of `2.0`, `mu` of `5e-4`, `rho` of `1.7`, a Peclet number of `1000`,
+  over-integration, and 15 steps of 10 sizes. The coupling term combines the
+  adjoint scalar of its own level and the next two with a column of its own,
+  `a_(j+1)^(m+j) dt_(m+j) / dt_m` for `j = 0, 1, 2`, one level below the EXT
+  column, and is added without extrapolation. The error at the smallest
+  perturbation is `-1.83e-5`, which is first-order truncation (`-1.83e-4` at
+  `1e-3`), and the tolerance is `1e-4`. The reverse replay gives `-3.81e-1`;
+  on the same case with `target_cfl`, `timestep` and `max_timestep` divided
+  by 2, 4 and 8, it gives `-2.84e-1`, `-2.05e-1` and `-1.30e-1`, on 25, 44 and
+  84 steps. With the exact transpose otherwise, the coupling term combined
+  with the EXT column gave `-5.76e-2`, the adjoint scalar advected with the
+  velocity of state `m` `-2.28e-1`, and the coupling term on the scalar of
+  state `m` `-2.96e-1`.
 - `brinkman_dissipation_rejection` — checks the invalid mixed-dealias
   configuration directly through Neko's pFUnit error-redirection fixture. A
   mixed setting has no value its sensitivity is the gradient of, so the
@@ -249,12 +289,9 @@ Currently, we have added tests for the following components:
   the cases or the driver's probe selection change, confirm again that both
   fail with the masked full weak Laplacian as the forcing.
 
-`scalar_mixing_objective_t` is not yet covered here (its only existing case,
-`tests/regression/sensitivity/cases/passive_scalar.case`, needed a Neko-core
-scalar-scheme fix first). The heavier,
-realistic (~1000-timestep) versions of these and other cases
-(`dissipation`, `dissipation_weights`, unsteady variants) live in
-`tests/regression/sensitivity/` instead — that suite is opt-in
+The heavier, realistic (~1000-timestep) versions of these and other cases
+(`dissipation`, `dissipation_weights`, `passive_scalar`, unsteady variants)
+live in `tests/regression/sensitivity/` instead — that suite is opt-in
 (`NEKO_TOP_RUN_SENSITIVITY_REGRESSION=1`) and not part of the default/PR-blocking
 test budget, since it's too slow to gate every PR.
 
