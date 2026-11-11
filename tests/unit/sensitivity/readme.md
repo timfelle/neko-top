@@ -268,6 +268,27 @@ Currently, we have added tests for the following components:
   with the EXT column gave `-5.76e-2`, the adjoint scalar advected with the
   velocity of state `m` `-2.28e-1`, and the coupling term on the scalar of
   state `m` `-2.96e-1`.
+- `scalar_mixing_objective_t`, unsteady with a variable timestep and a time
+  window (`unsteady_variable_timestep_scalar_window.case`) — the variable
+  timestep scalar case with the objective averaged over `0.012 <= t <= 0.03`
+  only. The scalar forcing is gated at the recorded time of every forward
+  state it consumes and added to that state's adjoint level alone, while the
+  coupling term runs over every level. The error at the smallest
+  perturbation is `-2.76e-5`, which is first-order truncation (`-2.80e-4` at
+  `1e-3`), and the tolerance is `1e-4`. The reverse replay gives `-4.17e-1`.
+- `scalar_mixing_objective_t`, a single step from a moving start
+  (`unsteady_scalar_mixing_single_step.case`) — the variable timestep scalar
+  case reduced to one step of `1e-3` at time order 3, the flow starting at
+  the velocity `[1, 0, 0]`. Every column of the exact transpose is cut off
+  past the last step: the coupling column is `(a_1, 0, 0)` and the EXT
+  column 0, so the coupling term is all the adjoint fluid sees, and the
+  adjoint scalar of the only level is advected by nothing. The moving start
+  makes the sensitivity depend on the design through the advection of the
+  first scalar step; from rest the case would not see the design at all. The
+  error at the smallest perturbation is `+4.07e-5`, against `+5.25e-4` at
+  `1e-3`: the sensitivity is about `2e-7`, so the smallest perturbation is
+  near the floor of the finite differences. The tolerance is `1e-4`. The
+  reverse replay gives `-3.15e-1`.
 - `brinkman_dissipation_rejection` — checks the invalid mixed-dealias
   configuration directly through Neko's pFUnit error-redirection fixture. A
   mixed setting has no value its sensitivity is the gradient of, so the

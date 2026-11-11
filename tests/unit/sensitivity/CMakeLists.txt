@@ -24,6 +24,8 @@ set(test_list
     "unsteady_variable_timestep_convection.case"
     "unsteady_scalar_mixing_levels.case"
     "unsteady_variable_timestep_scalar.case"
+    "unsteady_variable_timestep_scalar_window.case"
+    "unsteady_scalar_mixing_single_step.case"
 )
 
 # Path to the common driver source
