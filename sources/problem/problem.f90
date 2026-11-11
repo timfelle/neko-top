@@ -684,6 +684,13 @@ contains
   !! the combined adjoint the state is paired with. Otherwise it is sampled
   !! before the step, with the adjoint's own coefficients, which is exact at
   !! a fixed time step only.
+  !!
+  !! Either way, every objective gates and scales its adjoint forcing before
+  !! the step over forward step \f$ i \f$ by whether \f$ t_i \f$ lies in
+  !! its time window, the test its value applied to the sample of state
+  !! \f$ i \f$. The scale, the length of the run over that of the window,
+  !! is carried by the adjoint into every sample of the sensitivity, which
+  !! therefore takes no factor of its own.
   !! @param this The problem.
   !! @param simulation The simulation, whose state recovery holds the forward
   !! run.
@@ -747,6 +754,9 @@ contains
        ! The step's forcings consume the same primal sample, so each
        ! objective gates and scales its forcing by its own window there,
        ! at the time and step the forward run recorded for the sample.
+       ! The exact transpose adds that forcing to the adjoint level of
+       ! state i alone, so the levels it reaches are exactly the samples
+       ! the value of the objective took, on any time grid.
        call simulation%state_recover%get_time_state(i, sample)
        do j = 1, this%n_objectives
           call this%objective_list(j)%objective%update_forcing_scale( &

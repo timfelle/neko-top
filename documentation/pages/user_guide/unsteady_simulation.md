@@ -52,10 +52,11 @@ changes the step, which a replayed step, and every adjoint step, does not do.
 Nor is an MPMD run, in which the controller agrees every step with the
 coupled simulations.
 
-For an objective without a time window, the adjoint is the exact discrete
-transpose of the time scheme of the forward run, at a fixed and at a variable
-time step alike: it combines the coefficients the forward steps used, as the
-state recovery recorded them; see [the adjoint under a variable time
+The adjoint is the exact discrete transpose of the time scheme of the forward
+run, at a fixed and at a variable time step alike, and for an objective with a
+time window too: it combines the coefficients the forward steps used, as the
+state recovery recorded them, and forces each adjoint level at the sample the
+objective took there; see [the adjoint under a variable time
 step](@ref adjoint-variable-time-step). The time transpose is selected in
 `case.adjoint_fluid`:
 

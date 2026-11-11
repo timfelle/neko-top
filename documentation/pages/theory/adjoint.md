@@ -297,8 +297,11 @@ The convection depends on the forward state, so it is applied once, at
 \f$\mathbf{u}_m\f$, to the combined adjoint velocity
 \f$\mathbf{u}^\dagger_{e,m} = \sum_{j=1}^{3} c_j^m
 \mathbf{u}^\dagger_{m+j}\f$. The adjoint forcing of the objective enters at
-its own level, without extrapolation. The gradient pairs every state with
-the combined adjoint velocity,
+its own level, without extrapolation. An objective with a time window gates
+it at \f$t_m\f$, with the test its value applies to the sample of
+\f$\mathbf{u}_m\f$, and scales it by the length of the run over that of the
+window, so that every level is forced exactly when its state is sampled. The
+gradient pairs every state with the combined adjoint velocity,
 \f[
   \mathrm{d}F(\chi,\delta \chi)
   = -\sum_{m=0}^{N} \Delta t_{\max(m,1)} \int_\Omega \delta \chi\,
