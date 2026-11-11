@@ -238,7 +238,9 @@ contains
 
     ! A scalar step advects the scalar from before the step, its first lag
     ! after the step, with the new velocity. The exact transpose of that
-    ! advection reads the lag, so it is kept with every state.
+    ! advection reads the lag, so it is kept with every state. The reverse
+    ! replay does not read it, but the state list does not depend on the
+    ! time transpose, which the state recovery does not know.
     n_states = 4
     if (allocated(neko_case%scalars)) then
        n_states = n_states + 2 * size(neko_case%scalars%scalar_fields)

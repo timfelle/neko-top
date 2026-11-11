@@ -162,8 +162,10 @@ module adjoint_scalar_scheme
      !! `state_recover_t%get_adjoint_scalar_column`.
      real(kind=rp) :: coupling_col(4) = 0.0_rp
      !> The adjoint scalar and its lags combined with `coupling_col` after an
-     !! exact step, which the coupling term to the adjoint fluid reads.
-     type(field_t) :: s_adj_c
+     !! exact step, which the coupling term to the adjoint fluid reads. The
+     !! registry owns it, as it owns `s_adj`, so that the term, which the
+     !! adjoint fluid holds, points at no component of this scheme.
+     type(field_t), pointer :: s_adj_c => null()
      !> The velocity of the primal step after the restored one, which
      !! advects the adjoint scalar in an exact step, kept by `keep_velocity`.
      type(field_t) :: u_next
@@ -490,7 +492,7 @@ contains
     call this%cp%free()
     call this%lambda%free()
     call this%s_adj_lag%free()
-    call this%s_adj_c%free()
+    nullify(this%s_adj_c)
     call this%u_next%free()
     call this%v_next%free()
     call this%w_next%free()
@@ -543,20 +545,29 @@ contains
 
   end subroutine adjoint_scalar_scheme_validate
 
-  !> Initialize a linear solver
-  !! @note Currently only supporting Krylov solvers
   !> Prepare the exact transpose of the time scheme.
-  !! @details Allocates the fields the exact steps fill, all zero, so that
-  !! the coupling term can point at `s_adj_c` before the first step.
+  !! @details Sets up the fields the exact steps fill, all zero, so that
+  !! the coupling term can point at `s_adj_c` before the first step. A
+  !! field that is already set up is left as it is.
   !! @param this The adjoint scalar.
   subroutine adjoint_scalar_scheme_init_exact(this)
     class(adjoint_scalar_scheme_t), intent(inout) :: this
+    character(len=:), allocatable :: name
 
-    if (allocated(this%s_adj_c%x)) return
-    call this%s_adj_c%init(this%dm_Xh, trim(this%name) // "_coupling")
-    call this%u_next%init(this%dm_Xh, "u_next")
-    call this%v_next%init(this%dm_Xh, "v_next")
-    call this%w_next%init(this%dm_Xh, "w_next")
+    name = trim(this%name) // "_coupling"
+    if (.not. neko_registry%field_exists(name)) then
+       call neko_registry%add_field(this%dm_Xh, name)
+    end if
+    this%s_adj_c => neko_registry%get_field(name)
+    if (.not. allocated(this%u_next%x)) then
+       call this%u_next%init(this%dm_Xh, "u_next")
+    end if
+    if (.not. allocated(this%v_next%x)) then
+       call this%v_next%init(this%dm_Xh, "v_next")
+    end if
+    if (.not. allocated(this%w_next%x)) then
+       call this%w_next%init(this%dm_Xh, "w_next")
+    end if
   end subroutine adjoint_scalar_scheme_init_exact
 
   !> Make the next step the exact transpose of a forward step.
@@ -574,7 +585,7 @@ contains
     class(adjoint_scalar_scheme_t), intent(inout) :: this
     real(kind=rp), intent(in) :: ext_col(4), bdf_col(4), coupling_col(4)
 
-    if (.not. allocated(this%s_adj_c%x)) then
+    if (.not. associated(this%s_adj_c)) then
        call neko_error("The exact transpose of the adjoint scalar is " // &
             "not initialised")
     end if
@@ -628,6 +639,8 @@ contains
          this%coupling_col(3))
   end subroutine adjoint_scalar_scheme_combine_coupling
 
+  !> Initialize a linear solver
+  !! @note Currently only supporting Krylov solvers
   subroutine adjoint_scalar_scheme_solver_factory(ksp, n, solver, max_iter, &
        abstol, monitor)
     class(ksp_t), allocatable, target, intent(inout) :: ksp

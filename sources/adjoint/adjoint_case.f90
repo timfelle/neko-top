@@ -73,7 +73,10 @@ module adjoint_case
      class(adjoint_fluid_scheme_t), allocatable :: fluid_adj
      !> Adjoint scalar
      type(adjoint_scalars_t), allocatable :: adjoint_scalars
-     !> Source term coupling the adjoint scalar to the adjoint fluid
+     !> Source term coupling the adjoint scalar to the adjoint fluid. The
+     !! source-term handler of the adjoint fluid adds a copy of it, which is
+     !! the one computed; this one is stale once added, and changing it,
+     !! as `init_exact_transpose` does to the copy, has no effect.
      type(adjoint_scalar_convection_source_term_t), allocatable :: &
           adjoint_convection_term
      type(case_t), pointer :: case
@@ -558,36 +561,45 @@ contains
   !! the adjoint scalar levels \f$ m \f$ to \f$ m + 2 \f$ that the exact
   !! step forms, and is added without extrapolation. The source-term
   !! handler of the adjoint fluid holds a copy of the term, added at
-  !! initialisation, so that copy is the one changed here.
+  !! initialisation, so that copy is the one changed here. Anything but
+  !! exactly one such term stops the run.
   !! @param this The adjoint case.
   subroutine adjoint_case_init_exact_transpose(this)
     class(adjoint_case_t), target, intent(inout) :: this
-    integer :: i
+    integer :: i, n_coupling
 
     if (.not. allocated(this%adjoint_scalars)) return
     do i = 1, size(this%adjoint_scalars%adjoint_scalar_fields)
        call this%adjoint_scalars%adjoint_scalar_fields(i)%init_exact()
     end do
 
-    if (.not. allocated(this%adjoint_convection_term)) return
+    n_coupling = 0
     select type (f => this%fluid_adj)
     type is (adjoint_fluid_pnpn_t)
-       do i = 1, size(f%source_term%source_terms)
-          select type (st => f%source_term%source_terms(i)%source_term)
-          type is (adjoint_scalar_convection_source_term_t)
-             st%s => this%case%scalars%scalar_fields(1)%scalar%slag%lf(1)
-             st%s_adj => &
-                  this%adjoint_scalars%adjoint_scalar_fields(1)%s_adj_c
-             if (st%extrapolate) then
-                st%extrapolate = .false.
-                f%source_term%n_unextrapolated = &
-                     f%source_term%n_unextrapolated + 1
-             end if
-          end select
-       end do
+       if (allocated(f%source_term%source_terms)) then
+          do i = 1, size(f%source_term%source_terms)
+             select type (st => f%source_term%source_terms(i)%source_term)
+             type is (adjoint_scalar_convection_source_term_t)
+                n_coupling = n_coupling + 1
+                st%s => this%case%scalars%scalar_fields(1)%scalar%slag%lf(1)
+                st%s_adj => &
+                     this%adjoint_scalars%adjoint_scalar_fields(1)%s_adj_c
+                if (st%extrapolate) then
+                   st%extrapolate = .false.
+                   f%source_term%n_unextrapolated = &
+                        f%source_term%n_unextrapolated + 1
+                end if
+             end select
+          end do
+       end if
     class default
        call neko_error("The exact time transpose needs adjoint_fluid_pnpn_t")
     end select
+
+    if (n_coupling .ne. 1) then
+       call neko_error("The exact time transpose of the adjoint scalar " // &
+            "needs exactly one term coupling it to the adjoint fluid")
+    end if
   end subroutine adjoint_case_init_exact_transpose
 
 end module adjoint_case
