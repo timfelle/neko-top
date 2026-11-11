@@ -153,6 +153,15 @@ Currently, we have added tests for the following components:
   first step takes, which the forward run checks. The error at the smallest
   perturbation is `-5.14e-4`, and the tolerance is `1.5e-3`. A history
   started from `timestep` instead gave `-2.55e-3`.
+- `brinkman_dissipation_objective_t`, unsteady with a variable timestep and a
+  time window (`unsteady_variable_timestep_window.case`) — the variable
+  timestep case with the objective averaged over `0.012 <= t <= 0.03` only.
+  The adjoint forcing is gated at the recorded time of every forward state it
+  consumes and scaled by the run length over the window length. The error at
+  the smallest perturbation is `+1.34e-3`, the bias of the replayed adjoint,
+  and the tolerance is `5e-3`, as for the case without a window. With the
+  forcing scaled but not gated the error was `-1.54e-1`; with the forcing
+  neither gated nor scaled, `+3.62e-2`.
 - `brinkman_dissipation_rejection` — checks the invalid mixed-dealias
   configuration directly through Neko's pFUnit error-redirection fixture. A
   mixed setting has no value its sensitivity is the gradient of, so the

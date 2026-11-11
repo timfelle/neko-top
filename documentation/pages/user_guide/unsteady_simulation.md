@@ -30,6 +30,10 @@ over each forward step with that step's time step, and every sample of the
 sensitivity takes its time and its weight from the record. A state that is
 recomputed from a checkpoint on disc is stepped with the recorded time steps
 too.
+The adjoint forcing of an objective with a time window is switched on at the
+recorded time of every forward state it consumes, the same test the value
+used, and scaled by the length of the run over the length of the window, both
+summed from the recorded steps.
 
 With `"unsteady": true`, a variable time step needs
 
