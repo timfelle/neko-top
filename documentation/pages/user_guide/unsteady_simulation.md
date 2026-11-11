@@ -65,9 +65,12 @@ step](@ref adjoint-variable-time-step). The time transpose is selected in
 | `time_transpose` | `string` | `"exact"` | How the unsteady adjoint transposes the time scheme of the forward run. `"exact"` is its exact discrete transpose. `"reverse"` replays the forward steps in reverse with the coefficients of the adjoint's own history of steps, which is exact at a fixed time step only; under a variable time step it is consistent with the forward run, with or without a time window, but the difference grows with how much the time step changes from one step to the next. |
 
 The exact transpose needs a zero `case.adjoint_fluid.initial_condition` and an
-adjoint fluid that is not frozen, and stops with an error otherwise. The
-adjoint scalars have no exact transpose yet: with them the adjoint takes the
-reverse one, and says so in the log.
+adjoint fluid that is not frozen, and stops with an error otherwise. It covers
+the adjoint scalar too, which needs a zero
+`case.adjoint_scalar.initial_condition` in the same way. With an adjoint
+scalar, `"reverse"` is not exact even at a fixed time step: it advects the
+adjoint scalar with the velocity of the restored state and couples it to the
+adjoint fluid through the scalar of that state, each one state off.
 
 The source terms of the adjoint fluid in the case file,
 `case.adjoint_fluid.source_term`, including those that call the user file, are

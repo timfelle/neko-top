@@ -63,7 +63,6 @@ module simulation_m
   use state_recover, only: state_recover_t, state_recover_factory
   use runtime_stats, only: neko_rt_stats
   use utils, only: neko_error
-  use logger, only: neko_log
   use comm, only: is_mpmd
   implicit none
   private
@@ -423,37 +422,22 @@ contains
   !! run, built from the coefficients the state recovery records. With
   !! `"reverse"` the adjoint replays the forward steps in reverse with the
   !! coefficients of its own time-step history, which is exact at a fixed
-  !! time step only. The adjoint scalars have no exact transpose, and the
-  !! adjoint couples them to the fluid, so with them the adjoint takes the
-  !! reverse one, and warns under a variable time step. The exact transpose
-  !! does not support a frozen adjoint fluid, which the reset of every run
-  !! sets from `case.adjoint_fluid.freeze_flow`.
+  !! time step only. The key covers the adjoint scalars as well, which the
+  !! adjoint couples to the fluid. The exact transpose does not support a
+  !! frozen adjoint fluid, which the reset of every run sets from
+  !! `case.adjoint_fluid.freeze_flow`.
   !! @param this The simulation object.
   subroutine simulation_init_time_transpose(this)
     class(simulation_t), intent(inout) :: this
     character(len=:), allocatable :: time_transpose
-    character(len=*), parameter :: reverse_msg = "The unsteady adjoint " // &
-         "has adjoint scalars, which have no exact time transpose: it " // &
-         "replays the forward steps in reverse, which is exact at a fixed " // &
-         "time step only"
-    logical :: variable_dt, freeze
+    logical :: freeze
 
     call json_get_or_default(this%neko_case%params, &
          'case.adjoint_fluid.time_transpose', time_transpose, 'exact')
 
     select case (trim(time_transpose))
     case ('exact')
-       this%exact_adjoint = &
-            .not. allocated(this%adjoint_case%adjoint_scalars)
-       if (.not. this%exact_adjoint) then
-          call json_get_or_default(this%neko_case%params, &
-               'case.time.variable_timestep', variable_dt, .false.)
-          if (variable_dt) then
-             call neko_log%warning(reverse_msg)
-          else
-             call neko_log%message(reverse_msg)
-          end if
-       end if
+       this%exact_adjoint = .true.
     case ('reverse')
        this%exact_adjoint = .false.
     case default
@@ -469,6 +453,7 @@ contains
                "adjoint does not support a frozen adjoint fluid, " // &
                "case.adjoint_fluid.freeze_flow")
        end if
+       call this%adjoint_case%init_exact_transpose()
     end if
 
   end subroutine simulation_init_time_transpose

@@ -705,7 +705,7 @@ contains
     real(kind=rp) :: cfl
     real(kind=rp) :: total_time
     real(kind=rp) :: ext_col(4), bdf_col(4)
-    integer :: i, j, n
+    integer :: i, j, k, n
     logical :: exact
     type(time_state_t) :: sample
 
@@ -741,12 +741,23 @@ contains
     call profiler_start_region("Adjoint simulation")
 
     do i = n, 1, -1
+       ! The exact adjoint scalar advects with the velocity of the state
+       ! after the one restored next, which is the current one.
+       if (exact .and. allocated(simulation%adjoint_case%adjoint_scalars)) then
+          associate(fields => simulation%adjoint_case%adjoint_scalars% &
+               adjoint_scalar_fields)
+            do k = 1, size(fields)
+               call fields(k)%keep_velocity()
+            end do
+          end associate
+       end if
        ! restore primal field
        call simulation%state_recover%restore(i)
        if (exact) then
           call simulation%state_recover%get_adjoint_ext_column(i, ext_col)
           call simulation%state_recover%get_adjoint_bdf_column(i, bdf_col)
           call fluid_adj%set_exact_coeffs(ext_col, bdf_col)
+          call set_exact_scalar_coeffs(simulation, i, ext_col, bdf_col)
        else
           ! accumulate objective sensitivity
           call this%accumulate_sensitivity_sample(design, simulation, i)
@@ -781,6 +792,14 @@ contains
     if (exact) then
        call fluid_adj%clear_exact_coeffs()
        nullify(fluid_adj)
+       if (allocated(simulation%adjoint_case%adjoint_scalars)) then
+          associate(fields => simulation%adjoint_case%adjoint_scalars% &
+               adjoint_scalar_fields)
+            do k = 1, size(fields)
+               call fields(k)%clear_exact_coeffs()
+            end do
+          end associate
+       end if
     end if
 
     ! Leave every forcing scale at one, as the steady path assumes
@@ -874,7 +893,8 @@ contains
   !! against what the transpose assumes.
   !! @details The exact transpose starts from a zero adjoint past the last
   !! step, which is the terminal condition of a time integral, and every
-  !! step forms the combined adjoint, which a frozen adjoint fluid does not.
+  !! step forms the combined adjoint, which a frozen adjoint fluid or
+  !! adjoint scalar does not. The adjoint scalars must start from zero too.
   !! It takes every coefficient from the record of the forward run. Its
   !! step combines the current adjoint and two lags, with up to four BDF
   !! coefficients, so it represents forward steps of BDF and EXT orders 1
@@ -915,6 +935,25 @@ contains
             "case.adjoint_fluid.time_transpose to ""reverse""")
     end if
 
+    if (allocated(simulation%adjoint_case%adjoint_scalars)) then
+       associate(fields => &
+            simulation%adjoint_case%adjoint_scalars%adjoint_scalar_fields)
+         do i = 1, size(fields)
+            if (fields(i)%freeze) then
+               call neko_error("The exact time transpose of the unsteady " // &
+                    "adjoint does not support a frozen adjoint scalar")
+            end if
+            if (field_glsc2(fields(i)%s_adj, fields(i)%s_adj) .gt. &
+                 0.0_rp) then
+               call neko_error("The exact time transpose of the unsteady " // &
+                    "adjoint needs a zero case.adjoint_scalar." // &
+                    "initial_condition, or set case.adjoint_fluid." // &
+                    "time_transpose to ""reverse""")
+            end if
+         end do
+       end associate
+    end if
+
     max_ndiff = min(3, fluid_adj%ext_bdf%diffusion_time_order)
     max_nadv = min(3, fluid_adj%ext_bdf%advection_time_order)
     do i = 1, simulation%state_recover%get_n_timesteps()
@@ -930,6 +969,32 @@ contains
        end if
     end do
   end subroutine exact_adjoint_fluid
+
+  !> Make the next steps of the adjoint scalars the exact transpose of a
+  !! forward step.
+  !! @details The scalars share the time scheme of the fluid, so their EXT
+  !! and BDF columns are those of the adjoint fluid. Their coupling to the
+  !! adjoint fluid has a column of its own.
+  !! @param simulation The simulation.
+  !! @param i Index of the restored forward state.
+  !! @param ext_col The EXT column of the adjoint of state `i`.
+  !! @param bdf_col The BDF column of the adjoint of state `i`.
+  subroutine set_exact_scalar_coeffs(simulation, i, ext_col, bdf_col)
+    class(simulation_t), intent(inout) :: simulation
+    integer, intent(in) :: i
+    real(kind=rp), intent(in) :: ext_col(4), bdf_col(4)
+    real(kind=rp) :: coupling_col(4)
+    integer :: k
+
+    if (.not. allocated(simulation%adjoint_case%adjoint_scalars)) return
+    call simulation%state_recover%get_adjoint_scalar_column(i, coupling_col)
+    associate(fields => &
+         simulation%adjoint_case%adjoint_scalars%adjoint_scalar_fields)
+      do k = 1, size(fields)
+         call fields(k)%set_exact_coeffs(ext_col, bdf_col, coupling_col)
+      end do
+    end associate
+  end subroutine set_exact_scalar_coeffs
 
   ! ========================================================================== !
   ! Update the objectives and constraints

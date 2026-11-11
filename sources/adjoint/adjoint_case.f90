@@ -93,6 +93,10 @@ module adjoint_case
    contains
      procedure, pass(this) :: init => adjoint_init_from_json
      procedure, pass(this) :: free => adjoint_free
+     !> Prepare the adjoint scalars for the exact transpose of the time
+     !! scheme.
+     procedure, pass(this) :: init_exact_transpose => &
+          adjoint_case_init_exact_transpose
   end type adjoint_case_t
 
 contains
@@ -543,5 +547,47 @@ contains
     this%have_scalar = .false.
 
   end subroutine adjoint_free
+
+  !> Prepare the adjoint scalars for the exact transpose of the time scheme.
+  !! @details Forward scalar step \f$ m \f$ advects the scalar of state
+  !! \f$ m - 1 \f$ with the velocity of state \f$ m \f$, and scalar steps
+  !! \f$ m \f$ to \f$ m + 2 \f$ extrapolate that advection. The coupling
+  !! term of the adjoint of state \f$ m \f$ to the adjoint fluid therefore
+  !! reads the scalar of state \f$ m - 1 \f$, which the state recovery
+  !! restores as the first lag of the primal scalar, and the combination of
+  !! the adjoint scalar levels \f$ m \f$ to \f$ m + 2 \f$ that the exact
+  !! step forms, and is added without extrapolation. The source-term
+  !! handler of the adjoint fluid holds a copy of the term, added at
+  !! initialisation, so that copy is the one changed here.
+  !! @param this The adjoint case.
+  subroutine adjoint_case_init_exact_transpose(this)
+    class(adjoint_case_t), target, intent(inout) :: this
+    integer :: i
+
+    if (.not. allocated(this%adjoint_scalars)) return
+    do i = 1, size(this%adjoint_scalars%adjoint_scalar_fields)
+       call this%adjoint_scalars%adjoint_scalar_fields(i)%init_exact()
+    end do
+
+    if (.not. allocated(this%adjoint_convection_term)) return
+    select type (f => this%fluid_adj)
+    type is (adjoint_fluid_pnpn_t)
+       do i = 1, size(f%source_term%source_terms)
+          select type (st => f%source_term%source_terms(i)%source_term)
+          type is (adjoint_scalar_convection_source_term_t)
+             st%s => this%case%scalars%scalar_fields(1)%scalar%slag%lf(1)
+             st%s_adj => &
+                  this%adjoint_scalars%adjoint_scalar_fields(1)%s_adj_c
+             if (st%extrapolate) then
+                st%extrapolate = .false.
+                f%source_term%n_unextrapolated = &
+                     f%source_term%n_unextrapolated + 1
+             end if
+          end select
+       end do
+    class default
+       call neko_error("The exact time transpose needs adjoint_fluid_pnpn_t")
+    end select
+  end subroutine adjoint_case_init_exact_transpose
 
 end module adjoint_case

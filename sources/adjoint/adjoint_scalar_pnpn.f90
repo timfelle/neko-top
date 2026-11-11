@@ -59,7 +59,7 @@ module adjoint_scalar_pnpn
   use time_scheme_controller, only : time_scheme_controller_t
   use projection, only : projection_t
   use math, only : glsc2, col2, add2s2
-  use field_math, only : field_col3, field_col2
+  use field_math, only : field_col3, field_col2, field_addcol3, field_add2s2
   use logger, only : neko_log, LOG_SIZE, NEKO_LOG_DEBUG
   use advection_adjoint, only : advection_adjoint_t, advection_adjoint_factory
   use profiler, only : profiler_start_region, profiler_end_region
@@ -357,6 +357,22 @@ contains
 
   end subroutine adjoint_scalar_pnpn_free
 
+  !> Advance the adjoint scalar in time.
+  !! @details With `exact_transpose` the step is the exact discrete
+  !! transpose of the forward scalar step it goes back over. It takes the
+  !! EXT and BDF columns of `set_exact_coeffs` instead of the coefficients
+  !! of the time scheme it is given, and solves with the forward step's own
+  !! \f$ b_1 / \Delta t \f$. The forward step advects with the velocity of
+  !! the step after the restored state, which `keep_velocity` kept, so the
+  !! advection is applied once, to the adjoint scalar and its lags combined
+  !! with the EXT column, after the extrapolation of the other explicit
+  !! terms rather than into their history. After the solve it combines the
+  !! adjoint scalar and its lags for the coupling term to the adjoint fluid.
+  !! @param this The adjoint scalar.
+  !! @param time The time state.
+  !! @param ext_bdf The time scheme, of the adjoint fluid.
+  !! @param dt_controller The time-step controller.
+  !! @param ksp_results The results of the solve.
   subroutine adjoint_scalar_pnpn_step(this, time, ext_bdf, dt_controller, &
        ksp_results)
     class(adjoint_scalar_pnpn_t), intent(inout) :: this
@@ -364,8 +380,11 @@ contains
     type(time_scheme_controller_t), intent(in) :: ext_bdf
     type(time_step_controller_t), intent(in) :: dt_controller
     type(ksp_monitor_t), intent(inout) :: ksp_results
-    type(field_t), pointer :: rho_cp
-    integer :: rho_cp_index
+    type(field_t), pointer :: rho_cp, s_adj_e, adv_s
+    integer :: rho_cp_index, s_adj_e_index, adv_s_index
+    ! Coefficients of the time scheme and the order of its BDF part
+    real(kind=rp) :: ab(4), bd(4)
+    integer :: nbd
     ! Number of degrees of freedom
     integer :: n
 
@@ -373,6 +392,24 @@ contains
 
     n = this%dm_Xh%size()
     call neko_scratch_registry%request_field(rho_cp, rho_cp_index, .false.)
+
+    if (this%exact_transpose) then
+       ab = this%ext_col
+       bd = this%bdf_col
+       nbd = 3
+
+       ! Combine the adjoint scalar and its lags, the levels the advection
+       ! of the next three forward steps reaches.
+       call neko_scratch_registry%request_field(s_adj_e, s_adj_e_index, &
+            .true.)
+       call field_add2s2(s_adj_e, this%s_adj, ab(1))
+       call field_add2s2(s_adj_e, this%s_adj_lag%lf(1), ab(2))
+       call field_add2s2(s_adj_e, this%s_adj_lag%lf(2), ab(3))
+    else
+       ab = ext_bdf%advection_coeffs%x
+       bd = ext_bdf%diffusion_coeffs%x
+       nbd = ext_bdf%ndiff
+    end if
 
     call profiler_start_region('Adjoint Scalar')
     associate(u => this%u, v => this%v, w => this%w, s_adj => this%s_adj, &
@@ -415,8 +452,10 @@ contains
       ! call makeoifs%compute_scalar(this%advs%x, f_Xh%x, rho, dt, n)
       ! else
       ! Add the advection operators to the right-hans-side.
-      call this%adv%compute_adjoint_scalar(u, v, w, s_adj, f_Xh, &
-           Xh, this%c_Xh, dm_Xh%size())
+      if (.not. this%exact_transpose) then
+         call this%adv%compute_adjoint_scalar(u, v, w, s_adj, f_Xh, &
+              Xh, this%c_Xh, dm_Xh%size())
+      end if
 
       ! Scale the volumetric source and advection terms by rho * cp, then add
       ! the weak boundary fluxes without that scaling -- same split as the
@@ -433,12 +472,23 @@ contains
       ! the scalar field from the previous time-step.
       ! Now, this value is used in the explicit time scheme to advance these
       ! terms in time.
-      call makeext%compute_scalar(this%abx1, this%abx2, f_Xh%x, &
-           ext_bdf%advection_coeffs%x, n)
+      call makeext%compute_scalar(this%abx1, this%abx2, f_Xh%x, ab, n)
+
+      ! Add the advection with the kept velocity, applied to the combined
+      ! adjoint scalar and scaled like the other explicit terms.
+      if (this%exact_transpose) then
+         call neko_scratch_registry%request_field(adv_s, adv_s_index, &
+              .true.)
+         call this%adv%compute_adjoint_scalar(this%u_next, this%v_next, &
+              this%w_next, s_adj_e, adv_s, Xh, this%c_Xh, dm_Xh%size())
+         call field_addcol3(f_Xh, adv_s, rho_cp)
+         call neko_scratch_registry%relinquish_field(adv_s_index)
+         call neko_scratch_registry%relinquish_field(s_adj_e_index)
+      end if
 
       ! Add the RHS contributions coming from the BDF scheme.
       call makebdf%compute_scalar(s_adj_lag, f_Xh%x, s_adj, c_Xh%B, &
-           rho_cp, dt, ext_bdf%diffusion_coeffs%x, ext_bdf%ndiff, n)
+           rho_cp, dt, bd, nbd, n)
       ! end if
 
       ! Source terms that must not be extrapolated in time are added as
@@ -456,8 +506,7 @@ contains
       ! Compute scalar residual.
       call profiler_start_region('Adjoint_scalar_residual')
       call res%compute(Ax, s_adj, s_adj_res, f_Xh, c_Xh, msh, Xh, &
-           lambda, rho_cp, ext_bdf%diffusion_coeffs%x(1), &
-           dt, dm_Xh%size())
+           lambda, rho_cp, bd(1), dt, dm_Xh%size())
 
       call gs_Xh%op(s_adj_res, GS_OP_ADD)
 
@@ -486,6 +535,8 @@ contains
       else
          call add2s2(s_adj%x, ds_adj%x, 1.0_rp, n)
       end if
+
+      if (this%exact_transpose) call this%combine_coupling()
 
     end associate
     call neko_scratch_registry%relinquish_field(rho_cp_index)

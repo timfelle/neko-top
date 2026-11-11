@@ -214,6 +214,11 @@ contains
 
     end associate
 
+    ! The exact transpose of the time scheme adds the forcing of every
+    ! sample to its own adjoint level, without extrapolation. The handler
+    ! copies the term when it is added, so the flag is set before.
+    adjoint_forcing%extrapolate = .not. simulation%exact_adjoint
+
     ! append adjoint source term to the adjoint passive scalar equation
     call simulation%adjoint_scalars%adjoint_scalar_fields(i_adjoint_scalar) &
          %source_term%add_source_term(adjoint_forcing)

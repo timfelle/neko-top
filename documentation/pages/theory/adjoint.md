@@ -319,19 +319,46 @@ time order 2 and 3. The coefficients are recorded rather than rebuilt from the
 time steps, because those of the first steps also depend on how the history of
 the forward run was started.
 
+The adjoint scalar follows the same pattern. Forward step \f$n\f$ advances
+the fluid first and the scalar after, so its scalar step advects
+\f$\phi_{n-1}\f$ with the new velocity \f$\mathbf{u}_n\f$, and the scalar
+steps \f$n\f$ to \f$n+2\f$ extrapolate that advection with
+\f$a_1^{(n)}\f$, \f$a_2^{(n+1)}\f$ and \f$a_3^{(n+2)}\f$. The scalar
+shares the time scheme of the fluid, so the adjoint of \f$\phi_m\f$ takes
+the implicit operator, the BDF column and the EXT column of the fluid. It
+applies its advection once, with the velocity \f$\mathbf{u}_{m+1}\f$ of the
+next forward step, to the combined adjoint scalar
+\f$\phi^\dagger_{e,m} = \sum_{j=1}^{3} c_j^m \phi^\dagger_{m+j}\f$, and
+its forcing enters at its own level. The term the adjoint scalar adds to the
+adjoint fluid of \f$\mathbf{u}_m\f$ transposes the advection of scalar
+steps \f$m\f$ to \f$m+2\f$, which all advect with \f$\mathbf{u}_m\f$
+in their own slot. It is evaluated with the gradient of the scalar of the
+previous state, \f$\phi_{m-1}\f$, which the state recovery keeps with
+every state as the first lag of the scalar, on the combination
+\f[
+  \phi^\dagger_{c,m} = \sum_{j=0}^{2} d_j^m \phi^\dagger_{m+j},
+  \qquad d_j^m = a_{j+1}^{(m+j)} \Delta t_{m+j} / \Delta t_m,
+\f]
+of the adjoint scalar just solved and the next two, and is added without
+extrapolation. This column starts one level lower than the EXT column, so it
+does not vanish at the last level.
+
 This is the default, `case.adjoint_fluid.time_transpose` set to `"exact"`.
-With `"reverse"`, and with adjoint scalars, which have no exact transpose
-yet, the adjoint instead takes the BDF and EXT coefficients of its own
-history of steps, started from equal steps of \f$\Delta t_N\f$, and keeps
-every explicit term in the extrapolation. The coupling of
+With `"reverse"`, the adjoint instead takes the BDF and EXT coefficients of
+its own history of steps, started from equal steps of \f$\Delta t_N\f$, and
+keeps every explicit term in the extrapolation. The coupling of
 \f$\mathbf{u}_n\f$ with \f$\mathbf{u}_{n+1}^{\dagger}\f$ is weighted by
 \f$\Delta t_{n+1}\f$ at time order 1, where forward step \f$n+1\f$ alone
 applies \f$\chi\f$ to \f$\mathbf{u}_n\f$, and by \f$\Delta t_n\f$ at time
 order 2 and 3, where no single weight is exact and \f$\Delta t_n\f$ is the
-closer one. At a constant time step this is the exact discrete adjoint too.
-Under a variable time step it is consistent with the forward run but not its
-exact transpose, and the difference grows with how much the time step
-changes from one step to the next.
+closer one. At a constant time step this is the exact discrete adjoint too,
+of the fluid. Under a variable time step it is consistent with the forward run
+but not its exact transpose, and the difference grows with how much the time
+step changes from one step to the next. Its adjoint scalar is advected with
+the restored velocity \f$\mathbf{u}_m\f$ and couples to the adjoint fluid
+through the restored scalar \f$\phi_m\f$, each one state off, so with an
+adjoint scalar it is not exact even at a constant time step; the error is of
+first order in the time step.
 
 ### The curl--curl term {#adjoint-curl-curl}
 The forward pressure equation above contains the curl--curl term

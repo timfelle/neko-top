@@ -75,7 +75,8 @@ module adjoint_scalar_scheme
   use scratch_registry, only : neko_scratch_registry
   use time_state, only : time_state_t
   use device, only : device_memcpy, DEVICE_TO_HOST
-  use field_math, only : field_col3, field_cmult2, field_add2, field_cfill
+  use field_math, only : field_col3, field_cmult2, field_add2, field_cfill, &
+       field_copy, field_rzero, field_add2s2
   use mpi_f08, only: MPI_INTEGER, MPI_SUM
   implicit none
 
@@ -147,6 +148,29 @@ module adjoint_scalar_scheme
           user_material_properties => null()
      !> Freeze the scheme, i.e. do nothing in step()
      logical :: freeze = .false.
+     !> Whether a step is the exact discrete transpose of the forward scalar
+     !! step it goes back over, with the coefficients set by
+     !! `set_exact_coeffs`.
+     logical :: exact_transpose = .false.
+     !> EXT column of the adjoint level of the next step, see
+     !! `state_recover_t%get_adjoint_ext_column`.
+     real(kind=rp) :: ext_col(4) = 0.0_rp
+     !> BDF column of the adjoint level of the next step, see
+     !! `state_recover_t%get_adjoint_bdf_column`.
+     real(kind=rp) :: bdf_col(4) = 0.0_rp
+     !> EXT column of the coupling of the adjoint level of the next step, see
+     !! `state_recover_t%get_adjoint_scalar_column`.
+     real(kind=rp) :: coupling_col(4) = 0.0_rp
+     !> The adjoint scalar and its lags combined with `coupling_col` after an
+     !! exact step, which the coupling term to the adjoint fluid reads.
+     type(field_t) :: s_adj_c
+     !> The velocity of the primal step after the restored one, which
+     !! advects the adjoint scalar in an exact step, kept by `keep_velocity`.
+     type(field_t) :: u_next
+     !> See `u_next`.
+     type(field_t) :: v_next
+     !> See `u_next`.
+     type(field_t) :: w_next
    contains
      !> Constructor for the base type.
      procedure, pass(this) :: scheme_init => adjoint_scalar_scheme_init
@@ -163,6 +187,20 @@ module adjoint_scalar_scheme
      !> Register this scalar scheme with the checkpoint.
      procedure, pass(this) :: register_checkpoint => &
           adjoint_scalar_scheme_register_checkpoint
+     !> Prepare the exact transpose of the time scheme.
+     procedure, pass(this) :: init_exact => adjoint_scalar_scheme_init_exact
+     !> Make the next step the exact transpose of a forward step.
+     procedure, pass(this) :: set_exact_coeffs => &
+          adjoint_scalar_scheme_set_exact_coeffs
+     !> Return to the steps with the scheme's own coefficients.
+     procedure, pass(this) :: clear_exact_coeffs => &
+          adjoint_scalar_scheme_clear_exact_coeffs
+     !> Keep the primal velocity for the exact step after the next restore.
+     procedure, pass(this) :: keep_velocity => &
+          adjoint_scalar_scheme_keep_velocity
+     !> Combine the adjoint scalar and its lags for the coupling term.
+     procedure, pass(this) :: combine_coupling => &
+          adjoint_scalar_scheme_combine_coupling
      !> Constructor.
      procedure(adjoint_scalar_scheme_init_intrf), pass(this), deferred :: init
      !> Destructor.
@@ -452,6 +490,11 @@ contains
     call this%cp%free()
     call this%lambda%free()
     call this%s_adj_lag%free()
+    call this%s_adj_c%free()
+    call this%u_next%free()
+    call this%v_next%free()
+    call this%w_next%free()
+    call this%clear_exact_coeffs()
 
     nullify(bc)
 
@@ -502,6 +545,89 @@ contains
 
   !> Initialize a linear solver
   !! @note Currently only supporting Krylov solvers
+  !> Prepare the exact transpose of the time scheme.
+  !! @details Allocates the fields the exact steps fill, all zero, so that
+  !! the coupling term can point at `s_adj_c` before the first step.
+  !! @param this The adjoint scalar.
+  subroutine adjoint_scalar_scheme_init_exact(this)
+    class(adjoint_scalar_scheme_t), intent(inout) :: this
+
+    if (allocated(this%s_adj_c%x)) return
+    call this%s_adj_c%init(this%dm_Xh, trim(this%name) // "_coupling")
+    call this%u_next%init(this%dm_Xh, "u_next")
+    call this%v_next%init(this%dm_Xh, "v_next")
+    call this%w_next%init(this%dm_Xh, "w_next")
+  end subroutine adjoint_scalar_scheme_init_exact
+
+  !> Make the next step the exact transpose of a forward step.
+  !! @details The scalar shares the time scheme of the fluid, so its EXT and
+  !! BDF columns are those of the adjoint fluid of the same level.
+  !! @param this The adjoint scalar.
+  !! @param ext_col The EXT column of the level, see
+  !! `state_recover_t%get_adjoint_ext_column`.
+  !! @param bdf_col The BDF column of the level, see
+  !! `state_recover_t%get_adjoint_bdf_column`.
+  !! @param coupling_col The EXT column of the coupling of the level, see
+  !! `state_recover_t%get_adjoint_scalar_column`.
+  subroutine adjoint_scalar_scheme_set_exact_coeffs(this, ext_col, bdf_col, &
+       coupling_col)
+    class(adjoint_scalar_scheme_t), intent(inout) :: this
+    real(kind=rp), intent(in) :: ext_col(4), bdf_col(4), coupling_col(4)
+
+    if (.not. allocated(this%s_adj_c%x)) then
+       call neko_error("The exact transpose of the adjoint scalar is " // &
+            "not initialised")
+    end if
+    this%exact_transpose = .true.
+    this%ext_col = ext_col
+    this%bdf_col = bdf_col
+    this%coupling_col = coupling_col
+  end subroutine adjoint_scalar_scheme_set_exact_coeffs
+
+  !> Return to the steps with the scheme's own coefficients.
+  !! @param this The adjoint scalar.
+  subroutine adjoint_scalar_scheme_clear_exact_coeffs(this)
+    class(adjoint_scalar_scheme_t), intent(inout) :: this
+
+    this%exact_transpose = .false.
+    this%ext_col = 0.0_rp
+    this%bdf_col = 0.0_rp
+    this%coupling_col = 0.0_rp
+  end subroutine adjoint_scalar_scheme_clear_exact_coeffs
+
+  !> Keep the primal velocity for the exact step after the next restore.
+  !! @details Primal step \f$ m + 1 \f$ advects the scalar with its new
+  !! velocity \f$ u_{m+1} \f$, so the exact step for the adjoint of state
+  !! \f$ m \f$ advects with that velocity, not the restored \f$ u_m \f$.
+  !! Called before state \f$ m \f$ is restored, while the primal velocity
+  !! is still that of state \f$ m + 1 \f$. Before the first restore it is
+  !! that of the last state, which advects only the zero combined adjoint
+  !! scalar of the last level.
+  !! @param this The adjoint scalar.
+  subroutine adjoint_scalar_scheme_keep_velocity(this)
+    class(adjoint_scalar_scheme_t), intent(inout) :: this
+
+    call field_copy(this%u_next, this%u)
+    call field_copy(this%v_next, this%v)
+    call field_copy(this%w_next, this%w)
+  end subroutine adjoint_scalar_scheme_keep_velocity
+
+  !> Combine the adjoint scalar and its lags for the coupling term.
+  !! @details After an exact step for the adjoint of state \f$ m \f$, the
+  !! adjoint scalar and its lags are the levels \f$ m \f$ to \f$ m + 2 \f$,
+  !! which `coupling_col` combines into `s_adj_c`.
+  !! @param this The adjoint scalar.
+  subroutine adjoint_scalar_scheme_combine_coupling(this)
+    class(adjoint_scalar_scheme_t), intent(inout) :: this
+
+    call field_rzero(this%s_adj_c)
+    call field_add2s2(this%s_adj_c, this%s_adj, this%coupling_col(1))
+    call field_add2s2(this%s_adj_c, this%s_adj_lag%lf(1), &
+         this%coupling_col(2))
+    call field_add2s2(this%s_adj_c, this%s_adj_lag%lf(2), &
+         this%coupling_col(3))
+  end subroutine adjoint_scalar_scheme_combine_coupling
+
   subroutine adjoint_scalar_scheme_solver_factory(ksp, n, solver, max_iter, &
        abstol, monitor)
     class(ksp_t), allocatable, target, intent(inout) :: ksp
