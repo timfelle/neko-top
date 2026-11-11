@@ -20,6 +20,7 @@ set(test_list
     "unsteady_variable_timestep.case"
     "unsteady_variable_timestep_cfl_limited.case"
     "unsteady_variable_timestep_window.case"
+    "unsteady_variable_timestep_window_reverse.case"
     "unsteady_variable_timestep_convection.case"
 )
 

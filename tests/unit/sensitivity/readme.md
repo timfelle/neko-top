@@ -201,10 +201,19 @@ Currently, we have added tests for the following components:
   time window (`unsteady_variable_timestep_window.case`) — the variable
   timestep case with the objective averaged over `0.012 <= t <= 0.03` only.
   The adjoint forcing is gated at the recorded time of every forward state it
-  consumes and scaled by the run length over the window length. The error at
-  the smallest perturbation is `+1.34e-3`, the bias of the replayed adjoint,
-  and the tolerance is `5e-3`, as for the case without a window. With the
-  forcing scaled but not gated the error was `-1.54e-1`; with the forcing
+  consumes and scaled by the run length over the window length. The exact
+  transpose adds the forcing of each state to that state's adjoint level
+  alone, so the gate reaches exactly the states the value sampled. The error
+  at the smallest perturbation is `+3.56e-6`, which is first-order truncation
+  (`+3.57e-5` at `1e-3`), and the tolerance is `1e-4`. With the gate taken one
+  step late, at the time of the next forward state, the error was `+9.41e-3`.
+- `brinkman_dissipation_objective_t`, unsteady with a variable timestep, a time
+  window and the reverse time transpose
+  (`unsteady_variable_timestep_window_reverse.case`) — the windowed case with
+  `case.adjoint_fluid.time_transpose` set to `"reverse"`. The error at the
+  smallest perturbation is `+1.34e-3`, the bias of the replayed adjoint, and
+  the tolerance is `5e-3`, as for the reverse replay without a window. With
+  the forcing scaled but not gated the error was `-1.54e-1`; with the forcing
   neither gated nor scaled, `+3.62e-2`.
 - `brinkman_dissipation_objective_t`, unsteady with a variable timestep and a
   strong convection (`unsteady_variable_timestep_convection.case`) — the

@@ -62,7 +62,7 @@ step](@ref adjoint-variable-time-step). The time transpose is selected in
 
 | Parameter        | Type     | Default   | Description |
 | ---------------- | -------- | --------- | ----------- |
-| `time_transpose` | `string` | `"exact"` | How the unsteady adjoint transposes the time scheme of the forward run. `"exact"` is its exact discrete transpose. `"reverse"` replays the forward steps in reverse with the coefficients of the adjoint's own history of steps, which is exact at a fixed time step only; under a variable time step it is consistent with the forward run, but the difference grows with how much the time step changes from one step to the next. |
+| `time_transpose` | `string` | `"exact"` | How the unsteady adjoint transposes the time scheme of the forward run. `"exact"` is its exact discrete transpose. `"reverse"` replays the forward steps in reverse with the coefficients of the adjoint's own history of steps, which is exact at a fixed time step only; under a variable time step it is consistent with the forward run, with or without a time window, but the difference grows with how much the time step changes from one step to the next. |
 
 The exact transpose needs a zero `case.adjoint_fluid.initial_condition` and an
 adjoint fluid that is not frozen, and stops with an error otherwise. The
