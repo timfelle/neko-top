@@ -188,4 +188,38 @@ if (HAVE_HDF5)
             $<$<COMPILE_LANGUAGE:Fortran>:-Wno-unused-variable>
         )
     endif()
+
+    # checkpoint_rank_change: the MMA and the design checkpoints must stop with
+    # an error on every rank when loaded into a run they do not match, such as
+    # one on a different number of ranks. The error stops the run, so the
+    # driver runs outside pFUnit, from a script that launches it on varying
+    # numbers of ranks under a time limit.
+    add_executable(checkpoint_rank_change EXCLUDE_FROM_ALL
+        ${CMAKE_CURRENT_SOURCE_DIR}/checkpoint_rank_change.f90
+    )
+    target_link_libraries(checkpoint_rank_change PRIVATE Neko-TOP::neko-top)
+    set_target_properties(checkpoint_rank_change PROPERTIES
+        Fortran_MODULE_DIRECTORY
+            ${CMAKE_CURRENT_BINARY_DIR}/mod/checkpoint_rank_change
+    )
+    add_dependencies(Unit checkpoint_rank_change)
+
+    file(MAKE_DIRECTORY
+        ${CMAKE_CURRENT_BINARY_DIR}/run/checkpoint_rank_change)
+    add_test(NAME checkpoint_rank_change
+        COMMAND ${CMAKE_COMMAND}
+            -DDRIVER=$<TARGET_FILE:checkpoint_rank_change>
+            -DMPIEXEC=${MPIEXEC_EXECUTABLE}
+            -DNUMPROC_FLAG=${MPIEXEC_NUMPROC_FLAG}
+            "-DPREFLAGS=${MPIEXEC_PREFLAGS}"
+            -DMAX_RANKS=${MPIEXEC_MAX_NUMPROCS}
+            -DTIME_LIMIT=60
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/check_checkpoint_rank_change.cmake
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/run/checkpoint_rank_change
+    )
+    set_tests_properties(checkpoint_rank_change PROPERTIES
+        LABELS "unit;checkpointing;hdf5"
+        ENVIRONMENT "NEKO_LOG_FILE=checkpoint_rank_change.log"
+        TIMEOUT 600
+    )
 endif()
