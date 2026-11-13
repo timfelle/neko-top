@@ -82,9 +82,13 @@ export NEKO_LOG_FILE="neko_${case_name%.*}.log"
 # defaults to false, so it opens the CSV with `position="append"`. A file
 # left behind by an earlier run of this same case would therefore be
 # appended to rather than replaced. Remove it, so the comparison below is
-# unambiguously against the output of the run we are about to make.
-csv_file="FD_check_${case_stem}.csv"
-rm -f "$csv_file"
+# unambiguously against the output of the run we are about to make. A case
+# with several `fd_test_targets` writes one CSV per target instead,
+# FD_check_<case>__<target>.csv (`fd_name_targets` in
+# tests/shared/sensitivity.f90); the double underscore keeps those apart
+# from the output of a case whose name merely extends this one, such as
+# <case>_nodealias.
+rm -f "FD_check_${case_stem}.csv" "FD_check_${case_stem}__"*.csv
 
 # The FD-vs-analytic tolerance assertion happens inside the driver itself
 # (shared `sensitivity` module, see tests/unit/sensitivity/sensitivity.f90) —
@@ -104,9 +108,30 @@ mpirun -n "$ranks" "$binary" "$case_name"
 # each case re-check every other case's output. In --case mode a missing
 # reference is a hard failure rather than a silent skip, so a newly
 # registered case cannot pass vacuously.
-python3 "${script_dir}/FD_check.py" \
-    --case "$case_stem" \
-    --reference-dir "${script_dir}/reference_data" \
-    --no-plot
+#
+# Each target of a multi-target case is checked as a case of its own. The
+# targets are the union of the CSVs this run wrote and the references
+# recorded for this case, so a target missing from either side fails
+# rather than going unchecked. A case with neither is checked under its
+# own name, which fails on the missing output.
+targets=()
+shopt -s nullglob
+for csv in "FD_check_${case_stem}.csv" "FD_check_${case_stem}__"*.csv \
+    "${script_dir}/reference_data/ref_FD_check_${case_stem}.csv" \
+    "${script_dir}/reference_data/ref_FD_check_${case_stem}__"*.csv; do
+    [[ -f "$csv" ]] || continue
+    target="$(basename "$csv" .csv)"
+    target="${target#*FD_check_}"
+    [[ " ${targets[*]} " == *" ${target} "* ]] || targets+=("$target")
+done
+shopt -u nullglob
+(( ${#targets[@]} )) || targets=("$case_stem")
+
+for target in "${targets[@]}"; do
+    python3 "${script_dir}/FD_check.py" \
+        --case "$target" \
+        --reference-dir "${script_dir}/reference_data" \
+        --no-plot
+done
 
 echo "Sensitivity regression check passed for ${case_name}."
