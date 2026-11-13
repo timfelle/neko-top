@@ -364,8 +364,9 @@ contains
     if (len_trim(this%restart_file) .eq. 0) then
        i = -1
        if (pe_rank .eq. 0) then
+          ! Set before the loop, which runs zero times for max_iterations < 1
+          exists = .false.
           do i = this%max_iterations, 1, -1
-             exists = .false.
              file_name = checkpoint_filename(this, iteration = i)
              inquire(file = file_name, exist = exists)
              if (exists) exit
