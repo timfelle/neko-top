@@ -98,6 +98,16 @@ set_tests_properties(sensitivity_regression_build PROPERTIES
 set(sensitivity_regression_fast_cases
     "unsteady_viscous_dissipation"
     "unsteady_brinkman_dissipation"
+
+    # Matched no-dealiasing counterparts of the two unsteady cases above.
+    # They pin every over-integration flag that applies to them explicitly
+    # to `false` (as their `true` counterparts pin theirs to `true`), so
+    # both code paths keep permanent reference-backed coverage instead of
+    # the lane tracking whatever the flag defaults happen to be. They were
+    # chosen because the unsteady pair runs in ~15 s, unlike the slow tier
+    # below, which is also why they sit in this tier.
+    "unsteady_viscous_dissipation_nodealias"
+    "unsteady_brinkman_dissipation_nodealias"
 )
 
 # Slow tier. passive_scalar runs ten times as many timesteps per solve as
