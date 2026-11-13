@@ -45,6 +45,10 @@ Brinkman source-term coupling.
 The `verbose_*`, `output_precision`, and `output_format` options control the
 intermediate forward and backward fields written by the mapping cascade.
 
+Without `mapping` the cascade is empty: the design is used directly as the
+Brinkman amplitude, and the sensitivity is passed back to the design
+unchanged.
+
 ### `initial_distribution` options {#design_types-brinkman-initial}
 
 If omitted, the design is initialized to zero.

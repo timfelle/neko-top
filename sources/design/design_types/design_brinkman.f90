@@ -260,6 +260,9 @@ module brinkman_design
 contains
 
   !> Initialize the design from a JSON file
+  !! @param this The design.
+  !! @param parameters The JSON parameters of the design.
+  !! @param simulation The simulation the design is injected into.
   subroutine brinkman_design_init_from_json_sim(this, parameters, simulation)
     class(brinkman_design_t), intent(inout) :: this
     type(json_file), intent(inout) :: parameters
@@ -316,14 +319,13 @@ contains
     associate(coef => simulation%neko_case%fluid%c_Xh, &
          gs => simulation%neko_case%fluid%gs_Xh)
 
-      if ('mapping' .in. parameters) then
-         call this%mapping%init_base(coef)
-         call this%mapping%add(parameters, 'mapping')
-         call this%mapping%init_output_fields(this%design_indicator, &
-              this%brinkman_amplitude, this%sensitivity, verbose_design, &
-              verbose_sensitivity, output_precision, output_format_str, &
-              'design', 'sensitivity')
-      end if
+      ! Without a "mapping" the cascade stays empty, and the design is mapped
+      ! to the Brinkman amplitude by the identity.
+      call this%mapping%add(parameters, 'mapping')
+      call this%mapping%init_output_fields(this%design_indicator, &
+           this%brinkman_amplitude, this%sensitivity, verbose_design, &
+           verbose_sensitivity, output_precision, output_format_str, &
+           'design', 'sensitivity')
 
       if ('initial_distribution' .in. parameters) then
          call json_get(parameters, 'initial_distribution', json_subdict)
@@ -351,6 +353,13 @@ contains
 
   end subroutine brinkman_design_free
 
+  !> Initialise the design from components
+  !! @details The mapping cascade is left empty, so the design is mapped to
+  !! the Brinkman amplitude by the identity.
+  !! @param this The design.
+  !! @param name The name of the design.
+  !! @param simulation The simulation the design is injected into.
+  !! @param dealias Whether the Brinkman source terms are dealiased.
   subroutine brinkman_design_init_from_components(this, name, simulation, &
        dealias)
     class(brinkman_design_t), intent(inout) :: this
@@ -373,6 +382,7 @@ contains
     this%sensitivity => neko_registry%get_field("sensitivity")
 
     this%coef => simulation%fluid%c_Xh
+    call this%mapping%init_base(simulation%fluid%c_Xh)
 
     ! TODO
     ! this is where we steal basically everything in
