@@ -107,9 +107,8 @@ contains
     allocate(adjoint_scalar_convection_source_term_t::obj)
   end subroutine adjoint_scalar_convection_source_term_allocate
 
-  !> The constructor from JSON, which stops with an error: the term is only
-  !! built by the adjoint case, from components, when there is an adjoint
-  !! scalar.
+  !> The constructor from JSON, which stops with an error: the adjoint case
+  !! adds the term itself, from components, when case.adjoint_scalar is set.
   !! @param this The object.
   !! @param json The JSON object for the source.
   !! @param fields A list of fields for adding the source values.
@@ -123,8 +122,9 @@ contains
     type(coef_t), intent(in), target :: coef
     character(len=*), intent(in) :: variable_name
 
-    call neko_error("The adjoint_scalar_convection source term can only " // &
-         "be built by the adjoint case, not from JSON.")
+    call neko_error("The adjoint_scalar_convection source term cannot be " // &
+         "built from JSON; the adjoint case adds it when " // &
+         "case.adjoint_scalar is set.")
 
   end subroutine adjoint_scalar_convection_source_term_init_from_json
 
