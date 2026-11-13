@@ -1,9 +1,9 @@
 # CMakeLists.txt for the design unit tests.
 #
 # brinkman_design_no_mapping: a Brinkman design without a "mapping" must map
-# the design to the Brinkman amplitude, and a sensitivity back to the design,
-# by the identity, whether it is initialised from JSON or from components.
-# Freeing a design must also drop its mask.
+# a continuous design to the Brinkman amplitude, and a continuous sensitivity
+# back to the design, by the identity, whether it is initialised from JSON or
+# from components. Freeing a design must also drop its mask.
 
 set(CMAKE_FOLDER "Tests/Unit/Design")
 

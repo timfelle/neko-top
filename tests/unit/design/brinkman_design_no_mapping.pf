@@ -1,9 +1,11 @@
-! Verification that a Brinkman design without a "mapping" maps by the
-! identity.
+! Verification that a Brinkman design without a "mapping" maps a continuous
+! design by the identity.
 !
 ! The "mapping" of a `brinkman_design_t` is optional. Without it the mapping
-! cascade is empty, so the Brinkman amplitude must equal the design, and a
-! sensitivity must be passed back to the design unchanged. Before the fix,
+! cascade is empty and only makes a field continuous, by averaging the values
+! that neighbouring elements share. For a continuous design the Brinkman
+! amplitude must therefore equal the design, and a continuous sensitivity
+! must be passed back to the design unchanged. Before the fix,
 ! the mapping handler was only initialised when "mapping" was present, so the
 ! forward mapping at the end of the initialisation dereferenced unset mesh
 ! coefficients and the run aborted with a segmentation fault.

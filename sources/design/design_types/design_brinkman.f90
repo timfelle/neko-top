@@ -1,6 +1,6 @@
 !> @file design_brinkman.f90
 !! @copyright
-!! Copyright (c) 2024-2025, The Neko-TOP Authors
+!! Copyright (c) 2024-2026, The Neko-TOP Authors
 !! All rights reserved.
 !!
 !! Redistribution and use in source and binary forms, with or without
@@ -315,12 +315,12 @@ contains
     ! Initialize and inject into the simulation
     call this%init_from_components(name, simulation, dealias)
 
-    ! Initialize the mapper
+    ! Add the mapping cascade and its output, then set the initial design
     associate(coef => simulation%neko_case%fluid%c_Xh, &
          gs => simulation%neko_case%fluid%gs_Xh)
 
-      ! Without a "mapping" the cascade stays empty, and the design is mapped
-      ! to the Brinkman amplitude by the identity.
+      ! Without a "mapping" the cascade stays empty, and the Brinkman
+      ! amplitude is the design made continuous.
       call this%mapping%add(parameters, 'mapping')
       call this%mapping%init_output_fields(this%design_indicator, &
            this%brinkman_amplitude, this%sensitivity, verbose_design, &
@@ -359,8 +359,8 @@ contains
   end subroutine brinkman_design_free
 
   !> Initialise the design from components
-  !! @details The mapping cascade is left empty, so the design is mapped to
-  !! the Brinkman amplitude by the identity.
+  !! @details The mapping cascade is left empty, so the Brinkman amplitude is
+  !! the design made continuous.
   !! @param this The design.
   !! @param name The name of the design.
   !! @param simulation The simulation the design is injected into.
