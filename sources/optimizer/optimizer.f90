@@ -928,12 +928,14 @@ contains
        overwrite_flag = overwrite
     end if
 
-    ! Create the fill filename and extract relevant components
+    ! Create the full filename and extract relevant components. The check is
+    ! kept apart from the assignment, so that every path defines file_full.
     if (present(filename) .and. (present(path) .or. present(basename) .or. &
          present(format) .or. present(iteration))) then
        call neko_error('optimizer: Cannot specify both filename and ' // &
             'path/basename/format for checkpoint loading.')
-    else if (present(filename)) then
+    end if
+    if (present(filename)) then
        file_full = trim(filename)
     else
        file_full = checkpoint_filename(this, path, basename, format, &
@@ -1012,12 +1014,14 @@ contains
     call neko_log%section('Optimizer loading checkpoint')
     call profiler_start_region('Optimizer load checkpoint')
 
-    ! Check that the provided inputs are a valid combination.
+    ! Check that the provided inputs are a valid combination. The check is
+    ! kept apart from the assignment, so that every path defines file_full.
     if (present(filename) .and. (present(path) .or. present(basename) .or. &
          present(format) .or. present(iteration))) then
        call neko_error('optimizer: Cannot specify both filename and ' // &
             'path/basename/format for checkpoint loading.')
-    else if (present(filename)) then
+    end if
+    if (present(filename)) then
        file_full = trim(filename)
     else
        file_full = checkpoint_filename(this, path, basename, format, iteration)
