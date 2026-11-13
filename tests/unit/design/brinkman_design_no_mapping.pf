@@ -10,18 +10,22 @@
 ! forward mapping at the end of the initialisation dereferenced unset mesh
 ! coefficients and the run aborted with a segmentation fault.
 !
-! Three cases are checked:
+! Four cases are checked:
 !   1. `init` from JSON, which also sets up the output of the design.
 !   2. `init_from_components`, which never sets an optimisation domain, so
 !      the design must not be masked.
 !   3. `free` after a JSON initialisation restricted to the point zone of the
 !      case, then `init_from_components`. Freeing must drop the mask, or the
 !      new design is masked with the stale domain.
+!   4. A pseudo-random design and sensitivity, which differ between the
+!      elements that share a point. The cascade must then still be a
+!      projection, unchanged when applied twice, and the backward map must be
+!      the transpose of the forward one.
 !
-! The design is updated to the x coordinate, and the sensitivity mapped back
-! is its square. The mesh is periodic in y and z only, so both fields are
-! continuous, and the averaging of shared points in the cascade leaves them
-! unchanged.
+! In the first two cases the design is updated to the x coordinate, and the
+! sensitivity mapped back is its square. The mesh is periodic in y and z
+! only, so both fields are continuous, and the averaging of shared points in
+! the cascade leaves them unchanged.
 !
 ! Each test builds and frees its own simulation and then resets the
 ! registries, so that the second test does not find the fields of the first.
@@ -48,6 +52,13 @@ module brinkman_design_no_mapping
 
   !> The identity only rounds where the cascade averages shared points.
   real(kind=rp), parameter :: match_tol = 1.0e2_rp * epsilon(1.0_rp)
+
+  !> An inner product sums over every point, rounding once per term.
+  real(kind=rp), parameter :: transpose_tol = 1.0e4_rp * epsilon(1.0_rp)
+
+  !> The cascade must move the pseudo-random design by at least this much,
+  !! or the design is continuous and the projection checks are inert.
+  real(kind=rp), parameter :: min_effect = 1.0e-2_rp
 
   @TestCase
   type, extends(MPITestCase) :: test_brinkman_no_mapping
@@ -155,6 +166,73 @@ contains
     call amplitude%free()
 
   end subroutine count_masked
+
+  !> Map a discontinuous design forward and a discontinuous sensitivity
+  !! backward. The forward map P must be a projection, P(P a) = P a, and the
+  !! backward map its transpose, <P a, b> = <a, P^T b>.
+  !! @param des The initialised design.
+  !! @param effect Largest change of the design by the forward map.
+  !! @param idempotence_diff Largest change of the amplitude when it is
+  !! mapped again.
+  !! @param transpose_diff Difference of <P a, b> and <a, P^T b>, relative to
+  !! <P a, b>. The test runs on one rank, so the local sums are the inner
+  !! products.
+  subroutine run_projection(des, effect, idempotence_diff, transpose_diff)
+    type(brinkman_design_t), intent(inout) :: des
+    real(kind=rp), intent(out) :: effect
+    real(kind=rp), intent(out) :: idempotence_diff
+    real(kind=rp), intent(out) :: transpose_diff
+    type(vector_t) :: design, values, amplitude, remapped
+    type(vector_t) :: sensitivity, mapped
+    real(kind=rp) :: forward_product
+    integer :: n, i
+
+    n = des%size()
+    call design%init(n)
+    call values%init(n)
+    call amplitude%init(n)
+    call remapped%init(n)
+    call sensitivity%init(n)
+    call mapped%init(n)
+
+    ! A pseudo-random value per point, so that the copies of a point in the
+    ! elements sharing it differ. The positive sensitivity keeps <P a, b>
+    ! far from zero.
+    do i = 1, n
+       design%x(i) = 0.5_rp + 0.4_rp * sin(0.37_rp * real(i, kind=rp))
+       sensitivity%x(i) = 0.5_rp + 0.5_rp * cos(0.53_rp * real(i, kind=rp))
+    end do
+
+    values%x = design%x
+    call values%copy_from(HOST_TO_DEVICE, sync = .true.)
+    call des%update_design(values)
+    call get_host_amplitude(amplitude)
+    effect = maxval(abs(amplitude%x - design%x))
+
+    ! Mapping the amplitude again must leave it unchanged.
+    values%x = amplitude%x
+    call values%copy_from(HOST_TO_DEVICE, sync = .true.)
+    call des%update_design(values)
+    call get_host_amplitude(remapped)
+    idempotence_diff = maxval(abs(remapped%x - amplitude%x))
+
+    ! The backward map must be the transpose of the forward one.
+    call sensitivity%copy_from(HOST_TO_DEVICE, sync = .true.)
+    call des%map_backward(sensitivity)
+    call des%get_sensitivity(mapped)
+    call mapped%copy_from(DEVICE_TO_HOST, sync = .true.)
+    forward_product = sum(amplitude%x * sensitivity%x)
+    transpose_diff = abs(forward_product - sum(design%x * mapped%x)) / &
+         abs(forward_product)
+
+    call design%free()
+    call values%free()
+    call amplitude%free()
+    call remapped%free()
+    call sensitivity%free()
+    call mapped%free()
+
+  end subroutine run_projection
 
   !> Free the registries and initialise them again for the next test.
   subroutine reset_registries()
@@ -270,5 +348,33 @@ contains
     @assertEqual(0, masked_after, "stale mask after free")
 
   end subroutine free_drops_mask
+
+  !> Without a mapping, the cascade must be a projection whose backward map
+  !! is its transpose, also for a design that is not continuous.
+  @test(npes=[1])
+  subroutine projection_without_mapping(this)
+    class(test_brinkman_no_mapping), intent(inout) :: this
+    type(json_file) :: parameters, design_parameters
+    type(simulation_t), target :: sim
+    type(brinkman_design_t) :: des
+    real(kind=rp) :: effect, idempotence_diff, transpose_diff
+
+    parameters = json_read_file(case_file)
+    call json_get(parameters, 'optimization.design', design_parameters)
+
+    call sim%init(parameters)
+    call des%init(design_parameters, sim)
+
+    call run_projection(des, effect, idempotence_diff, transpose_diff)
+
+    call des%free()
+    call sim%free()
+    call reset_registries()
+
+    @assertGreaterThan(effect, min_effect, "the design is continuous")
+    @assertEqual(0.0_rp, idempotence_diff, match_tol, "not a projection")
+    @assertEqual(0.0_rp, transpose_diff, transpose_tol, "not the transpose")
+
+  end subroutine projection_without_mapping
 
 end module brinkman_design_no_mapping

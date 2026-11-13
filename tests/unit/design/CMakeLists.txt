@@ -3,7 +3,9 @@
 # brinkman_design_no_mapping: a Brinkman design without a "mapping" must map
 # a continuous design to the Brinkman amplitude, and a continuous sensitivity
 # back to the design, by the identity, whether it is initialised from JSON or
-# from components. Freeing a design must also drop its mask.
+# from components. Freeing a design must also drop its mask, and on a
+# discontinuous design the empty cascade must be a projection whose backward
+# map is its transpose.
 
 set(CMAKE_FOLDER "Tests/Unit/Design")
 
