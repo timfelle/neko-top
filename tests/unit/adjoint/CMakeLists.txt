@@ -10,6 +10,9 @@
 #
 # adjoint_case_init: initialising an adjoint case releases what an earlier
 # initialisation left behind.
+#
+# adjoint_case_output_layout: the adjoint field output takes the data layout
+# of the case.
 
 set(CMAKE_FOLDER "Tests/Unit/Adjoint")
 
@@ -69,10 +72,19 @@ add_pfunit_ctest(adjoint_case_init
 )
 add_dependencies(adjoint_case_init adjoint_test_prepare)
 
+add_pfunit_ctest(adjoint_case_output_layout
+    TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/adjoint_case_output_layout.pf
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    LINK_LIBRARIES Neko-TOP::neko-top
+    MAX_PES 1
+)
+add_dependencies(adjoint_case_output_layout adjoint_test_prepare)
+
 add_dependencies(Unit
     adv_adjoint_no_dealias_transpose
     adjoint_source_term_json
     adjoint_case_init
+    adjoint_case_output_layout
 )
 
 # Set test properties
@@ -94,6 +106,12 @@ set_tests_properties(adjoint_case_init PROPERTIES
     TIMEOUT 120
 )
 
+set_tests_properties(adjoint_case_output_layout PROPERTIES
+    LABELS "unit;adjoint"
+    ENVIRONMENT "NEKO_LOG_FILE=adjoint_case_output_layout.log"
+    TIMEOUT 120
+)
+
 # Disable treating unused-variable as error for pfunit tests
 if (CMAKE_Fortran_COMPILER_ID STREQUAL "GNU")
     target_compile_options(adv_adjoint_no_dealias_transpose PRIVATE
@@ -103,6 +121,9 @@ if (CMAKE_Fortran_COMPILER_ID STREQUAL "GNU")
         $<$<COMPILE_LANGUAGE:Fortran>:-Wno-unused-variable>
     )
     target_compile_options(adjoint_case_init PRIVATE
+        $<$<COMPILE_LANGUAGE:Fortran>:-Wno-unused-variable>
+    )
+    target_compile_options(adjoint_case_output_layout PRIVATE
         $<$<COMPILE_LANGUAGE:Fortran>:-Wno-unused-variable>
     )
 endif()

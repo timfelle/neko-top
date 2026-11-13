@@ -1,0 +1,82 @@
+!> The adjoint field output takes the data layout of the case, as the field
+!! output of the primal does.
+!!
+!! The layout is read from `case.output_layout` and only applies to ADIOS2
+!! (bp) files. A bp file takes its layout when it is set up, without ADIOS2,
+!! which is only needed for writing. The test therefore sets up the adjoint
+!! of a case whose adjoint output is a bp file, with a layout other than the
+!! default, and reads the layout back from that file. Nothing is written.
+module adjoint_case_output_layout
+  use mpi
+  use pfunit
+  use neko, only: neko_init
+  use case, only: case_t
+  use adjoint_case, only: adjoint_case_t
+  use bp_file, only: bp_file_t
+  use json_module, only: json_file
+  use json_utils_ext, only: json_read_file
+  implicit none
+
+  character(len=*), parameter :: case_file = 'adjoint_case.case'
+
+  !> A data layout other than the default, which is 1.
+  integer, parameter :: expected_layout = 2
+
+  @TestCase
+  type, extends(MPITestCase) :: test_adjoint_case_output_layout
+   contains
+     procedure :: setUp
+     procedure :: tearDown
+  end type test_adjoint_case_output_layout
+
+  !> Whether Neko is initialised, which is done once for all the tests.
+  logical :: initialized = .false.
+
+contains
+
+  subroutine setUp(this)
+    class(test_adjoint_case_output_layout), intent(inout) :: this
+
+    if (initialized) return
+    initialized = .true.
+    call neko_init()
+  end subroutine setUp
+
+  subroutine tearDown(this)
+    class(test_adjoint_case_output_layout), intent(inout) :: this
+  end subroutine tearDown
+
+  !> The adjoint field output is set up with the layout of the case.
+  @test(npes=[1])
+  subroutine test_adjoint_output_layout(this)
+    class(test_adjoint_case_output_layout), intent(inout) :: this
+    type(json_file) :: parameters
+    type(case_t), target :: neko_case
+    type(adjoint_case_t) :: adjoint
+    integer :: layout
+    logical :: found
+
+    parameters = json_read_file(case_file)
+    call parameters%update('case.output_layout', expected_layout, found)
+    call parameters%update('case.adjoint_fluid.output_format', 'adios2', &
+         found)
+
+    call neko_case%init(parameters)
+    call adjoint%init(neko_case)
+
+    ! Stays -1 if the adjoint output is not a bp file.
+    layout = -1
+    select type (ft => adjoint%f_out%file_%file_type)
+    type is (bp_file_t)
+       layout = ft%layout
+    end select
+
+    call adjoint%free()
+    call neko_case%free()
+    call parameters%destroy()
+
+    @assertEqual(expected_layout, layout, 'Adjoint layout (-1: not bp)')
+
+  end subroutine test_adjoint_output_layout
+
+end module adjoint_case_output_layout

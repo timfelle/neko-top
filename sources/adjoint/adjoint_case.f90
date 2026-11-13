@@ -51,7 +51,7 @@ module adjoint_case
   use file, only: file_t
   use json_module, only: json_file
   use json_utils, only: json_get, json_get_or_default, json_extract_item, &
-       json_get_or_lookup
+       json_get_or_lookup, json_get_or_lookup_or_default
   use adjoint_scalar_scheme, only: adjoint_scalar_scheme_t
   use adjoint_scalar_pnpn, only : adjoint_scalar_pnpn_t
   use logger, only : neko_log
@@ -416,6 +416,12 @@ contains
     else
        precision = sp
     end if
+
+    !
+    ! Setup output layout of the field bp file
+    !
+    call json_get_or_lookup_or_default(neko_case%params, &
+         'case.output_layout', layout, 1)
 
     !
     ! Setup output_controller
