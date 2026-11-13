@@ -150,8 +150,9 @@ Currently, we have added tests for the following components:
   masks the full weak Laplacian drops. With that forcing the error was
   `+1.62` (steady) and `+74.7` (unsteady, where the probed sensitivity even
   had the wrong sign); with the gradient of the value it is `+4.5e-4` and
-  `-2.8e-5`, the latter first-order truncation. The tolerances, `1e-2` (as
-  for `viscous_dissipation.case`) and `1e-3`, lie between the two. Whenever
+  `-2.8e-5`, the latter first-order truncation. The tolerances, `1e-2` (the
+  tolerance `viscous_dissipation.case` had before its `end_time` was raised
+  to 5.0) and `1e-3`, lie between the two. Whenever
   the cases or the driver's probe selection change, confirm again that both
   fail with the masked full weak Laplacian as the forcing.
 
