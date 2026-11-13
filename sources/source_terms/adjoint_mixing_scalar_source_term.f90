@@ -122,7 +122,7 @@ contains
   !! @param f_s RHS of the adjoint scalar.
   !! @param s the forward scalar field.
   !! @param obj_scale a scaling factor, the weight of the objective. Must
-  !! outlive the term.
+  !! stay valid while the term is computed.
   !! @param phi_ref target concentration.
   !! @param mask the mask for the source term.
   !! @param if_mask whether to use the mask.

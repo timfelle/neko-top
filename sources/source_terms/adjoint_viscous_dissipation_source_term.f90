@@ -145,7 +145,8 @@ contains
   !! @param this The source term.
   !! @param f_x, f_y, f_z the RHS of the adjoint equations
   !! @param u, v, w the flow fields of the primal
-  !! @param weight the weight of the objective. Must outlive the term.
+  !! @param weight the weight of the objective. Must stay valid while the
+  !! term is computed.
   !! @param obj_scale a further, constant scaling factor
   !! @param mask the mask for the source term
   !! @param if_mask whether to use the mask
