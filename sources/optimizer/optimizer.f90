@@ -329,7 +329,9 @@ contains
     ! Optional settings
     call optimizer_default_file_settings(this)
     if (present(max_runtime)) this%max_runtime = max_runtime
-    if (present(stop_design_change)) this%stop_design_change = stop_design_change
+    if (present(stop_design_change)) then
+       this%stop_design_change = stop_design_change
+    end if
     if (present(restart_file)) this%restart_file = restart_file
     if (present(checkpoint_path)) this%checkpoint_path = checkpoint_path
     if (present(checkpoint_base)) this%checkpoint_base = checkpoint_base
