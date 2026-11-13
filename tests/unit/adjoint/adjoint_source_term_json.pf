@@ -1,0 +1,167 @@
+!> The adjoint source terms Neko-TOP registers with Neko's source-term
+!! factory refuse to be built from a case file.
+!!
+!! Each of them is built from components by the code that owns its inputs:
+!! the Brinkman dissipation, viscous dissipation and scalar mixing
+!! objectives, and the adjoint case for the term coupling the adjoint scalar
+!! to the adjoint fluid. The factory still reaches them by name, for instance
+!! from `case.adjoint_fluid.source_term`, but their JSON constructors have
+!! nothing to set them up from. Each must therefore stop with an error,
+!! rather than return a term that fails at its first `compute`.
+!!
+!! Each term is built through the factory, as a case file builds it. The
+!! error is redirected to a pFUnit exception, so that it can be caught.
+module adjoint_source_term_json
+  use mpi
+  use pfunit
+  use funit, only: throw, catch, SourceLocation
+  use source_term, only: source_term_t, source_term_factory
+  use field_list, only: field_list_t
+  use coefs, only: coef_t
+  use json_module, only: json_file
+  use neko_top, only: neko_top_register_types
+  use utils, only: throw_error, default_throw_error
+  use adjoint_brinkman_dissipation_source_term, only: &
+       adjoint_brinkman_dissipation_source_term_t
+  use adjoint_viscous_dissipation_source_term, only: &
+       adjoint_viscous_dissipation_source_term_t
+  use adjoint_mixing_scalar_source_term, only: &
+       adjoint_mixing_scalar_source_term_t
+  use adjoint_scalar_convection_source_term, only: &
+       adjoint_scalar_convection_source_term_t
+  implicit none
+
+  @TestCase
+  type, extends(MPITestCase) :: test_adjoint_source_term_json
+   contains
+     procedure :: setUp
+     procedure :: tearDown
+  end type test_adjoint_source_term_json
+
+  !> Whether the Neko-TOP types are registered. Registering a type twice is
+  !! an error, so this is done once for all the tests.
+  logical :: registered = .false.
+
+contains
+
+  subroutine setUp(this)
+    class(test_adjoint_source_term_json), intent(inout) :: this
+
+    if (registered) return
+    registered = .true.
+    call neko_top_register_types()
+  end subroutine setUp
+
+  subroutine tearDown(this)
+    class(test_adjoint_source_term_json), intent(inout) :: this
+    ! A test that fails early must not leave neko_error redirected.
+    throw_error => default_throw_error
+  end subroutine tearDown
+
+  !> Raise a pFUnit exception in place of stopping, so that a test can catch
+  !! the error raised by a source term's constructor.
+  !! @param filename The file that raised the error.
+  !! @param line_number The line that raised the error.
+  !! @param message The error message, if any.
+  subroutine throw_to_pfunit(filename, line_number, message)
+    character(len=*), intent(in) :: filename
+    integer, intent(in) :: line_number
+    character(len=*), optional, intent(in) :: message
+
+    call throw('neko_error was called', SourceLocation(filename, line_number))
+
+  end subroutine throw_to_pfunit
+
+  !> Build a source term through the factory from a JSON object naming its
+  !! type, as a case file builds it.
+  !! @param type_name The type name the source term is registered under.
+  !! @param expected An object of the type the factory should build.
+  !! @param built Whether the factory built an object of the expected type,
+  !! so that an error cannot come from an unknown type name instead.
+  !! @param raised Whether building the source term raised an error.
+  subroutine build_from_json(type_name, expected, built, raised)
+    character(len=*), intent(in) :: type_name
+    class(source_term_t), intent(in) :: expected
+    logical, intent(out) :: built, raised
+    class(source_term_t), allocatable :: source_term
+    type(json_file) :: json
+    type(field_list_t) :: fields
+    type(coef_t) :: coef
+
+    call json%initialize()
+    call json%add('type', type_name)
+
+    throw_error => throw_to_pfunit
+    call source_term_factory(source_term, json, fields, coef, 'fluid')
+    raised = catch()
+    throw_error => default_throw_error
+
+    built = .false.
+    if (allocated(source_term)) then
+       built = same_type_as(source_term, expected)
+       call source_term%free()
+       deallocate(source_term)
+    end if
+    call json%destroy()
+
+  end subroutine build_from_json
+
+  !> The adjoint forcing of the Brinkman dissipation objective.
+  @test(npes=[1])
+  subroutine test_brinkman_dissipation(this)
+    class(test_adjoint_source_term_json), intent(inout) :: this
+    type(adjoint_brinkman_dissipation_source_term_t) :: expected
+    logical :: built, raised
+
+    call build_from_json('adjoint_brinkman_dissipation', expected, built, &
+         raised)
+
+    @assertTrue(built, 'The factory did not build the registered type')
+    @assertTrue(raised, 'Built from JSON without an error')
+
+  end subroutine test_brinkman_dissipation
+
+  !> The adjoint forcing of the viscous dissipation objective.
+  @test(npes=[1])
+  subroutine test_viscous_dissipation(this)
+    class(test_adjoint_source_term_json), intent(inout) :: this
+    type(adjoint_viscous_dissipation_source_term_t) :: expected
+    logical :: built, raised
+
+    call build_from_json('adjoint_viscous_dissipation', expected, built, &
+         raised)
+
+    @assertTrue(built, 'The factory did not build the registered type')
+    @assertTrue(raised, 'Built from JSON without an error')
+
+  end subroutine test_viscous_dissipation
+
+  !> The adjoint forcing of the scalar mixing objective.
+  @test(npes=[1])
+  subroutine test_mixing_scalar(this)
+    class(test_adjoint_source_term_json), intent(inout) :: this
+    type(adjoint_mixing_scalar_source_term_t) :: expected
+    logical :: built, raised
+
+    call build_from_json('adjoint_mixing_scalar', expected, built, raised)
+
+    @assertTrue(built, 'The factory did not build the registered type')
+    @assertTrue(raised, 'Built from JSON without an error')
+
+  end subroutine test_mixing_scalar
+
+  !> The term coupling the adjoint scalar to the adjoint fluid.
+  @test(npes=[1])
+  subroutine test_scalar_convection(this)
+    class(test_adjoint_source_term_json), intent(inout) :: this
+    type(adjoint_scalar_convection_source_term_t) :: expected
+    logical :: built, raised
+
+    call build_from_json('adjoint_scalar_convection', expected, built, raised)
+
+    @assertTrue(built, 'The factory did not build the registered type')
+    @assertTrue(raised, 'Built from JSON without an error')
+
+  end subroutine test_scalar_convection
+
+end module adjoint_source_term_json

@@ -103,7 +103,7 @@ module adjoint_brinkman_dissipation_source_term
      integer :: gdim
 
    contains
-     !> The common constructor using a JSON object.
+     !> The constructor from JSON, which stops with an error.
      procedure, pass(this) :: init => &
           adjoint_brinkman_dissipation_source_term_init_from_json
      !> The constructor from type components.
@@ -125,7 +125,8 @@ contains
     allocate(adjoint_brinkman_dissipation_source_term_t::obj)
   end subroutine adjoint_brinkman_dissipation_source_term_allocate
 
-  !> The common constructor using a JSON object.
+  !> The constructor from JSON, which stops with an error: the term is only
+  !! built by the brinkman_dissipation objective, from components.
   !! @param this The source term.
   !! @param json The JSON object for the source.
   !! @param fields A list of fields for adding the source values.
@@ -138,13 +139,10 @@ contains
     type(field_list_t), intent(in), target :: fields
     type(coef_t), intent(in), target :: coef
     character(len=*), intent(in) :: variable_name
-    ! real(kind=rp), allocatable :: values(:)
-    ! real(kind=rp) :: start_time, end_time
 
-
-    ! we shouldn't be initializing this from JSON
-    ! maybe throw an error?
-
+    call neko_error("The adjoint_brinkman_dissipation source term can " // &
+         "only be built by the brinkman_dissipation objective, not from " // &
+         "JSON.")
 
   end subroutine adjoint_brinkman_dissipation_source_term_init_from_json
 

@@ -96,7 +96,7 @@ module adjoint_viscous_dissipation_source_term
      real(kind=rp) :: volume
 
    contains
-     !> The common constructor using a JSON object.
+     !> The constructor from JSON, which stops with an error.
      procedure, pass(this) :: init => &
           adjoint_viscous_dissipation_source_term_init_from_json
      !> The constructor from type components.
@@ -118,9 +118,10 @@ contains
     allocate(adjoint_viscous_dissipation_source_term_t::obj)
   end subroutine adjoint_viscous_dissipation_source_term_allocate
 
-  !> The common constructor using a JSON object.
-  !! @param json The JSON object for the source.
+  !> The constructor from JSON, which stops with an error: the term is only
+  !! built by the viscous_dissipation objective, from components.
   !! @param this The source term.
+  !! @param json The JSON object for the source.
   !! @param fields A list of fields for adding the source values.
   !! @param coef The SEM coeffs.
   !! @param variable_name The name of the variable where the source term acts.
@@ -132,9 +133,9 @@ contains
     type(coef_t), intent(in), target :: coef
     character(len=*), intent(in) :: variable_name
 
-    ! we shouldn't be initializing this from JSON
-    ! maybe throw an error?
-
+    call neko_error("The adjoint_viscous_dissipation source term can " // &
+         "only be built by the viscous_dissipation objective, not from " // &
+         "JSON.")
 
   end subroutine adjoint_viscous_dissipation_source_term_init_from_json
 

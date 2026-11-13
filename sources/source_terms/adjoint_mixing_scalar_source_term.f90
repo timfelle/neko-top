@@ -49,6 +49,7 @@ module adjoint_mixing_scalar_source_term
   use mask_ops, only: mask_exterior_const, compute_masked_volume
   use math, only: abscmp
   use point_zone, only: point_zone_t
+  use utils, only: neko_error
   implicit none
   private
   public :: adjoint_mixing_scalar_source_term_allocate
@@ -79,7 +80,7 @@ module adjoint_mixing_scalar_source_term
      !> The volume of the masked region (or whole domain)
      real(kind=rp) :: mask_volume
    contains
-     !> The common constructor using a JSON object.
+     !> The constructor from JSON, which stops with an error.
      procedure, pass(this) :: init => &
           adjoint_mixing_scalar_source_term_init_from_json
      !> The constructor from type components.
@@ -99,7 +100,8 @@ contains
     allocate(adjoint_mixing_scalar_source_term_t::obj)
   end subroutine adjoint_mixing_scalar_source_term_allocate
 
-  !> The common constructor using a JSON object.
+  !> The constructor from JSON, which stops with an error: the term is only
+  !! built by the scalar_mixing objective, from components.
   !! @param this The object.
   !! @param json The JSON object for the source.
   !! @param fields A list of fields for adding the source values.
@@ -113,6 +115,8 @@ contains
     type(coef_t), intent(in), target :: coef
     character(len=*), intent(in) :: variable_name
 
+    call neko_error("The adjoint_mixing_scalar source term can only be " // &
+         "built by the scalar_mixing objective, not from JSON.")
 
   end subroutine adjoint_mixing_scalar_source_term_init_from_json
 
