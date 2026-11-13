@@ -112,8 +112,7 @@ def main():
         args.data_dir += os.sep
 
     # Add our visualisation modules to the Python path so we can import them.
-    visualisation_dir = os.path.join(os.path.dirname(__file__),
-                                     "../../visualisation")
+    visualisation_dir = os.path.join(os.path.dirname(__file__), "../paraview")
     if visualisation_dir not in sys.path:
         sys.path.append(visualisation_dir)
 
