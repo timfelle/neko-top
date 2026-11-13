@@ -101,7 +101,7 @@ contains
   !! @param this The adjoint case.
   !! @param neko_case The primal case, whose parameters set up the adjoint.
   subroutine adjoint_init_from_json(this, neko_case)
-    class(adjoint_case_t), intent(inout) :: this
+    class(adjoint_case_t), target, intent(inout) :: this
     type(case_t), target, intent(inout) :: neko_case
 
     call this%free()
@@ -117,7 +117,7 @@ contains
   !! @param neko_case The primal case.
   subroutine adjoint_case_init_common(this, neko_case)
     class(adjoint_case_t), target, intent(inout) :: this
-    type(case_t), intent(inout) :: neko_case
+    type(case_t), target, intent(inout) :: neko_case
     integer :: lx
     real(kind=rp) :: real_val
     character(len=:), allocatable :: string_val, file_format, name

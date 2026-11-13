@@ -52,7 +52,7 @@ contains
     class(test_adjoint_case_output_layout), intent(inout) :: this
     type(json_file) :: parameters
     type(case_t), target :: neko_case
-    type(adjoint_case_t) :: adjoint
+    type(adjoint_case_t), target :: adjoint
     integer :: layout
     logical :: found
 

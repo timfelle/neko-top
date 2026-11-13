@@ -52,7 +52,7 @@ contains
     class(test_adjoint_case_init), intent(inout) :: this
     type(json_file) :: parameters
     type(case_t), target :: neko_case
-    type(adjoint_case_t) :: adjoint
+    type(adjoint_case_t), target :: adjoint
     logical :: set_up, coupling_kept, norm_output_kept
 
     parameters = json_read_file(case_file)
