@@ -41,7 +41,7 @@ module scalar_mixing_objective
   use simulation_m, only: simulation_t
   use design, only: design_t
   use json_module, only: json_file
-  use json_utils, only: json_get_or_default
+  use json_utils, only: json_get, json_get_or_default
   use field, only: field_t
   use field_math, only: field_copy, field_cadd, field_col2, field_cmult
   use neko_config, only: NEKO_BCKND_DEVICE
