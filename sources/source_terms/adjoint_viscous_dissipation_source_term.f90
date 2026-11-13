@@ -155,8 +155,8 @@ contains
   !! @param end_time when to stop applying the source term.
   !! @param scale scale of the forcing, owned by the objective.
   subroutine adjoint_viscous_dissipation_source_term_init_from_components( &
-       this, f_x, f_y, f_z, u, v, w, obj_scale, mask, if_mask, coef, &
-       volume, start_time, end_time)
+       this, f_x, f_y, f_z, u, v, w, weight, obj_scale, mask, if_mask, &
+       coef, volume, start_time, end_time, scale)
     class(adjoint_viscous_dissipation_source_term_t), intent(inout) :: this
     type(field_t), pointer, intent(in) :: f_x, f_y, f_z
     type(field_t), intent(in), target :: u, v, w
@@ -213,6 +213,8 @@ contains
     nullify(this%v)
     nullify(this%w)
     nullify(this%mask)
+    nullify(this%weight)
+    nullify(this%scale)
     if (allocated(this%Ax)) then
        deallocate(this%Ax)
     end if
@@ -280,7 +282,8 @@ contains
       end if
 
       ! add to RHS
-      call field_add2s2(fu, work, this%obj_scale / this%volume)
+      call field_add2s2(fu, work, &
+           this%scale * (this%weight * this%obj_scale) / this%volume)
 
       ! ------------------------------------------------------------------------
       ! v
@@ -299,7 +302,8 @@ contains
       end if
 
       ! add to RHS
-      call field_add2s2(fv, work, this%obj_scale / this%volume)
+      call field_add2s2(fv, work, &
+           this%scale * (this%weight * this%obj_scale) / this%volume)
 
       ! ------------------------------------------------------------------------
       ! w
@@ -318,7 +322,8 @@ contains
       end if
 
       ! add to RHS
-      call field_add2s2(fw, work, this%obj_scale / this%volume)
+      call field_add2s2(fw, work, &
+           this%scale * (this%weight * this%obj_scale) / this%volume)
 
       call neko_scratch_registry%relinquish_field(temp_indices)
 

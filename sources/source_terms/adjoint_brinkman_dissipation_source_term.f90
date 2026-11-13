@@ -76,8 +76,12 @@ module adjoint_brinkman_dissipation_source_term
      type(field_t), pointer :: w => null()
      !> \f$\chi\f$ the Brinkman amplitude
      type(field_t), pointer :: chi => null()
-     !> a scale for this term
-     real(kind=rp) :: K
+     !> a scale for this term, the weight of the objective. Pointed to, so
+     !! that continuation updates of the weight reach the forcing.
+     real(kind=rp), pointer :: K => null()
+     !> Scale of the forcing, owned by the objective. Zero switches the
+     !! forcing off.
+     real(kind=rp), pointer :: scale => null()
      !> A mask for where the source term is evaluated
      class(point_zone_t), pointer :: mask => null()
      !> containing a mask?
@@ -218,7 +222,8 @@ contains
        call neko_error('Unknown design type')
     end select
 
-    this%K = K
+    this%K => K
+    this%scale => scale
     this%if_mask = if_mask
     if (this%if_mask) then
        this%mask => mask
@@ -240,6 +245,8 @@ contains
     nullify(this%GLL_to_GL)
     nullify(this%mask)
     nullify(this%scratch_GL)
+    nullify(this%K)
+    nullify(this%scale)
 
   end subroutine adjoint_brinkman_dissipation_source_term_free
 
