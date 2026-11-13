@@ -34,6 +34,8 @@ module adjoint_case_output_layout
 
 contains
 
+  !> Initialise Neko, once for all the tests.
+  !! @param this The test case.
   subroutine setUp(this)
     class(test_adjoint_case_output_layout), intent(inout) :: this
 
@@ -42,11 +44,14 @@ contains
     call neko_init()
   end subroutine setUp
 
+  !> Nothing to release: each test frees what it sets up.
+  !! @param this The test case.
   subroutine tearDown(this)
     class(test_adjoint_case_output_layout), intent(inout) :: this
   end subroutine tearDown
 
   !> The adjoint field output is set up with the layout of the case.
+  !! @param this The test case.
   @test(npes=[1])
   subroutine test_adjoint_output_layout(this)
     class(test_adjoint_case_output_layout), intent(inout) :: this

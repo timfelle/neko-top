@@ -33,6 +33,8 @@ module adjoint_case_init
 
 contains
 
+  !> Initialise Neko, once for all the tests.
+  !! @param this The test case.
   subroutine setUp(this)
     class(test_adjoint_case_init), intent(inout) :: this
 
@@ -41,12 +43,15 @@ contains
     call neko_init()
   end subroutine setUp
 
+  !> Nothing to release: each test frees what it sets up.
+  !! @param this The test case.
   subroutine tearDown(this)
     class(test_adjoint_case_init), intent(inout) :: this
   end subroutine tearDown
 
   !> Initialising an adjoint case releases what an earlier initialisation
   !! left behind.
+  !! @param this The test case.
   @test(npes=[1])
   subroutine test_init_releases_earlier_state(this)
     class(test_adjoint_case_init), intent(inout) :: this

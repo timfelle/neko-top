@@ -44,6 +44,8 @@ module adjoint_source_term_json
 
 contains
 
+  !> Register the Neko-TOP types, once for all the tests.
+  !! @param this The test case.
   subroutine setUp(this)
     class(test_adjoint_source_term_json), intent(inout) :: this
 
@@ -52,6 +54,8 @@ contains
     call neko_top_register_types()
   end subroutine setUp
 
+  !> Restore the default handling of neko_error.
+  !! @param this The test case.
   subroutine tearDown(this)
     class(test_adjoint_source_term_json), intent(inout) :: this
     ! A test that fails early must not leave neko_error redirected.
@@ -107,6 +111,7 @@ contains
   end subroutine build_from_json
 
   !> The adjoint forcing of the Brinkman dissipation objective.
+  !! @param this The test case.
   @test(npes=[1])
   subroutine test_brinkman_dissipation(this)
     class(test_adjoint_source_term_json), intent(inout) :: this
@@ -122,6 +127,7 @@ contains
   end subroutine test_brinkman_dissipation
 
   !> The adjoint forcing of the viscous dissipation objective.
+  !! @param this The test case.
   @test(npes=[1])
   subroutine test_viscous_dissipation(this)
     class(test_adjoint_source_term_json), intent(inout) :: this
@@ -137,6 +143,7 @@ contains
   end subroutine test_viscous_dissipation
 
   !> The adjoint forcing of the scalar mixing objective.
+  !! @param this The test case.
   @test(npes=[1])
   subroutine test_mixing_scalar(this)
     class(test_adjoint_source_term_json), intent(inout) :: this
@@ -151,6 +158,7 @@ contains
   end subroutine test_mixing_scalar
 
   !> The term coupling the adjoint scalar to the adjoint fluid.
+  !! @param this The test case.
   @test(npes=[1])
   subroutine test_scalar_convection(this)
     class(test_adjoint_source_term_json), intent(inout) :: this
