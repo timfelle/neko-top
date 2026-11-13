@@ -47,6 +47,7 @@ submodule (state_recover_checkpoint) checkpoint_linear
   use simulation, only: simulation_step, simulation_restart
   use time_step_controller, only: time_step_controller_t
   use profiler, only: profiler_start_region, profiler_end_region
+  use mpi_f08, only: MPI_Wtime
 
 contains
 
