@@ -171,11 +171,11 @@ module brinkman_design
      !> A mask indicating the optimization domain
      class(point_zone_t), pointer :: optimization_domain
      !> A logical if we're restricting the optimization domain
-     logical :: has_mask
+     logical :: has_mask = .false.
      !> SEM coefficients
      class(coef_t), pointer :: coef
      !> Average mass matrix
-     real(kind=rp) :: avg_B
+     real(kind=rp) :: avg_B = 0.0_rp
 
      ! TODO
      ! you also had logicals for convergence etc,
