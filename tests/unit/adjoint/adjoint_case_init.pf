@@ -1,0 +1,82 @@
+!> Initialising an adjoint case starts from a clean object.
+!!
+!! `adjoint_case_t%init` frees the object first, so that what an earlier
+!! initialisation left behind is released, rather than kept or allocated a
+!! second time. Two full initialisations cannot show this within one run:
+!! the adjoint fluid adds its fields to the global registry, which nothing
+!! clears, so the second one would stop there. The test instead gives a
+!! fresh object two things that an earlier initialisation of another case
+!! would leave behind, and that this case does not set up: the term coupling
+!! an adjoint scalar to the adjoint fluid, and the adjoint norm output
+!! switched on. Neither may survive the initialisation.
+module adjoint_case_init
+  use mpi
+  use pfunit
+  use neko, only: neko_init
+  use case, only: case_t
+  use adjoint_case, only: adjoint_case_t
+  use json_module, only: json_file
+  use json_utils_ext, only: json_read_file
+  implicit none
+
+  character(len=*), parameter :: case_file = 'adjoint_case.case'
+
+  @TestCase
+  type, extends(MPITestCase) :: test_adjoint_case_init
+   contains
+     procedure :: setUp
+     procedure :: tearDown
+  end type test_adjoint_case_init
+
+  !> Whether Neko is initialised, which is done once for all the tests.
+  logical :: initialized = .false.
+
+contains
+
+  subroutine setUp(this)
+    class(test_adjoint_case_init), intent(inout) :: this
+
+    if (initialized) return
+    initialized = .true.
+    call neko_init()
+  end subroutine setUp
+
+  subroutine tearDown(this)
+    class(test_adjoint_case_init), intent(inout) :: this
+  end subroutine tearDown
+
+  !> Initialising an adjoint case releases what an earlier initialisation
+  !! left behind.
+  @test(npes=[1])
+  subroutine test_init_releases_earlier_state(this)
+    class(test_adjoint_case_init), intent(inout) :: this
+    type(json_file) :: parameters
+    type(case_t), target :: neko_case
+    type(adjoint_case_t) :: adjoint
+    logical :: set_up, coupling_kept, norm_output_kept
+
+    parameters = json_read_file(case_file)
+    call neko_case%init(parameters)
+
+    ! Left behind by an earlier initialisation of a case with an adjoint
+    ! scalar and the adjoint norm output, neither of which this case has.
+    allocate(adjoint%adjoint_convection_term)
+    adjoint%norm_output_enabled = .true.
+
+    call adjoint%init(neko_case)
+
+    set_up = allocated(adjoint%fluid_adj)
+    coupling_kept = allocated(adjoint%adjoint_convection_term)
+    norm_output_kept = adjoint%norm_output_enabled
+
+    call adjoint%free()
+    call neko_case%free()
+    call parameters%destroy()
+
+    @assertTrue(set_up, 'The adjoint fluid was not set up')
+    @assertFalse(coupling_kept, 'The earlier coupling term was kept')
+    @assertFalse(norm_output_kept, 'The earlier norm output was kept')
+
+  end subroutine test_init_releases_earlier_state
+
+end module adjoint_case_init

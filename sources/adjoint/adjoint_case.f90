@@ -97,28 +97,35 @@ module adjoint_case
 
 contains
 
-  ! Constructor from json.
+  !> Constructor from JSON.
+  !! @param this The adjoint case.
+  !! @param neko_case The primal case, whose parameters set up the adjoint.
   subroutine adjoint_init_from_json(this, neko_case)
     class(adjoint_case_t), intent(inout) :: this
     type(case_t), target, intent(inout) :: neko_case
+
+    call this%free()
 
     this%case => neko_case
     call adjoint_case_init_common(this, neko_case)
 
   end subroutine adjoint_init_from_json
 
-  !> Initialize a neko_case from its (loaded) params object
+  !> Initialise the adjoint case from the (loaded) params object of the
+  !! primal case.
+  !! @param this The adjoint case.
+  !! @param neko_case The primal case.
   subroutine adjoint_case_init_common(this, neko_case)
     class(adjoint_case_t), target, intent(inout) :: this
     type(case_t), intent(inout) :: neko_case
-    integer :: lx = 0
-    real(kind=rp) :: real_val = 0.0_rp
+    integer :: lx
+    real(kind=rp) :: real_val
     character(len=:), allocatable :: string_val, file_format, name
     character(len=:), allocatable :: norm_control, norm_file
     integer :: precision, integer_val, layout
     integer :: n_scalars_primal, n_scalars_adjoint, i
-    logical :: scalar = .false.
-    logical :: temperature_found = .false.
+    logical :: scalar
+    logical :: temperature_found
     logical :: logical_val
 
     ! extra things for json
@@ -339,6 +346,7 @@ contains
        else
 
           ! Handle multiple scalars
+          temperature_found = .false.
           do i = 1, n_scalars_adjoint
              call json_extract_item(neko_case%params, 'case.adjoint_scalars', &
                   i, scalar_params_adjoint)
@@ -509,7 +517,8 @@ contains
 
   end subroutine adjoint_case_init_common
 
-  ! Destructor.
+  !> Destructor.
+  !! @param this The adjoint case.
   subroutine adjoint_free(this)
     class(adjoint_case_t), intent(inout) :: this
 
@@ -539,6 +548,7 @@ contains
     call this%output_controller%free()
     call this%norm_output_ctrl%free()
     call this%norm_output_file%free()
+    this%norm_output_enabled = .false.
 
     this%have_scalar = .false.
 

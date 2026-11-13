@@ -1,0 +1,55 @@
+{
+    "version": 1.0,
+    "case": {
+        "mesh_file": "box.nmsh",
+        "output_checkpoints": false,
+        "time": {
+            "end_time": 0.1,
+            "timestep": 0.01
+        },
+        "numerics": {
+            "time_order": 2,
+            "polynomial_order": 2,
+            "dealias": false
+        },
+        "fluid": {
+            "scheme": "pnpn",
+            "Re": 1.0,
+            "initial_condition": {
+                "type": "uniform",
+                "value": [ 0.0, 0.0, 0.0 ]
+            },
+            "velocity_solver": {
+                "type": "cg",
+                "preconditioner": {
+                    "type": "jacobi"
+                },
+                "absolute_tolerance": 1e-9,
+                "max_iterations": 100
+            },
+            "pressure_solver": {
+                "type": "gmres",
+                "preconditioner": {
+                    "type": "jacobi"
+                },
+                "absolute_tolerance": 1e-8,
+                "max_iterations": 100
+            },
+            "boundary_conditions": [
+                {
+                    "type": "no_slip",
+                    "zone_indices": [ 1, 2, 3, 4, 5, 6 ]
+                }
+            ],
+            "output_control": "never"
+        },
+        "adjoint_fluid": {
+            "boundary_conditions": [
+                {
+                    "type": "no_slip",
+                    "zone_indices": [ 1, 2, 3, 4, 5, 6 ]
+                }
+            ]
+        }
+    }
+}
