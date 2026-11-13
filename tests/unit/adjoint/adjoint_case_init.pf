@@ -5,10 +5,10 @@
 !! second time. Two full initialisations cannot show this within one run:
 !! the adjoint fluid adds its fields to the global registry, which nothing
 !! clears, so the second one would stop there. The test instead gives a
-!! fresh object two things that an earlier initialisation of another case
-!! would leave behind, and that this case does not set up: the term coupling
-!! an adjoint scalar to the adjoint fluid, and the adjoint norm output
-!! switched on. Neither may survive the initialisation.
+!! fresh object what an earlier initialisation of another case would leave
+!! behind, and this case does not set up: the adjoint scalars, the term
+!! coupling them to the adjoint fluid, and the adjoint norm output switched
+!! on. None of them may survive the initialisation.
 module adjoint_case_init
   use mpi
   use pfunit
@@ -53,19 +53,21 @@ contains
     type(json_file) :: parameters
     type(case_t), target :: neko_case
     type(adjoint_case_t), target :: adjoint
-    logical :: set_up, coupling_kept, norm_output_kept
+    logical :: set_up, scalars_kept, coupling_kept, norm_output_kept
 
     parameters = json_read_file(case_file)
     call neko_case%init(parameters)
 
     ! Left behind by an earlier initialisation of a case with an adjoint
     ! scalar and the adjoint norm output, neither of which this case has.
+    allocate(adjoint%adjoint_scalars)
     allocate(adjoint%adjoint_convection_term)
     adjoint%norm_output_enabled = .true.
 
     call adjoint%init(neko_case)
 
     set_up = allocated(adjoint%fluid_adj)
+    scalars_kept = allocated(adjoint%adjoint_scalars)
     coupling_kept = allocated(adjoint%adjoint_convection_term)
     norm_output_kept = adjoint%norm_output_enabled
 
@@ -74,6 +76,7 @@ contains
     call parameters%destroy()
 
     @assertTrue(set_up, 'The adjoint fluid was not set up')
+    @assertFalse(scalars_kept, 'The earlier adjoint scalars were kept')
     @assertFalse(coupling_kept, 'The earlier coupling term was kept')
     @assertFalse(norm_output_kept, 'The earlier norm output was kept')
 
