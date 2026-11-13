@@ -491,15 +491,18 @@ contains
   end subroutine restart_matches_original_run
 
   !> A checkpoint path long enough that path, base name and suffix exceed
-  !! 256 characters must still give a checkpoint file, and a restart from
-  !! that file must load it. The file name used to be built in a
-  !! 256-character buffer, which aborted with "Fortran runtime error: End of
-  !! record", and the restart file name was cut to 256 characters, so the
-  !! restart aborted because the file did not exist.
+  !! 256 characters must still give a checkpoint file, and a restart must
+  !! load it, both when it is given as the restart file and when it is
+  !! detected as the latest checkpoint in the path. The file name used to be
+  !! built in a 256-character buffer, which aborted with "Fortran runtime
+  !! error: End of record", and the restart file name was cut to 256
+  !! characters, so the restart aborted because the file did not exist. A
+  !! name cut to 256 characters in the detection is not found, so the run
+  !! starts afresh.
   @test(npes=[2])
   subroutine long_checkpoint_path(this)
     class(test_sd_checkpoint), intent(inout) :: this
-    type(vector_t) :: x_a, x_b
+    type(vector_t) :: x_a, x_b, x_c
     character(len=:), allocatable :: path, file_full
     character(len=256) :: msg
     real(kind=rp) :: local_diff, global_diff
@@ -530,8 +533,22 @@ contains
     write(msg, '(A)') 'the restart should load the checkpointed design'
     @assertEqual(0.0_rp, global_diff, 0.0_rp, msg)
 
+    ! Run C: the checkpoint path and base of Run A, but no restart file, so
+    ! the latest checkpoint in the path must be detected and loaded. Without
+    ! an interval it writes nothing, and a run that detected nothing ends
+    ! elsewhere, as in Run B.
+    call run_one_iteration('"checkpoint": {"path": "' // path // &
+         '", "base": "' // CKPT_BASE // '"}', 0.9_rp, x_c)
+
+    local_diff = maxval(abs(x_c%x - x_a%x))
+    call MPI_Allreduce(local_diff, global_diff, 1, &
+         MPI_REAL_PRECISION%mpi_val, MPI_MAX, NEKO_COMM%mpi_val, ierr)
+    write(msg, '(A)') 'the latest checkpoint should be detected and loaded'
+    @assertEqual(0.0_rp, global_diff, 0.0_rp, msg)
+
     call x_a%free()
     call x_b%free()
+    call x_c%free()
   end subroutine long_checkpoint_path
 
   !> Run a one-iteration steepest-descent optimisation of a small quadratic
