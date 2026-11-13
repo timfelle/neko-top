@@ -189,6 +189,29 @@ if (HAVE_HDF5)
         )
     endif()
 
+    # design_checkpoint_hdf5: a design checkpoint must round-trip exactly when
+    # a rank owns no design variables. It needs two ranks on every backend and
+    # no case file.
+    add_pfunit_ctest(design_checkpoint_hdf5
+        TEST_SOURCES
+            ${CMAKE_CURRENT_SOURCE_DIR}/test_design_checkpoint_hdf5.pf
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+        LINK_LIBRARIES Neko-TOP::neko-top
+        MAX_PES 2
+    )
+    set_tests_properties(design_checkpoint_hdf5 PROPERTIES
+        LABELS "unit;checkpointing;hdf5"
+        ENVIRONMENT "NEKO_LOG_FILE=design_checkpoint_hdf5.log"
+        TIMEOUT 120
+    )
+    add_dependencies(Unit design_checkpoint_hdf5)
+
+    if (CMAKE_Fortran_COMPILER_ID STREQUAL "GNU")
+        target_compile_options(design_checkpoint_hdf5 PRIVATE
+            $<$<COMPILE_LANGUAGE:Fortran>:-Wno-unused-variable>
+        )
+    endif()
+
     # checkpoint_rank_change: the MMA and the design checkpoints must stop with
     # an error on every rank when loaded into a run they do not match, such as
     # one on a different number of ranks. The error stops the run, so the

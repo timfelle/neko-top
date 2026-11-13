@@ -69,7 +69,9 @@ contains
     integer :: ierr, info, drank
     logical :: file_exists, design_exists, overwrite_flag
     integer :: n_accum, n_array(pe_size)
+    real(kind=rp) :: empty(1)
 
+    empty = 0.0_rp
     overwrite_flag = .false.
     if (present(overwrite)) overwrite_flag = overwrite
 
@@ -205,11 +207,20 @@ contains
     call this%get_values(temp_vec)
     call temp_vec%copy_from(DEVICE_TO_HOST, sync = .true.)
 
-    ! Write values
+    ! Write values. A rank without design variables still takes part in the
+    ! collective write, with an empty selection and a placeholder buffer, since
+    ! the host array of an empty vector may be unallocated.
     call h5dcreate_f(grp_id, 'values', H5T_NEKO_REAL, &
          filespace, dset_id, ierr)
-    call h5dwrite_f(dset_id, H5T_NEKO_REAL, temp_vec%x, ddim, ierr, &
-         file_space_id = filespace, mem_space_id = memspace, xfer_prp = xf_id)
+    if (this%n .gt. 0) then
+       call h5dwrite_f(dset_id, H5T_NEKO_REAL, temp_vec%x, dcount, ierr, &
+            file_space_id = filespace, mem_space_id = memspace, &
+            xfer_prp = xf_id)
+    else
+       call h5dwrite_f(dset_id, H5T_NEKO_REAL, empty, dcount, ierr, &
+            file_space_id = filespace, mem_space_id = memspace, &
+            xfer_prp = xf_id)
+    end if
     call h5dclose_f(dset_id, ierr)
 
     call neko_scratch_registry%relinquish(temp_index)
@@ -249,6 +260,7 @@ contains
     integer(hsize_t) :: n_stored
     integer :: ierr, info, mpi_comm, mismatch
     integer :: n, n_global, n_accum, n_array(pe_size)
+    real(kind=rp) :: empty(1)
 
     character(len=*), parameter :: h5_group = '/Design/checkpoint'
 
@@ -361,11 +373,20 @@ contains
     call h5sselect_hyperslab_f(filespace, H5S_SELECT_SET_F, doffset, dcount, &
          ierr)
 
-    ! Read values
+    ! Read values. A rank without design variables still takes part in the
+    ! collective read, with an empty selection and a placeholder buffer, since
+    ! the host array of an empty vector may be unallocated.
     call neko_scratch_registry%request(temp_vec, temp_index, this%n, .false.)
     call h5dopen_f(grp_id, 'values', dset_id, ierr)
-    call h5dread_f(dset_id, H5T_NEKO_REAL, temp_vec%x, dcount, ierr, &
-         file_space_id = filespace, mem_space_id = memspace, xfer_prp = xf_id)
+    if (this%n .gt. 0) then
+       call h5dread_f(dset_id, H5T_NEKO_REAL, temp_vec%x, dcount, ierr, &
+            file_space_id = filespace, mem_space_id = memspace, &
+            xfer_prp = xf_id)
+    else
+       call h5dread_f(dset_id, H5T_NEKO_REAL, empty, dcount, ierr, &
+            file_space_id = filespace, mem_space_id = memspace, &
+            xfer_prp = xf_id)
+    end if
     call h5dclose_f(dset_id, ierr)
 
     call temp_vec%copy_from(HOST_TO_DEVICE, sync = .true.)
