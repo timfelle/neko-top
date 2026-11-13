@@ -8,10 +8,13 @@
 ! forward mapping at the end of the initialisation dereferenced unset mesh
 ! coefficients and the run aborted with a segmentation fault.
 !
-! Two entry points are checked:
+! Three cases are checked:
 !   1. `init` from JSON, which also sets up the output of the design.
 !   2. `init_from_components`, which never sets an optimisation domain, so
 !      the design must not be masked.
+!   3. `free` after a JSON initialisation restricted to the point zone of the
+!      case, then `init_from_components`. Freeing must drop the mask, or the
+!      new design is masked with the stale domain.
 !
 ! The design is updated to the x coordinate, and the sensitivity mapped back
 ! is its square. The mesh is periodic in y and z only, so both fields are
@@ -126,6 +129,31 @@ contains
 
   end subroutine run_identity
 
+  !> Count the points a design masks: those where the amplitude is zero when
+  !! every design value is one.
+  !! @param des The initialised design.
+  !! @param n_masked The number of masked points.
+  subroutine count_masked(des, n_masked)
+    type(brinkman_design_t), intent(inout) :: des
+    integer, intent(out) :: n_masked
+    type(vector_t) :: values, amplitude
+    integer :: n
+
+    n = des%size()
+    call values%init(n)
+    call amplitude%init(n)
+
+    values%x = 1.0_rp
+    call values%copy_from(HOST_TO_DEVICE, sync = .true.)
+    call des%update_design(values)
+    call get_host_amplitude(amplitude)
+    n_masked = count(amplitude%x .lt. 0.5_rp)
+
+    call values%free()
+    call amplitude%free()
+
+  end subroutine count_masked
+
   !> Free the registries and initialise them again for the next test.
   subroutine reset_registries()
 
@@ -205,5 +233,40 @@ contains
     @assertEqual(0.0_rp, backward_diff, match_tol, "backward mapping")
 
   end subroutine identity_from_components
+
+  !> A design restricted to a point zone must drop its mask when it is
+  !! freed, so that the design initialised again from components is not
+  !! masked.
+  @test(npes=[1])
+  subroutine free_drops_mask(this)
+    class(test_brinkman_no_mapping), intent(inout) :: this
+    type(json_file) :: parameters, design_parameters
+    type(simulation_t), target :: sim
+    type(brinkman_design_t) :: des
+    integer :: masked_before, masked_after
+    logical :: found
+
+    parameters = json_read_file(case_file)
+    call json_get(parameters, 'optimization.design', design_parameters)
+    call design_parameters%update('domain.type', 'point_zone', found)
+    call design_parameters%update('domain.zone_name', 'optimization_domain', &
+         found)
+
+    call sim%init(parameters)
+    call des%init(design_parameters, sim)
+    call count_masked(des, masked_before)
+
+    call des%free()
+    call des%init_from_components("Brinkman Design", sim, .false.)
+    call count_masked(des, masked_after)
+
+    call des%free()
+    call sim%free()
+    call reset_registries()
+
+    @assertTrue(masked_before .gt. 0, "the point zone masks nothing")
+    @assertEqual(0, masked_after, "stale mask after free")
+
+  end subroutine free_drops_mask
 
 end module brinkman_design_no_mapping

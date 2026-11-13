@@ -342,6 +342,7 @@ contains
   end subroutine brinkman_design_init_from_json_sim
 
   !> Free the design
+  !! @param this The design.
   subroutine brinkman_design_free(this)
     class(brinkman_design_t), intent(inout) :: this
 
@@ -350,6 +351,10 @@ contains
     nullify(this%brinkman_amplitude)
     nullify(this%design_indicator)
     nullify(this%sensitivity)
+    nullify(this%optimization_domain)
+    nullify(this%coef)
+    this%has_mask = .false.
+    this%avg_B = 0.0_rp
 
   end subroutine brinkman_design_free
 
