@@ -40,3 +40,20 @@ set_tests_properties(lint_test_depends PROPERTIES
     LABELS "lint;unit"
     TIMEOUT 60
 )
+
+# ============================================================================ #
+# Lint the library: every MPI call must go through an mpi_f08 interface. A call
+# to a routine missing from the file's `use mpi_f08, only:` list compiles, but
+# links to the F77 MPI binding instead, which can corrupt memory. Labelled
+# "unit" for the same reason as above; it needs the built library only.
+
+add_test(NAME lint_mpi_bindings
+    COMMAND ${CMAKE_COMMAND}
+        -DNM=${CMAKE_NM}
+        -DLIBRARY=$<TARGET_FILE:neko-top>
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/check_mpi_bindings.cmake
+)
+set_tests_properties(lint_mpi_bindings PROPERTIES
+    LABELS "lint;unit"
+    TIMEOUT 60
+)
