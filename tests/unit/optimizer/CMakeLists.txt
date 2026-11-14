@@ -120,11 +120,13 @@ add_pfunit_ctest(optimizer_checkpoint
 
 add_dependencies(Unit optimizer_checkpoint)
 
-# Set test properties
+# Set test properties. This small case runs several times slower on a device
+# than on the CPU (about 300-1300 s on CUDA against 60-120 s on the CPU), so
+# device builds get a longer timeout.
 set_tests_properties(optimizer_checkpoint PROPERTIES
     LABELS "unit;optimizer;hdf5"
     ENVIRONMENT "NEKO_LOG_FILE=optimizer_checkpoint.log"
-    TIMEOUT 600
+    TIMEOUT $<IF:$<NOT:$<STREQUAL:${DEVICE_TYPE},CPU>>,1800,600>
 )
 
 # Add dependencies to ensure preparation is done before the test runs
