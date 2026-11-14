@@ -13,7 +13,11 @@
 !!
 !! Each window must hold the steps whose time `start_time + i * dt` lies in
 !! it, in the forward run, and the adjoint must sample exactly the steps the
-!! forward run sampled.
+!! forward run sampled. The objectives also record the time of every sample,
+!! held by their window or not, and those must match bit for bit: both runs
+!! must sample step `i` at exactly `start_time + i * dt`. That is what tells
+!! a time counted in steps from one summed step by step, whose round-off is
+!! far too small to move a sample across a window boundary in ten steps.
 module adjoint_sample_steps
 
   use mpi
@@ -29,7 +33,8 @@ module adjoint_sample_steps
   use json_utils_ext, only: json_read_file
   use neko_top, only: neko_top_register_types
   use logger, only: neko_log
-  use num_types, only: rp, dp
+  use num_types, only: rp, dp, xp, i8
+  use time_state, only: time_state_t
   use objectives_user, only: objectives_user_setup
 
   implicit none
@@ -50,8 +55,9 @@ module adjoint_sample_steps
        [0.025_rp, 0.05_rp, 0.07_rp]
 
   !> An objective that records the steps of the forward run it is sampled
-  !! at, by the forward run and by the adjoint run. Its value and
-  !! sensitivity are zero, so it changes nothing else.
+  !! at, and the times it is sampled at, by the forward run and by the
+  !! adjoint run. Its value and sensitivity are zero, so it changes nothing
+  !! else.
   type, extends(objective_t) :: step_recorder_t
      !> The window the objective records for.
      integer :: window = 0
@@ -62,6 +68,10 @@ module adjoint_sample_steps
      procedure, pass(this) :: update_value => step_recorder_update_value
      procedure, pass(this) :: update_sensitivity => &
           step_recorder_update_sensitivity
+     procedure, pass(this) :: accumulate_value => &
+          step_recorder_accumulate_value
+     procedure, pass(this) :: update_forcing_scale => &
+          step_recorder_update_forcing_scale
   end type step_recorder_t
 
   !> The steps each window was sampled at by the forward run. Kept here
@@ -69,6 +79,15 @@ module adjoint_sample_steps
   logical :: forward_sampled(n_steps, n_windows) = .false.
   !> The steps each window was sampled at by the adjoint run.
   logical :: adjoint_sampled(n_steps, n_windows) = .false.
+  !> The time the forward run sampled each window at, at each step, inside
+  !! the window or not.
+  real(kind=dp) :: forward_time(n_steps, n_windows) = 0.0_dp
+  !> Whether the forward run sampled each window at each step at all.
+  logical :: forward_timed(n_steps, n_windows) = .false.
+  !> The time the adjoint run sampled each window at, at each step.
+  real(kind=dp) :: adjoint_time(n_steps, n_windows) = 0.0_dp
+  !> Whether the adjoint run sampled each window at each step at all.
+  logical :: adjoint_timed(n_steps, n_windows) = .false.
   !> Whether a recorder was sampled at a step outside the run.
   logical :: outside_run = .false.
 
@@ -107,25 +126,69 @@ contains
     nullify(this%sim)
   end subroutine step_recorder_free
 
-  !> Record a sample of the forward run, which has just taken the step.
+  !> Not called, as the recorder accumulates its value itself.
   subroutine step_recorder_update_value(this, design)
     class(step_recorder_t), intent(inout) :: this
     class(design_t), intent(in) :: design
-
-    call record_step(forward_sampled, this%sim%n_timesteps, this%window)
-    this%value = 0.0_rp
   end subroutine step_recorder_update_value
 
-  !> Record a sample of the adjoint run. It samples each forward state
-  !! before the adjoint step over the forward step that reached it, so after
-  !! `k` adjoint steps it samples the state of forward step `n_steps - k`.
+  !> Record a sample of the forward run, which has just taken the step: its
+  !! time, whether the window holds it or not, and then, as a functional
+  !! does, the time sampled and the step if the window holds it. The value
+  !! stays zero.
+  !! @param this The recorder.
+  !! @param design The design.
+  !! @param time The time state of the sample.
+  subroutine step_recorder_accumulate_value(this, design, time)
+    class(step_recorder_t), intent(inout) :: this
+    class(design_t), intent(in) :: design
+    type(time_state_t), intent(in) :: time
+
+    call record_time(forward_time, forward_timed, this%sim%n_timesteps, &
+         this%window, time%t)
+    if (.not. this%in_window(time)) return
+
+    this%value_weight = this%value_weight + real(time%dt, kind=xp)
+    call record_step(forward_sampled, this%sim%n_timesteps, this%window)
+  end subroutine step_recorder_accumulate_value
+
+  !> Record a sample of the adjoint's sensitivity, at one of the steps the
+  !! window holds.
   subroutine step_recorder_update_sensitivity(this, design)
     class(step_recorder_t), intent(inout) :: this
     class(design_t), intent(in) :: design
 
-    call record_step(adjoint_sampled, this%sim%n_timesteps - &
-         this%sim%adjoint_case%time%tstep, this%window)
+    call record_step(adjoint_sampled, adjoint_step(this), this%window)
   end subroutine step_recorder_update_sensitivity
+
+  !> Record the time of a sample of the adjoint run. The adjoint gates the
+  !! forcing of every objective here, before every adjoint step and at the
+  !! time it accumulates their sensitivity at, whether the window holds the
+  !! sample or not. The recorder has no forcing, so it has no scale to set.
+  !! @param this The recorder.
+  !! @param time The time state of the sample.
+  !! @param run_time Length of the forward run.
+  subroutine step_recorder_update_forcing_scale(this, time, run_time)
+    class(step_recorder_t), intent(inout) :: this
+    type(time_state_t), intent(in) :: time
+    real(kind=xp), intent(in) :: run_time
+
+    call record_time(adjoint_time, adjoint_timed, adjoint_step(this), &
+         this%window, time%t)
+  end subroutine step_recorder_update_forcing_scale
+
+  !> The forward step whose state the adjoint run samples. It samples each
+  !! forward state before the adjoint step over the forward step that reached
+  !! it, so after `k` adjoint steps it samples the state of forward step
+  !! `n_steps - k`.
+  !! @param this The recorder.
+  !! @return The forward step sampled.
+  function adjoint_step(this) result(step)
+    class(step_recorder_t), intent(in) :: this
+    integer :: step
+
+    step = this%sim%n_timesteps - this%sim%adjoint_case%time%tstep
+  end function adjoint_step
 
   !> Mark a step as sampled for a window.
   !! @param sampled The steps sampled, per window.
@@ -142,6 +205,27 @@ contains
        sampled(step, window) = .true.
     end if
   end subroutine record_step
+
+  !> Record the time a window was sampled at, at a step.
+  !! @param times The times sampled at, per step and window.
+  !! @param timed Whether each step was sampled, per window.
+  !! @param step The step sampled.
+  !! @param window The window.
+  !! @param t The time sampled at.
+  subroutine record_time(times, timed, step, window, t)
+    real(kind=dp), intent(inout) :: times(:,:)
+    logical, intent(inout) :: timed(:,:)
+    integer, intent(in) :: step
+    integer, intent(in) :: window
+    real(kind=dp), intent(in) :: t
+
+    if (step .lt. 1 .or. step .gt. size(times, 1)) then
+       outside_run = .true.
+    else
+       times(step, window) = t
+       timed(step, window) = .true.
+    end if
+  end subroutine record_time
 
   ! ========================================================================== !
   ! Harness
@@ -164,10 +248,23 @@ contains
     if (len(list) .eq. 0) list = ' none'
   end function step_list
 
+  !> Whether two times are the same, bit for bit.
+  !! @param a A time.
+  !! @param b Another time.
+  !! @return Whether their bits agree.
+  pure function same_bits(a, b) result(same)
+    real(kind=dp), intent(in) :: a
+    real(kind=dp), intent(in) :: b
+    logical :: same
+
+    same = transfer(a, 0_i8) .eq. transfer(b, 0_i8)
+  end function same_bits
+
   ! ========================================================================== !
   ! Test
 
-  !> Both runs must sample each window at the steps whose time lies in it.
+  !> Both runs must sample each window at the steps whose time lies in it,
+  !! and every step at exactly the same time, counted from the start time.
   @test(npes=[1])
   subroutine samples_the_forward_steps(this)
     class(test_adjoint_sample_steps_case), intent(inout) :: this
@@ -180,7 +277,7 @@ contains
     logical :: expected(n_steps, n_windows)
     character(len=512) :: failure_message
     character(len=256) :: log_buf
-    real(kind=dp) :: dt
+    real(kind=dp) :: dt, case_start_time, case_dt, step_time
     integer :: i, w
     logical :: found, failed
 
@@ -219,6 +316,10 @@ contains
 
     forward_sampled = .false.
     adjoint_sampled = .false.
+    forward_time = 0.0_dp
+    forward_timed = .false.
+    adjoint_time = 0.0_dp
+    adjoint_timed = .false.
     outside_run = .false.
 
     call neko_log%section('Sample step test, forward run')
@@ -231,6 +332,11 @@ contains
 
     failed = .false.
     failure_message = ''
+
+    ! The start time and time step as the simulation holds them, which the
+    ! sample times must be counted from
+    case_start_time = sim%neko_case%time%start_time
+    case_dt = sim%neko_case%time%dt
 
     if (sim%n_timesteps .ne. n_steps) then
        write(log_buf, '(A,I0,A,I0)') 'The run took ', sim%n_timesteps, &
@@ -275,6 +381,30 @@ contains
                ', the forward run at', step_list(forward_sampled(:, w))
           call record_failure(failed, failure_message, trim(log_buf))
        end if
+
+       do i = 1, n_steps
+          if (.not. (forward_timed(i, w) .and. adjoint_timed(i, w))) then
+             write(log_buf, '(A,I0,A,I0)') 'A run did not sample window ', &
+                  w, ' at step ', i
+             call record_failure(failed, failure_message, trim(log_buf))
+             cycle
+          end if
+
+          step_time = case_start_time + real(i, kind=dp) * case_dt
+          if (.not. same_bits(forward_time(i, w), step_time)) then
+             write(log_buf, '(A,I0,A,ES24.17,A,ES24.17)') &
+                  'The forward run sampled step ', i, ' at t = ', &
+                  forward_time(i, w), ' instead of ', step_time
+             call record_failure(failed, failure_message, trim(log_buf))
+          end if
+          if (.not. same_bits(adjoint_time(i, w), forward_time(i, w))) then
+             write(log_buf, '(A,I0,A,ES24.17,A,ES24.17)') &
+                  'The adjoint sampled step ', i, ' at t = ', &
+                  adjoint_time(i, w), ', the forward run at ', &
+                  forward_time(i, w)
+             call record_failure(failed, failure_message, trim(log_buf))
+          end if
+       end do
     end do
 
     call prob%free()

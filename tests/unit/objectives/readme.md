@@ -352,11 +352,11 @@ sampled the objective at. The test runs `time_window_run_length.case` moved
 to `start_time = 0.0125`, off the grid of its `dt = 0.005`, for ten steps,
 once forward and once backward. Its pFUnit test, `adjoint_sample_steps.pf`,
 adds three objectives of its own that do nothing but record the steps they
-are sampled at. Their windows hold the first two steps, steps 5 to 7 and the
-last three steps, with every boundary half a step from a sample. On the
-forward run each window must hold the steps whose time `start_time + n * dt`
-lies in it, and the adjoint must sample exactly those. It costs about a
-second.
+are sampled at, and the time of every sample. Their windows hold the first
+two steps, steps 5 to 7 and the last three steps, with every boundary half a
+step from a sample. On the forward run each window must hold the steps whose
+time `start_time + n * dt` lies in it, and the adjoint must sample exactly
+those. It costs about a second.
 
 This is the property that was broken before. The adjoint took the time of a
 sample to be the length of the run less its own time, which starts at
@@ -376,6 +376,20 @@ A non-zero start time is what this test needs to tell the two apart. The
 other way the old sample time went wrong, the round-off of a time summed over
 a long run, is checked by `tests/unit/problem/sample_time.pf` instead, which
 needs no simulation for its million steps.
+
+The times are compared too, bit for bit: both runs must sample step `n`, held
+by the window or not, at exactly `start_time + n * dt`. The objectives record
+the forward run's time where they accumulate their value, and the adjoint's
+where it gates their forcing, which it does at the time it accumulates their
+sensitivity at. Ten steps are far too few for the round-off of a time summed
+step by step to move a sample across a boundary half a step away, so the
+steps alone cannot tell such a time from one counted in steps. With the
+forward run put back on the simulation's own summed time the steps all pass,
+and the test fails at seven of the ten steps with
+
+```
+The forward run sampled step 2 at t =  2.25000000000000026E-02 instead of  2.24999999999999992E-02
+```
 
 ## `steady_scalar_unconverged` and `steady_scalar_unconverged_simtime`
 
