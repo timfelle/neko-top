@@ -1,5 +1,9 @@
 # CMakeLists.txt for the MMA unit tests.
 #
+# mma_device_maxval3: the device maximum that bounds the step length of the
+# device pdip subsolver must equal the same maximum on the host. It checks the
+# device backend only, and passes without checking anything in a CPU build.
+#
 # mma_kkt_nan: a NaN sensitivity on one rank must make the max-norm of the CPU
 # KKT residual NaN on every rank, for both subsolvers, so that the optimiser
 # cannot read a NaN design as converged. It needs two ranks on every backend,
@@ -14,6 +18,29 @@ set(CMAKE_FOLDER "Tests/Unit/MMA")
 
 # ============================================================================ #
 # Define the tests themselves
+
+add_pfunit_ctest(mma_device_maxval3
+    TEST_SOURCES mma_device_maxval3.pf
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    LINK_LIBRARIES Neko-TOP::neko-top
+    MAX_PES 1
+)
+
+add_dependencies(Unit
+    mma_device_maxval3
+)
+
+set_tests_properties(mma_device_maxval3 PROPERTIES
+    LABELS "unit;mma"
+    ENVIRONMENT "NEKO_LOG_FILE=mma_device_maxval3.log"
+    TIMEOUT 120
+)
+
+if (CMAKE_Fortran_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(mma_device_maxval3 PRIVATE
+        $<$<COMPILE_LANGUAGE:Fortran>:-Wno-unused-variable>
+    )
+endif()
 
 add_pfunit_ctest(mma_kkt_nan
     TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/mma_kkt_nan.pf

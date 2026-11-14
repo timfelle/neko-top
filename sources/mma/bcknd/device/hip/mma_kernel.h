@@ -1168,7 +1168,8 @@ __global__ void maxval3_kernel(const T* __restrict__ a, const T* __restrict__ b,
   const unsigned int wid = threadIdx.x / warpSize;
 
   __shared__ T shared[16];
-  T maxval = cons * a[0] / b[0];
+  // Start from the first term, so that the start value is one of the terms
+  T maxval = cons * a[0] / (b[0] - c[0]);
   for (int i = idx; i < n; i += str)
   {
     maxval = max(maxval, cons * a[i] / (b[i] - c[i]));

@@ -1,0 +1,165 @@
+!> Unit tests for the device maximum of cons * a / (b - c).
+!!
+!! The pdip subsolver of the device MMA backend bounds its step length with
+!! device_maxval3, the maximum of cons * a(i) / (b(i) - c(i)) over the local
+!! design variables. Every device thread used to start this maximum from
+!! cons * a(1) / b(1), which is not one of the terms, so a large value of it
+!! raised the maximum and shortened the step. These tests choose the first
+!! entries such that it does, and compare the device maximum with the same
+!! maximum on the host.
+module mma_device_maxval3
+  use pfunit
+  use num_types, only: rp
+  use neko_config, only: NEKO_BCKND_DEVICE
+  use comm, only: comm_init
+  use device, only: device_init, device_finalize
+  use logger, only: neko_log
+  use vector, only: vector_t
+  use device_mma_math, only: device_maxval3
+
+  implicit none
+
+  !> Number of entries: three blocks of 1024 device threads, the last one
+  !! only partly filled, so that the maximum is reduced over several blocks
+  !! and over threads without entries.
+  integer, parameter :: n = 2500
+
+  !> Tolerance relative to the maximum. The device and the host evaluate the
+  !! same expression, so they agree to a few ULPs.
+  real(kind=rp), parameter :: tol = 4.0_rp * epsilon(1.0_rp)
+
+  logical :: log_initialized = .false.
+
+  @TestCase
+  type, extends(MPITestCase) :: test_mma_device_maxval3
+     !> Type components, not locals, so that tearDown frees them also when a
+     !! failing assertion returns early.
+     type(vector_t) :: a, b, c
+   contains
+     procedure :: setUp
+     procedure :: tearDown
+  end type test_mma_device_maxval3
+
+contains
+
+  subroutine setUp(this)
+    class(test_mma_device_maxval3), intent(inout) :: this
+
+    if (NEKO_BCKND_DEVICE .eq. 1) call device_init
+    call comm_init
+
+    if (.not. log_initialized) then
+       call neko_log%init()
+       log_initialized = .true.
+    end if
+
+  end subroutine setUp
+
+  subroutine tearDown(this)
+    class(test_mma_device_maxval3), intent(inout) :: this
+
+    call this%a%free()
+    call this%b%free()
+    call this%c%free()
+    if (NEKO_BCKND_DEVICE .eq. 1) call device_finalize
+
+  end subroutine tearDown
+
+  ! ========================================================================== !
+  ! The device backend exists in a device build only, so these tests pass
+  ! without checking anything in a CPU build.
+
+  !> The lower bound term of the pdip step length, -1.01 * dx / (x - alpha),
+  !! with its maximum in the last block.
+  @test(npes=[1])
+  subroutine lower_bound_term(this)
+    class(test_mma_device_maxval3), intent(inout) :: this
+    real(kind=rp), dimension(n) :: dx, x, alpha
+
+    if (NEKO_BCKND_DEVICE .eq. 0) return
+
+    ! Every term is -1.01 * (-0.1) / 0.5 = 0.202, except for the maximum,
+    ! 1.212. The first term is 0.202 too, but -1.01 * dx(1) / x(1) = 10.1.
+    dx = -0.1_rp
+    x = 0.5_rp
+    alpha = 0.0_rp
+    dx(2400) = -0.6_rp
+    x(1) = 0.01_rp
+    alpha(1) = -0.49_rp
+
+    call check_maxval3(this, dx, x, alpha, -1.01_rp)
+
+  end subroutine lower_bound_term
+
+  !> The upper bound term of the pdip step length, 1.01 * dx / (beta - x),
+  !! with its maximum in the middle block.
+  @test(npes=[1])
+  subroutine upper_bound_term(this)
+    class(test_mma_device_maxval3), intent(inout) :: this
+    real(kind=rp), dimension(n) :: dx, beta, x
+
+    if (NEKO_BCKND_DEVICE .eq. 0) return
+
+    ! Every term is 1.01 * 0.1 / 0.5 = 0.202, except for the maximum, 1.212.
+    ! The first term is 0.202 too, but 1.01 * dx(1) / beta(1) = 10.1.
+    dx = 0.1_rp
+    beta = 1.0_rp
+    x = 0.5_rp
+    dx(1500) = 0.6_rp
+    beta(1) = 0.01_rp
+    x(1) = -0.49_rp
+
+    call check_maxval3(this, dx, beta, x, 1.01_rp)
+
+  end subroutine upper_bound_term
+
+  !> A single entry, so that every device thread but one has no entries.
+  @test(npes=[1])
+  subroutine single_entry(this)
+    class(test_mma_device_maxval3), intent(inout) :: this
+
+    if (NEKO_BCKND_DEVICE .eq. 0) return
+
+    ! The only term is -1.01 * (-0.1) / 0.5 = 0.202, but
+    ! -1.01 * dx(1) / x(1) = 10.1.
+    call check_maxval3(this, [-0.1_rp], [0.01_rp], [-0.49_rp], -1.01_rp)
+
+  end subroutine single_entry
+
+  ! ========================================================================== !
+  ! Helpers
+
+  !> Compare device_maxval3 with the same maximum on the host.
+  !! @param this The test case, which holds the device vectors.
+  !! @param a The numerators.
+  !! @param b The minuends of the denominators.
+  !! @param c The subtrahends of the denominators.
+  !! @param cons The factor of all terms.
+  subroutine check_maxval3(this, a, b, c, cons)
+    class(test_mma_device_maxval3), intent(inout) :: this
+    real(kind=rp), dimension(:), intent(in) :: a, b, c
+    real(kind=rp), intent(in) :: cons
+    real(kind=rp) :: expected, old_start, device_max
+    integer :: n_entries
+
+    n_entries = size(a)
+    expected = maxval(cons * a / (b - c))
+
+    ! The inputs are only a check if the old start value of every device
+    ! thread exceeds the maximum. The maximum over the device blocks starts
+    ! from zero, so the maximum must also be positive.
+    old_start = cons * a(1) / b(1)
+    @assertGreaterThan(old_start, 2.0_rp * expected, 'inputs: old start')
+    @assertGreaterThan(expected, 0.0_rp, 'inputs: maximum')
+
+    this%a = a
+    this%b = b
+    this%c = c
+    device_max = device_maxval3(this%a%x_d, this%b%x_d, this%c%x_d, cons, &
+         n_entries)
+
+    @assertRelativelyEqual(expected, device_max, tol, 'device maximum')
+
+  end subroutine check_maxval3
+
+end module mma_device_maxval3
