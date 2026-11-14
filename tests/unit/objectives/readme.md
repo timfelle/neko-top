@@ -33,9 +33,7 @@ Only the objectives declared in the case file are checked. `problem_t` appends
 an internal augmented-Lagrangian objective of its own, which the driver skips.
 
 The driver calls `problem_t%compute` and never `compute_sensitivity`, so no
-adjoint is solved. That is what keeps these affordable as unit tests. The one
-exception is `end_time_step_count`, below, which solves a single adjoint of a
-ten-step run with its own driver.
+adjoint is solved. That is what keeps these affordable as unit tests.
 
 ## The scalar setup, restored from the example
 
@@ -308,7 +306,7 @@ each branch of `problem_t%compute`, and requires each run to take exactly ten
 steps and stop at `t = 0.05`. Its pFUnit test, `step_count.pf`, checks nothing
 but where the runs stop, and refuses a case whose
 `end_time` is not on a step boundary, since only there does the check bite. It
-costs 4 s.
+costs under a second.
 
 This is the property that was broken before. The time accumulated after ten
 steps is `0.049999999999999996`, and the unsteady path's loop compared it
@@ -323,24 +321,6 @@ The unsteady run took 11 steps to t =  0.550000000000000E-01 instead of 10 to t 
 
 while the steady run passes. Both paths are reported before the test fails,
 so a regression in either is named.
-
-The driver then solves the adjoint of the unsteady run once and requires that
-it writes no job-limit checkpoint. With `output_at_end` off, which this case
-has, the adjoint's finalisation writes one whenever it judges the run to have
-stopped short of `end_time`. The adjoint replays the forward run's step count,
-so its clock ends where the forward run's did, a few ulps short of `end_time`
-here, and it needs the same tolerance to see the run as complete. Comparing
-there without one, as it did before, made every such run write a spurious
-`joblimit00000.chkp` once the forward loop was fixed. With that comparison put
-back, the step counts pass and the test fails with
-
-```
-The adjoint wrote joblimit00000.chkp, so it judged the run to have stopped short of end_time
-```
-
-The file name is built the way the adjoint builds it, so a change to Neko's
-checkpoint naming cannot leave the test looking for the wrong file, and any
-copy left by an earlier failure is deleted before the adjoint runs.
 
 ## `steady_scalar_unconverged` and `steady_scalar_unconverged_simtime`
 

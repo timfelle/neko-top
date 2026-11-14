@@ -5,10 +5,6 @@
 !! The case is run once through each branch of `problem_t%compute`, and each
 !! run must take exactly `(end_time - start_time) / dt` timesteps and finish
 !! at `end_time`.
-!!
-!! The adjoint of the unsteady run is then solved once, and must not write a
-!! job-limit checkpoint. With `output_at_end` off, the adjoint's finalisation
-!! writes one when it judges the run to have stopped short of `end_time`.
 module step_count
 
   use mpi
@@ -18,12 +14,11 @@ module step_count
   use problem, only: problem_t
   use neko, only: neko_init
   use json_module, only: json_file
-  use json_utils, only: json_get, json_get_or_default
+  use json_utils, only: json_get
   use json_utils_ext, only: json_read_file
   use neko_top, only: neko_top_register_types
   use logger, only: neko_log
   use num_types, only: dp
-  use file, only: file_t
   use objectives_user, only: objectives_user_setup
 
   implicit none
@@ -58,8 +53,7 @@ contains
     class(test_step_count_case), intent(inout) :: this
   end subroutine tearDown
 
-  !> A boundary `end_time` must take the expected number of forward steps,
-  !! and its adjoint must recognise that the forward run completed.
+  !> A boundary `end_time` must take the expected number of forward steps.
   @test(npes=[1])
   subroutine stops_at_end_time(this)
     class(test_step_count_case), intent(inout) :: this
@@ -68,14 +62,11 @@ contains
     type(simulation_t) :: sim
     type(brinkman_design_t) :: des
     type(problem_t) :: prob
-    type(file_t) :: joblimit_file
-    character(len=1024) :: joblimit_fname
-    character(len=:), allocatable :: checkpoint_format
     character(len=256) :: log_buf
     character(len=512) :: failure_message
     real(kind=dp) :: start_time, end_time, dt, n_steps_exact, final_time
     integer :: n_expected, n_taken, i
-    logical :: failed, output_at_end, joblimit_written, found
+    logical :: failed, found
 
     parameters = json_read_file(case_file)
 
@@ -110,13 +101,6 @@ contains
     if (abs(n_steps_exact - real(n_expected, kind=dp)) .gt. step_tolerance) then
        call record_failure(failed, failure_message, &
             'The test case needs an end_time on a step boundary.')
-    end if
-
-    call json_get_or_default(parameters, 'case.output_at_end', output_at_end, &
-         .true.)
-    if (output_at_end) then
-       call record_failure(failed, failure_message, &
-            'The test case needs "output_at_end": false.')
     end if
 
     write(log_buf, '(A,E22.15,A,E22.15,A,I0,A)') 'Expecting a run to t = ', &
@@ -158,39 +142,8 @@ contains
 
        ! Put the flag back the way the case file declared it.
        sim%unsteady = .true.
-
-       ! Build the name the way `simulation_adjoint_joblimit_chkp` does, so
-       ! this looks for the file it would actually write.
-       call json_get_or_default(parameters, 'case.checkpoint_format', &
-            checkpoint_format, 'chkp')
-       if (checkpoint_format .eq. 'hdf5') then
-          call joblimit_file%init(sim%neko_case%output_directory // 'joblimit.h5')
-       else
-          call joblimit_file%init(sim%neko_case%output_directory // 'joblimit.chkp')
-       end if
-       joblimit_fname = joblimit_file%file_type%get_next_output_fname()
-       call joblimit_file%free()
-
-       ! Clear any left over from an earlier run of this test.
-       call delete_file(joblimit_fname)
-
-       call neko_log%section('Step count test, adjoint run')
-       call prob%compute_sensitivity(des, sim)
-       call neko_log%end_section()
-
-       inquire(file = trim(joblimit_fname), exist = joblimit_written)
-       if (joblimit_written) then
-          call record_failure(failed, failure_message, &
-               'The adjoint wrote ' // trim(joblimit_fname) // &
-               ', so it judged the run to have stopped short of end_time')
-       else
-          call neko_log%message('The adjoint wrote no job-limit checkpoint')
-       end if
-
-       call delete_file(joblimit_fname)
     end if
 
-    if (allocated(checkpoint_format)) deallocate(checkpoint_format)
     call prob%free()
     call des%free()
     call sim%free()
@@ -223,19 +176,5 @@ contains
     failed = .true.
     call neko_log%warning(trim(message))
   end subroutine record_failure
-
-  !> Delete a file, if it exists.
-  !! @param fname Name of the file.
-  subroutine delete_file(fname)
-    character(len=*), intent(in) :: fname
-    logical :: exists
-    integer :: unit, stat
-
-    inquire(file = trim(fname), exist = exists)
-    if (.not. exists) return
-
-    open(newunit = unit, file = trim(fname), iostat = stat, status = 'old')
-    if (stat .eq. 0) close(unit, status = 'delete')
-  end subroutine delete_file
 
 end module step_count

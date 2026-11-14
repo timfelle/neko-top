@@ -393,10 +393,7 @@ contains
     end do
     call profiler_end_region("Adjoint simulation")
 
-    ! The steady adjoint takes as many steps as the forward run did, with
-    ! time steps of its own, so its time need not reach the end time. It is
-    ! complete once it has taken them all.
-    call simulation_adjoint_finalize(this%adjoint_case, this%n_timesteps)
+    call simulation_adjoint_finalize(this%adjoint_case)
 
   end subroutine simulation_run_backward
 

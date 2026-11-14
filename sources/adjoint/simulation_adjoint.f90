@@ -38,7 +38,6 @@ module simulation_adjoint
   use neko_config, only: NEKO_BCKND_DEVICE
   use num_types, only: rp, dp
   use time_scheme_controller, only: time_scheme_controller_t
-  use file, only: file_t
   use logger, only: LOG_SIZE, neko_log
   use profiler, only: profiler_start_region, profiler_end_region
   use json_utils, only: json_get_or_default
@@ -53,7 +52,7 @@ module simulation_adjoint
   private
 
   public :: simulation_adjoint_init, simulation_adjoint_step, &
-       simulation_adjoint_finalize, simulation_adjoint_restart
+       simulation_adjoint_finalize
 
 contains
 
@@ -89,28 +88,14 @@ contains
 
   !> Finalize a simulation of a case
   !! @param C The adjoint case.
-  !! @param n_steps The number of steps the adjoint was to take. If given,
-  !! the run is complete once it has taken them all; otherwise once its time
-  !! has reached the end time.
-  subroutine simulation_adjoint_finalize(C, n_steps)
+  subroutine simulation_adjoint_finalize(C)
     type(adjoint_case_t), intent(inout) :: C
-    integer, intent(in), optional :: n_steps
-    logical :: output_at_end, stopped_short
+    logical :: output_at_end
 
     ! Run a final output if specified in the json
     call json_get_or_default(C%case%params, 'case.output_at_end', &
          output_at_end, .true.)
     call C%output_controller%execute(C%time, output_at_end)
-
-    if (present(n_steps)) then
-       stopped_short = C%time%tstep .lt. n_steps
-    else
-       stopped_short = .not. C%time%is_done()
-    end if
-
-    if (.not. (output_at_end) .and. stopped_short) then
-       call simulation_adjoint_joblimit_chkp(C, C%time%t)
-    end if
 
     ! Finalize the user modules
     call C%case%user%finalize(C%time)
@@ -241,57 +226,6 @@ contains
 
   end subroutine simulation_settime
 
-  !> Restart a case @a C from a given checkpoint
-  subroutine simulation_adjoint_restart(C)
-    type(adjoint_case_t), intent(inout) :: C
-    integer :: i
-    type(file_t) :: chkpf, previous_meshf
-    character(len=LOG_SIZE) :: log_buf
-    character(len=:), allocatable :: restart_file
-    character(len=:), allocatable :: restart_mesh_file
-    real(kind=rp) :: tol
-    logical :: found
-
-    call C%case%params%get('case.restart_file', restart_file, found)
-    call C%case%params%get('case.restart_mesh_file', restart_mesh_file, found)
-
-    if (found) then
-       call previous_meshf%init(trim(restart_mesh_file))
-       call previous_meshf%read(C%fluid_adj%chkp%previous_mesh)
-    end if
-
-    call C%case%params%get('case.mesh2mesh_tolerance', tol, found)
-
-    if (found) C%case%fluid%chkp%mesh2mesh_tol = tol
-
-    call chkpf%init(trim(restart_file))
-    call chkpf%read(C%fluid_adj%chkp)
-    call C%fluid_adj%chkp%set_time_state(C%time)
-
-    ! Free the previous mesh, dont need it anymore
-    do i = 1, size(C%time%dtlag)
-       call C%case%fluid%ext_bdf%set_coeffs(C%time%dtlag)
-    end do
-
-    call C%fluid_adj%restart(C%case%chkp)
-    call C%case%fluid%chkp%previous_mesh%free()
-    if (allocated(C%adjoint_scalars)) then
-       call C%adjoint_scalars%restart(C%case%chkp)
-    end if
-
-    call neko_log%section('Restarting from checkpoint')
-    write(log_buf, '(A,A)') 'File :   ', trim(restart_file)
-    call neko_log%message(log_buf)
-    write(log_buf, '(A,E15.7)') 'Time : ', C%time%t
-    call neko_log%message(log_buf)
-    call neko_log%end_section()
-
-    call C%output_controller%set_counter(C%time)
-    if (C%norm_output_enabled) then
-       call C%norm_output_ctrl%set_counter(C%time)
-    end if
-  end subroutine simulation_adjoint_restart
-
   subroutine simulation_adjoint_norm_output(C, time_output)
     type(adjoint_case_t), intent(inout) :: C
     type(time_state_t), intent(in) :: time_output
@@ -327,30 +261,5 @@ contains
     call neko_scratch_registry%relinquish(idx)
     call C%norm_output_ctrl%register_execution(time_output)
   end subroutine simulation_adjoint_norm_output
-
-  !> Write a checkpoint at joblimit
-  subroutine simulation_adjoint_joblimit_chkp(C, t)
-    type(adjoint_case_t), intent(inout) :: C
-    real(kind=rp), intent(inout) :: t
-    type(file_t) :: chkpf
-    character(len=:), allocatable :: chkp_format
-    character(len=LOG_SIZE) :: log_buf
-    character(len=10) :: format_str
-    logical :: found
-
-    call C%case%params%get('case.checkpoint_format', chkp_format, found)
-    call C%case%fluid%chkp%sync_host()
-    format_str = '.chkp'
-    if (found) then
-       if (chkp_format .eq. 'hdf5') then
-          format_str = '.h5'
-       end if
-    end if
-    call chkpf%init(C%case%output_directory // 'joblimit' // trim(format_str))
-    call chkpf%write(C%case%fluid%chkp, t)
-    write(log_buf, '(A)') '! saving checkpoint >>>'
-    call neko_log%message(log_buf)
-
-  end subroutine simulation_adjoint_joblimit_chkp
 
 end module simulation_adjoint
