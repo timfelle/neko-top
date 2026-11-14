@@ -58,14 +58,14 @@ add_pfunit_ctest(adv_adjoint_no_dealias_transpose
 )
 
 add_pfunit_ctest(adjoint_source_term_json
-    TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/adjoint_source_term_json.pf
+    TEST_SOURCES adjoint_source_term_json.pf
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     LINK_LIBRARIES Neko-TOP::neko-top
     MAX_PES 1
 )
 
 add_pfunit_ctest(adjoint_case_init
-    TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/adjoint_case_init.pf
+    TEST_SOURCES adjoint_case_init.pf
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     LINK_LIBRARIES Neko-TOP::neko-top
     MAX_PES 1
@@ -73,7 +73,7 @@ add_pfunit_ctest(adjoint_case_init
 add_dependencies(adjoint_case_init adjoint_test_prepare)
 
 add_pfunit_ctest(adjoint_case_output_layout
-    TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/adjoint_case_output_layout.pf
+    TEST_SOURCES adjoint_case_output_layout.pf
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     LINK_LIBRARIES Neko-TOP::neko-top
     MAX_PES 1
