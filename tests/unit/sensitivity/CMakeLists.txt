@@ -143,5 +143,56 @@ set_tests_properties(${case_name}
 )
 
 # ============================================================================ #
+# Resetting the simulation before a forward run must keep the fluid and
+# adjoint fluid `freeze` flags the case sets, and undo a freeze it does not.
+set(case_name "freeze_reset")
+add_executable(freeze_reset_tester_bin EXCLUDE_FROM_ALL
+    ${CMAKE_CURRENT_SOURCE_DIR}/freeze_reset_tester.f90
+)
+target_link_libraries(freeze_reset_tester_bin
+    PRIVATE Neko-TOP::neko-top
+)
+add_dependencies(Unit freeze_reset_tester_bin)
+
+add_custom_target(
+    ${case_name}_case_file
+    COMMENT "Copying case file ${case_name}.case to the test directory"
+    SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/${case_name}.case
+    BYPRODUCTS ${CMAKE_CURRENT_BINARY_DIR}/${case_name}.case
+    COMMAND
+        ${CMAKE_COMMAND} -E copy_if_different
+        ${CMAKE_CURRENT_SOURCE_DIR}/${case_name}.case
+        ${CMAKE_CURRENT_BINARY_DIR}/${case_name}.case
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+)
+add_dependencies(sensitivity_test_prepare ${case_name}_case_file)
+
+# Each variant is a test name suffix, then the values the driver gives
+# `case.fluid.freeze` and `case.adjoint_fluid.freeze`.
+set(freeze_reset_variants
+    "frozen:true:unset"
+    "free:unset:unset"
+    "adjoint_free:true:false"
+)
+foreach(variant ${freeze_reset_variants})
+    string(REPLACE ":" ";" variant_args ${variant})
+    list(GET variant_args 0 suffix)
+    list(GET variant_args 1 fluid_freeze)
+    list(GET variant_args 2 adjoint_freeze)
+
+    add_test(NAME ${case_name}_${suffix}
+        COMMAND $<TARGET_FILE:freeze_reset_tester_bin> ${case_name}.case
+            ${fluid_freeze} ${adjoint_freeze}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    )
+    set_tests_properties(${case_name}_${suffix}
+        PROPERTIES
+            LABELS "sensitivity;unit"
+            ENVIRONMENT "NEKO_LOG_FILE=${case_name}_${suffix}.log"
+            TIMEOUT 300
+    )
+endforeach()
+
+# ============================================================================ #
 # Final dependencies
 add_dependencies(Unit sensitivity_test_prepare)
