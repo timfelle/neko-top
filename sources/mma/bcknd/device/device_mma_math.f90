@@ -45,9 +45,9 @@ module device_mma_math
        cuda_maxval3, cuda_kkt_rex, mma_gensub1_cuda, mma_gensub2_cuda, &
        mma_gensub3_cuda, mma_gensub4_cuda, mattrans_v_mul_cuda, &
        mma_dipsolvesub1_cuda, mma_Ljjxinv_cuda, cuda_Hess, delta_1dbeam_cuda, &
-       cuSOLVER_wrapper, mma_prepare_hessian_cuda, mma_prepare_aa_matrix_cuda, &
-       cuda_custom_solver, mma_update_hessian_z_cuda, mma_gensub3_dip_cuda, &
-       mma_dip_kkt_cuda
+       cuSOLVER_wrapper, cuSOLVER_wrapper_free, mma_prepare_hessian_cuda, &
+       mma_prepare_aa_matrix_cuda, cuda_custom_solver, &
+       mma_update_hessian_z_cuda, mma_gensub3_dip_cuda, mma_dip_kkt_cuda
   use hip_mma_math, only: hip_mma_max, hip_max2, hip_rex, hip_lcsc2, &
        hip_relambda, hip_sub2cons2, hip_maxval, hip_norm, hip_delx, &
        hip_add2inv2, hip_GG, hip_diagx, hip_bb, hip_updatebb, hip_AA, &
@@ -56,8 +56,8 @@ module device_mma_math
        mma_gensub3_hip, mma_gensub4_hip, mattrans_v_mul_hip, &
        mma_dipsolvesub1_hip, mma_Ljjxinv_hip, hip_Hess, delta_1dbeam_hip, &
        hip_custom_solver, mma_prepare_hessian_hip, &
-       mma_prepare_aa_matrix_hip, hipSOLVER_wrapper, mma_update_hessian_z_hip, &
-       mma_gensub3_dip_hip, mma_dip_kkt_hip
+       mma_prepare_aa_matrix_hip, hipSOLVER_wrapper, hipSOLVER_wrapper_free, &
+       mma_update_hessian_z_hip, mma_gensub3_dip_hip, mma_dip_kkt_hip
 
   implicit none
   private
@@ -71,9 +71,9 @@ module device_mma_math
        device_dy, device_deta, device_dxsi, device_maxval2, device_maxval3, &
        device_kkt_rex, device_mattrans_v_mul, device_mma_dipsolvesub1, &
        device_mma_Ljjxinv, device_Hess, device_delta_1dbeam, &
-       device_solve_linear_system, device_prepare_hessian, &
-       device_prepare_aa_matrix, device_update_hessian_z, &
-       device_mma_gensub3_dip, device_mma_dip_kkt
+       device_solve_linear_system, device_solve_linear_system_free, &
+       device_prepare_hessian, device_prepare_aa_matrix, &
+       device_update_hessian_z, device_mma_gensub3_dip, device_mma_dip_kkt
 
 contains
   !> Update Hessian for dual solver with z-term contribution:
@@ -145,6 +145,16 @@ contains
     call neko_error('no device backend configured')
 #endif
   end subroutine device_solve_linear_system
+
+  !> Release the solver handle and the buffers that the linear solver of the
+  !! device backend keeps between solves. The next solve creates them again.
+  subroutine device_solve_linear_system_free()
+#if HAVE_HIP
+    call hipSOLVER_wrapper_free()
+#elif HAVE_CUDA
+    call cuSOLVER_wrapper_free()
+#endif
+  end subroutine device_solve_linear_system_free
 
 
   !> A device support to do the following calculation for 1D beam elements:

@@ -78,6 +78,7 @@ module mma
   use neko_config, only: NEKO_BCKND_DEVICE, NEKO_BCKND_CUDA, NEKO_BCKND_HIP, &
        NEKO_BCKND_OPENCL
   use device, only: device_memcpy, HOST_TO_DEVICE, DEVICE_TO_HOST
+  use device_mma_math, only: device_solve_linear_system_free
   use, intrinsic :: iso_c_binding, only: c_ptr
   use logger, only: neko_log
   use mpi_f08, only: MPI_SUM, MPI_Allreduce, MPI_INTEGER
@@ -346,6 +347,10 @@ contains
     call this%pij%free()
     call this%qij%free()
     call this%scratch%free()
+
+    ! Release the solver handle and the buffers that the device linear solver
+    ! keeps between solves
+    if (NEKO_BCKND_DEVICE .eq. 1) call device_solve_linear_system_free()
 
     this%is_initialized = .false.
     this%is_updated = .false.

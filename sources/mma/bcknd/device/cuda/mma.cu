@@ -160,49 +160,72 @@ extern "C" {
     }
  }
 
+  // The cuSOLVER handle and the device buffers of cuSOLVER_wrapper. They are
+  // kept between solves, since creating a handle costs far more than solving
+  // the small systems of the MMA subsolvers. The handle is created by the
+  // first solve, a buffer is only reallocated when a solve needs a larger
+  // one, and cuSOLVER_wrapper_free, called when an MMA is freed, releases
+  // them all. The next solve then creates them again.
+  static cusolverDnHandle_t mma_solver_handle = NULL;
+  static double* mma_solver_work = NULL;
+  static int mma_solver_lwork = 0;
+  static int* mma_solver_ipiv = NULL;
+  static int mma_solver_n = 0;
+  static int* mma_solver_info = NULL;
+
   void cuSOLVER_wrapper(void* A, void* b, int n, int* jj) {
-    cusolverDnHandle_t handle;
     cusolverStatus_t status;
     const cudaStream_t stream = (cudaStream_t)glb_cmd_queue;
-    if (cusolverDnCreate(&handle) != CUSOLVER_STATUS_SUCCESS) {
+    if (mma_solver_handle == NULL &&
+        cusolverDnCreate(&mma_solver_handle) != CUSOLVER_STATUS_SUCCESS) {
+        mma_solver_handle = NULL;
         *jj = -1;
         return;
     }
 
     // Solve on Neko's stream, ordered after the kernels assembling A and b.
-    // The stream is non-blocking, so the info values are also copied on it.
-    // A failure is returned through jj, which the caller reports.
-    status = cusolverDnSetStream(handle, stream);
+    // It is set on every solve, as the device layer may have replaced it
+    // since the handle was created. The stream is non-blocking, so the info
+    // values are also copied on it. A failure is returned through jj, which
+    // the caller reports.
+    status = cusolverDnSetStream(mma_solver_handle, stream);
     if (status != CUSOLVER_STATUS_SUCCESS) {
-        cusolverDnDestroy(handle);
         *jj = -1;
         return;
     }
 
     int lwork;
-    double* workspace;
-    int* ipiv;
-    int* info;  // Device pointer for cuSOLVER info
     int host_info = 0;  // Host variable to store the info
 
     // Workspace query
-    status = cusolverDnDgetrf_bufferSize(handle, n, n, (double*)A, n, &lwork);
+    status = cusolverDnDgetrf_bufferSize(mma_solver_handle, n, n, (double*)A,
+                                         n, &lwork);
     if (status != CUSOLVER_STATUS_SUCCESS) {
-        cusolverDnDestroy(handle);
         *jj = -1;
         return;
     }
-    CUDA_CHECK(cudaMalloc(&workspace, lwork * sizeof(double)));
-    CUDA_CHECK(cudaMalloc(&ipiv, n * sizeof(int)));
-    CUDA_CHECK(cudaMalloc(&info, sizeof(int)));
+    if (lwork > mma_solver_lwork) {
+        if (mma_solver_work != NULL) CUDA_CHECK(cudaFree(mma_solver_work));
+        CUDA_CHECK(cudaMalloc(&mma_solver_work, lwork * sizeof(double)));
+        mma_solver_lwork = lwork;
+    }
+    if (n > mma_solver_n) {
+        if (mma_solver_ipiv != NULL) CUDA_CHECK(cudaFree(mma_solver_ipiv));
+        CUDA_CHECK(cudaMalloc(&mma_solver_ipiv, n * sizeof(int)));
+        mma_solver_n = n;
+    }
+    if (mma_solver_info == NULL) {
+        CUDA_CHECK(cudaMalloc(&mma_solver_info, sizeof(int)));
+    }
 
     // LU factorization and solve
-    status = cusolverDnDgetrf(handle, n, n, (double*)A, n, workspace, ipiv,
-                              info);
+    status = cusolverDnDgetrf(mma_solver_handle, n, n, (double*)A, n,
+                              mma_solver_work, mma_solver_ipiv,
+                              mma_solver_info);
 
     // Copy info from device to host to check if factorization succeeded.
     // A failed call may leave info unwritten, so it is reported as -1.
-    CUDA_CHECK(cudaMemcpyAsync(&host_info, info, sizeof(int),
+    CUDA_CHECK(cudaMemcpyAsync(&host_info, mma_solver_info, sizeof(int),
                                cudaMemcpyDeviceToHost, stream));
     CUDA_CHECK(cudaStreamSynchronize(stream));
     if (status != CUSOLVER_STATUS_SUCCESS) {
@@ -211,10 +234,11 @@ extern "C" {
 
     if (host_info == 0) {
         // Only solve if factorization was successful
-        status = cusolverDnDgetrs(handle, CUBLAS_OP_N, n, 1, (double*)A, n,
-                                  ipiv, (double*)b, n, info);
+        status = cusolverDnDgetrs(mma_solver_handle, CUBLAS_OP_N, n, 1,
+                                  (double*)A, n, mma_solver_ipiv, (double*)b,
+                                  n, mma_solver_info);
         // Copy the final info value
-        CUDA_CHECK(cudaMemcpyAsync(&host_info, info, sizeof(int),
+        CUDA_CHECK(cudaMemcpyAsync(&host_info, mma_solver_info, sizeof(int),
                                    cudaMemcpyDeviceToHost, stream));
         CUDA_CHECK(cudaStreamSynchronize(stream));
         if (status != CUSOLVER_STATUS_SUCCESS) {
@@ -222,15 +246,23 @@ extern "C" {
         }
     }
 
-
     // Return the actual info value through jj
     *jj = host_info;
+  }
 
-    // Cleanup
-    CUDA_CHECK(cudaFree(workspace));
-    CUDA_CHECK(cudaFree(ipiv));
-    CUDA_CHECK(cudaFree(info));
-    cusolverDnDestroy(handle);
+  // Release the handle and the buffers that cuSOLVER_wrapper keeps between
+  // solves.
+  void cuSOLVER_wrapper_free() {
+    if (mma_solver_work != NULL) CUDA_CHECK(cudaFree(mma_solver_work));
+    if (mma_solver_ipiv != NULL) CUDA_CHECK(cudaFree(mma_solver_ipiv));
+    if (mma_solver_info != NULL) CUDA_CHECK(cudaFree(mma_solver_info));
+    if (mma_solver_handle != NULL) cusolverDnDestroy(mma_solver_handle);
+    mma_solver_handle = NULL;
+    mma_solver_work = NULL;
+    mma_solver_lwork = 0;
+    mma_solver_ipiv = NULL;
+    mma_solver_n = 0;
+    mma_solver_info = NULL;
   }
 
   void custom_solve_linear_system(void* A, void* b, int n, int* info) {

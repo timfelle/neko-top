@@ -71,49 +71,73 @@ void mma_update_hessian_z_hip(void* Hess, void* a, int m) {
     HIP_CHECK(hipGetLastError());
 }
 
+// The hipSOLVER handle and the device buffers of hipSOLVER_wrapper. They are
+// kept between solves, since creating a handle, which on AMD also creates a
+// rocBLAS handle, costs far more than solving the small systems of the MMA
+// subsolvers. The handle is created by the first solve, a buffer is only
+// reallocated when a solve needs a larger one, and hipSOLVER_wrapper_free,
+// called when an MMA is freed, releases them all. The next solve then
+// creates them again.
+static hipsolverDnHandle_t mma_solver_handle = NULL;
+static double *mma_solver_work = NULL;
+static int mma_solver_lwork = 0;
+static int *mma_solver_ipiv = NULL;
+static int mma_solver_n = 0;
+static int *mma_solver_info = NULL;
+
 void hipSOLVER_wrapper(void* A, void* b, int n, int* jj) {
-    hipsolverDnHandle_t handle;
     hipsolverStatus_t status;
     const hipStream_t stream = (hipStream_t)glb_cmd_queue;
-    if (hipsolverDnCreate(&handle) != HIPSOLVER_STATUS_SUCCESS) {
+    if (mma_solver_handle == NULL &&
+        hipsolverDnCreate(&mma_solver_handle) != HIPSOLVER_STATUS_SUCCESS) {
+        mma_solver_handle = NULL;
         *jj = -1;
         return;
     }
 
     // Solve on Neko's stream, ordered after the kernels assembling A and b.
-    // The stream is non-blocking, so the info values are also copied on it.
-    // A failure is returned through jj, which the caller reports.
-    status = hipsolverDnSetStream(handle, stream);
+    // It is set on every solve, as the device layer may have replaced it
+    // since the handle was created. The stream is non-blocking, so the info
+    // values are also copied on it. A failure is returned through jj, which
+    // the caller reports.
+    status = hipsolverDnSetStream(mma_solver_handle, stream);
     if (status != HIPSOLVER_STATUS_SUCCESS) {
-        hipsolverDnDestroy(handle);
         *jj = -1;
         return;
     }
 
     int lwork;
-    double *workspace;
-    int *ipiv;
-    int *info;  // Device pointer for hipSOLVER info
     int host_info = 0;  // Host variable to store the info
 
     // Workspace query
-    status = hipsolverDnDgetrf_bufferSize(handle, n, n, (double*)A, n, &lwork);
+    status = hipsolverDnDgetrf_bufferSize(mma_solver_handle, n, n, (double*)A,
+                                          n, &lwork);
     if (status != HIPSOLVER_STATUS_SUCCESS) {
-        hipsolverDnDestroy(handle);
         *jj = -1;
         return;
     }
-    HIP_CHECK(hipMalloc(&workspace, lwork * sizeof(double)));
-    HIP_CHECK(hipMalloc(&ipiv, n * sizeof(int)));
-    HIP_CHECK(hipMalloc(&info, sizeof(int)));
+    if (lwork > mma_solver_lwork) {
+        if (mma_solver_work != NULL) HIP_CHECK(hipFree(mma_solver_work));
+        HIP_CHECK(hipMalloc(&mma_solver_work, lwork * sizeof(double)));
+        mma_solver_lwork = lwork;
+    }
+    if (n > mma_solver_n) {
+        if (mma_solver_ipiv != NULL) HIP_CHECK(hipFree(mma_solver_ipiv));
+        HIP_CHECK(hipMalloc(&mma_solver_ipiv, n * sizeof(int)));
+        mma_solver_n = n;
+    }
+    if (mma_solver_info == NULL) {
+        HIP_CHECK(hipMalloc(&mma_solver_info, sizeof(int)));
+    }
 
     // LU factorization and solve
-    status = hipsolverDnDgetrf(handle, n, n, (double*)A, n, workspace, ipiv,
-                               info);
+    status = hipsolverDnDgetrf(mma_solver_handle, n, n, (double*)A, n,
+                               mma_solver_work, mma_solver_ipiv,
+                               mma_solver_info);
 
     // Copy info from device to host to check if factorization succeeded.
     // A failed call may leave info unwritten, so it is reported as -1.
-    HIP_CHECK(hipMemcpyAsync(&host_info, info, sizeof(int),
+    HIP_CHECK(hipMemcpyAsync(&host_info, mma_solver_info, sizeof(int),
                              hipMemcpyDeviceToHost, stream));
     HIP_CHECK(hipStreamSynchronize(stream));
     if (status != HIPSOLVER_STATUS_SUCCESS) {
@@ -122,10 +146,11 @@ void hipSOLVER_wrapper(void* A, void* b, int n, int* jj) {
 
     if (host_info == 0) {
         // Only solve if factorization was successful
-        status = hipsolverDnDgetrs(handle, HIPSOLVER_OP_N, n, 1, (double*)A, n,
-                                   ipiv, (double*)b, n, info);
+        status = hipsolverDnDgetrs(mma_solver_handle, HIPSOLVER_OP_N, n, 1,
+                                   (double*)A, n, mma_solver_ipiv, (double*)b,
+                                   n, mma_solver_info);
         // Copy the final info value
-        HIP_CHECK(hipMemcpyAsync(&host_info, info, sizeof(int),
+        HIP_CHECK(hipMemcpyAsync(&host_info, mma_solver_info, sizeof(int),
                                  hipMemcpyDeviceToHost, stream));
         HIP_CHECK(hipStreamSynchronize(stream));
         if (status != HIPSOLVER_STATUS_SUCCESS) {
@@ -135,12 +160,21 @@ void hipSOLVER_wrapper(void* A, void* b, int n, int* jj) {
 
     // Return the actual info value through jj
     *jj = host_info;
+}
 
-    // Cleanup
-    HIP_CHECK(hipFree(workspace));
-    HIP_CHECK(hipFree(ipiv));
-    HIP_CHECK(hipFree(info));
-    hipsolverDnDestroy(handle);
+// Release the handle and the buffers that hipSOLVER_wrapper keeps between
+// solves.
+void hipSOLVER_wrapper_free() {
+    if (mma_solver_work != NULL) HIP_CHECK(hipFree(mma_solver_work));
+    if (mma_solver_ipiv != NULL) HIP_CHECK(hipFree(mma_solver_ipiv));
+    if (mma_solver_info != NULL) HIP_CHECK(hipFree(mma_solver_info));
+    if (mma_solver_handle != NULL) hipsolverDnDestroy(mma_solver_handle);
+    mma_solver_handle = NULL;
+    mma_solver_work = NULL;
+    mma_solver_lwork = 0;
+    mma_solver_ipiv = NULL;
+    mma_solver_n = 0;
+    mma_solver_info = NULL;
 }
 
 void mma_prepare_aa_matrix_hip(void* AA, void* s, void* lambda,

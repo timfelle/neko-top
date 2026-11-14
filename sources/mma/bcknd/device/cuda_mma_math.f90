@@ -80,6 +80,10 @@ module cuda_mma_math
        integer(c_int) :: info
      end subroutine cuSOLVER_wrapper
 
+     subroutine cuSOLVER_wrapper_free() &
+          bind(c, name = 'cuSOLVER_wrapper_free')
+     end subroutine cuSOLVER_wrapper_free
+
      subroutine delta_1dbeam_cuda(Delta_d, L_total, Le, offset, n) &
           bind(c, name = 'delta_1dbeam_cuda')
        import c_rp, c_int, c_ptr

@@ -56,6 +56,10 @@ module hip_mma_math
        integer(c_int) :: info
      end subroutine hipSOLVER_wrapper
 
+     subroutine hipSOLVER_wrapper_free() &
+          bind(c, name = 'hipSOLVER_wrapper_free')
+     end subroutine hipSOLVER_wrapper_free
+
      subroutine hip_custom_solver(A_d, b_d, n, info) &
           bind(c, name = 'hip_custom_solver')
        import c_int, c_ptr
