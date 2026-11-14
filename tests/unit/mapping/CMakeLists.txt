@@ -45,7 +45,7 @@ add_pfunit_ctest(mapping_pde_filter_convergence
 )
 
 add_pfunit_ctest(mapping_pde_filter_lifecycle
-    TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/mapping_pde_filter_lifecycle.pf
+    TEST_SOURCES mapping_pde_filter_lifecycle.pf
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     LINK_LIBRARIES Neko-TOP::neko-top
     MAX_PES 1
