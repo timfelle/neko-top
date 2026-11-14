@@ -1,0 +1,302 @@
+!> @file adjoint_sample_steps.pf
+!! pFUnit regression test asserting that the unsteady adjoint samples an
+!! objective at the steps the forward run sampled it at, for a run that does
+!! not start at time zero.
+!!
+!! The case is `time_window_run_length.case` moved to start at
+!! `start_time = 0.0125`, off the grid of its `dt = 0.005`, and run for ten
+!! steps. Three objectives that only record the steps they are sampled at are
+!! added to it, each with a window of its own: one holding the first two
+!! steps, one in the middle of the run and one holding its last three steps.
+!! Every window boundary lies half a step from a sample, so that round-off
+!! cannot decide which steps a window holds.
+!!
+!! Each window must hold the steps whose time `start_time + i * dt` lies in
+!! it, in the forward run, and the adjoint must sample exactly the steps the
+!! forward run sampled.
+module adjoint_sample_steps
+
+  use mpi
+  use pfunit
+  use simulation_m, only: simulation_t
+  use brinkman_design, only: brinkman_design_t
+  use design, only: design_t
+  use objective, only: objective_t
+  use problem, only: problem_t
+  use neko, only: neko_init
+  use json_module, only: json_file
+  use json_utils, only: json_get
+  use json_utils_ext, only: json_read_file
+  use neko_top, only: neko_top_register_types
+  use logger, only: neko_log
+  use num_types, only: rp, dp
+  use objectives_user, only: objectives_user_setup
+
+  implicit none
+
+  character(len=*), parameter :: case_file = 'time_window_run_length.case'
+
+  !> The start time of the run, off the grid of the time step.
+  real(kind=dp), parameter :: start_time = 0.0125_dp
+  !> The number of steps of the run.
+  integer, parameter :: n_steps = 10
+  !> The number of windows checked.
+  integer, parameter :: n_windows = 3
+  !> The start of each window.
+  real(kind=rp), parameter :: window_start(n_windows) = &
+       [0.01_rp, 0.035_rp, 0.05_rp]
+  !> The end of each window.
+  real(kind=rp), parameter :: window_end(n_windows) = &
+       [0.025_rp, 0.05_rp, 0.07_rp]
+
+  !> An objective that records the steps of the forward run it is sampled
+  !! at, by the forward run and by the adjoint run. Its value and
+  !! sensitivity are zero, so it changes nothing else.
+  type, extends(objective_t) :: step_recorder_t
+     !> The window the objective records for.
+     integer :: window = 0
+     !> The simulation, whose step counts tell the step sampled.
+     type(simulation_t), pointer :: sim => null()
+   contains
+     procedure, pass(this) :: free => step_recorder_free
+     procedure, pass(this) :: update_value => step_recorder_update_value
+     procedure, pass(this) :: update_sensitivity => &
+          step_recorder_update_sensitivity
+  end type step_recorder_t
+
+  !> The steps each window was sampled at by the forward run. Kept here
+  !! rather than in the recorders, which the problem takes over.
+  logical :: forward_sampled(n_steps, n_windows) = .false.
+  !> The steps each window was sampled at by the adjoint run.
+  logical :: adjoint_sampled(n_steps, n_windows) = .false.
+  !> Whether a recorder was sampled at a step outside the run.
+  logical :: outside_run = .false.
+
+  @TestCase
+  type, extends(MPITestCase) :: test_adjoint_sample_steps_case
+   contains
+     procedure :: setUp
+     procedure :: tearDown
+  end type test_adjoint_sample_steps_case
+
+  logical :: initialized = .false.
+
+contains
+
+  subroutine setUp(this)
+    class(test_adjoint_sample_steps_case), intent(inout) :: this
+
+    if (initialized) return
+    initialized = .true.
+
+    call neko_init()
+    call neko_top_register_types()
+  end subroutine setUp
+
+  subroutine tearDown(this)
+    class(test_adjoint_sample_steps_case), intent(inout) :: this
+  end subroutine tearDown
+
+  ! ========================================================================== !
+  ! The step recorder
+
+  subroutine step_recorder_free(this)
+    class(step_recorder_t), intent(inout) :: this
+
+    call this%free_base()
+    nullify(this%sim)
+  end subroutine step_recorder_free
+
+  !> Record a sample of the forward run, which has just taken the step.
+  subroutine step_recorder_update_value(this, design)
+    class(step_recorder_t), intent(inout) :: this
+    class(design_t), intent(in) :: design
+
+    call record_step(forward_sampled, this%sim%n_timesteps, this%window)
+    this%value = 0.0_rp
+  end subroutine step_recorder_update_value
+
+  !> Record a sample of the adjoint run. It samples each forward state
+  !! before the adjoint step over the forward step that reached it, so after
+  !! `k` adjoint steps it samples the state of forward step `n_steps - k`.
+  subroutine step_recorder_update_sensitivity(this, design)
+    class(step_recorder_t), intent(inout) :: this
+    class(design_t), intent(in) :: design
+
+    call record_step(adjoint_sampled, this%sim%n_timesteps - &
+         this%sim%adjoint_case%time%tstep, this%window)
+  end subroutine step_recorder_update_sensitivity
+
+  !> Mark a step as sampled for a window.
+  !! @param sampled The steps sampled, per window.
+  !! @param step The step sampled.
+  !! @param window The window.
+  subroutine record_step(sampled, step, window)
+    logical, intent(inout) :: sampled(:,:)
+    integer, intent(in) :: step
+    integer, intent(in) :: window
+
+    if (step .lt. 1 .or. step .gt. size(sampled, 1)) then
+       outside_run = .true.
+    else
+       sampled(step, window) = .true.
+    end if
+  end subroutine record_step
+
+  ! ========================================================================== !
+  ! Harness
+
+  !> The steps marked in a mask, as a list for a message.
+  !! @param mask Whether each step is marked.
+  !! @return The steps marked, separated by spaces.
+  function step_list(mask) result(list)
+    logical, intent(in) :: mask(:)
+    character(len=:), allocatable :: list
+    character(len=12) :: step
+    integer :: i
+
+    list = ''
+    do i = 1, size(mask)
+       if (.not. mask(i)) cycle
+       write(step, '(I0)') i
+       list = list // ' ' // trim(step)
+    end do
+    if (len(list) .eq. 0) list = ' none'
+  end function step_list
+
+  ! ========================================================================== !
+  ! Test
+
+  !> Both runs must sample each window at the steps whose time lies in it.
+  @test(npes=[1])
+  subroutine samples_the_forward_steps(this)
+    class(test_adjoint_sample_steps_case), intent(inout) :: this
+
+    type(json_file) :: parameters, design_parameters
+    type(simulation_t), target :: sim
+    type(brinkman_design_t) :: des
+    type(problem_t) :: prob
+    class(objective_t), allocatable :: recorder
+    logical :: expected(n_steps, n_windows)
+    character(len=512) :: failure_message
+    character(len=256) :: log_buf
+    real(kind=dp) :: dt
+    integer :: i, w
+    logical :: found, failed
+
+    parameters = json_read_file(case_file)
+
+    ! Keep the state recovery files apart from the other tests reading the
+    ! same case file.
+    call parameters%update('state_recovery.path', &
+         'adjoint_sample_steps_checkpoints/', found)
+
+    call json_get(parameters, 'case.time.timestep', dt)
+    call parameters%update('case.time.start_time', start_time, found)
+    call parameters%update('case.time.end_time', &
+         start_time + real(n_steps, kind=dp) * dt, found)
+
+    call json_get(parameters, 'optimization.design', design_parameters)
+
+    ! Register the user-defined inflow before the case is built.
+    call objectives_user_setup(sim%neko_case%user)
+
+    call sim%init(parameters)
+    call des%init(design_parameters, sim)
+    call prob%init(parameters, des, sim)
+
+    do w = 1, n_windows
+       allocate(step_recorder_t :: recorder)
+       select type (recorder)
+       type is (step_recorder_t)
+          call recorder%init_base('step recorder', des%size(), 1.0_rp, &
+               start_time = window_start(w), end_time = window_end(w))
+          recorder%window = w
+          recorder%sim => sim
+       end select
+       call prob%add_objective(recorder)
+    end do
+
+    forward_sampled = .false.
+    adjoint_sampled = .false.
+    outside_run = .false.
+
+    call neko_log%section('Sample step test, forward run')
+    call prob%compute(des, sim)
+    call neko_log%end_section()
+
+    call neko_log%section('Sample step test, adjoint run')
+    call prob%compute_sensitivity(des, sim)
+    call neko_log%end_section()
+
+    failed = .false.
+    failure_message = ''
+
+    if (sim%n_timesteps .ne. n_steps) then
+       write(log_buf, '(A,I0,A,I0)') 'The run took ', sim%n_timesteps, &
+            ' steps instead of ', n_steps
+       call record_failure(failed, failure_message, trim(log_buf))
+    end if
+
+    if (outside_run) then
+       call record_failure(failed, failure_message, &
+            'A window was sampled at a step outside the run')
+    end if
+
+    do w = 1, n_windows
+       do i = 1, n_steps
+          associate(t => start_time + real(i, kind=dp) * dt)
+            expected(i, w) = t .ge. window_start(w) .and. &
+                 t .le. window_end(w)
+          end associate
+       end do
+
+       write(log_buf, '(A,I0,A,A,A,A,A,A)') 'Window ', w, &
+            ': expected', step_list(expected(:, w)), &
+            ', forward', step_list(forward_sampled(:, w)), &
+            ', adjoint', step_list(adjoint_sampled(:, w))
+       call neko_log%message(trim(log_buf))
+
+       if (.not. any(expected(:, w))) then
+          write(log_buf, '(A,I0,A)') 'Window ', w, ' holds no step'
+          call record_failure(failed, failure_message, trim(log_buf))
+       end if
+
+       if (any(forward_sampled(:, w) .neqv. expected(:, w))) then
+          write(log_buf, '(A,I0,A,A,A,A)') 'The forward run sampled window ', &
+               w, ' at steps', step_list(forward_sampled(:, w)), &
+               ' instead of', step_list(expected(:, w))
+          call record_failure(failed, failure_message, trim(log_buf))
+       end if
+
+       if (any(adjoint_sampled(:, w) .neqv. forward_sampled(:, w))) then
+          write(log_buf, '(A,I0,A,A,A,A)') 'The adjoint sampled window ', &
+               w, ' at steps', step_list(adjoint_sampled(:, w)), &
+               ', the forward run at', step_list(forward_sampled(:, w))
+          call record_failure(failed, failure_message, trim(log_buf))
+       end if
+    end do
+
+    call prob%free()
+    call des%free()
+    call sim%free()
+
+    @assertTrue(.not. failed, trim(failure_message))
+  end subroutine samples_the_forward_steps
+
+  !> Record a failure without stopping early, so that every window is
+  !! reported and the resources are freed before pFUnit reports it.
+  !! @param failed Whether a failure has been recorded.
+  !! @param failure_message The first failure recorded.
+  !! @param message The failure to record.
+  subroutine record_failure(failed, failure_message, message)
+    logical, intent(inout) :: failed
+    character(len=*), intent(inout) :: failure_message
+    character(len=*), intent(in) :: message
+
+    if (.not. failed) failure_message = message
+    failed = .true.
+    call neko_log%warning(trim(message))
+  end subroutine record_failure
+
+end module adjoint_sample_steps

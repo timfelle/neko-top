@@ -83,9 +83,24 @@ target_include_directories(end_time_step_count PRIVATE ${LOCAL_MOD_DIR})
 add_dependencies(Unit end_time_step_count)
 add_dependencies(end_time_step_count objectives_test_prepare)
 
+# The adjoint must sample the steps the forward run sampled, also for a run
+# that does not start at zero. It reuses `time_window_run_length.case` too.
+add_pfunit_ctest(adjoint_sample_steps
+    TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/adjoint_sample_steps.pf
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    LINK_LIBRARIES objectives_user_obj Neko-TOP::neko-top
+    MAX_PES 1
+)
+target_include_directories(adjoint_sample_steps PRIVATE ${LOCAL_MOD_DIR})
+add_dependencies(Unit adjoint_sample_steps)
+add_dependencies(adjoint_sample_steps objectives_test_prepare)
+
 # Disable treating pFUnit's generated variables as unused.
 if (CMAKE_Fortran_COMPILER_ID STREQUAL "GNU")
     target_compile_options(end_time_step_count PRIVATE
+        $<$<COMPILE_LANGUAGE:Fortran>:-Wno-unused-variable>
+    )
+    target_compile_options(adjoint_sample_steps PRIVATE
         $<$<COMPILE_LANGUAGE:Fortran>:-Wno-unused-variable>
     )
 endif()
@@ -164,6 +179,13 @@ set_tests_properties(end_time_step_count
     PROPERTIES
         LABELS "objectives;unit"
         ENVIRONMENT "NEKO_LOG_FILE=end_time_step_count.log"
+        TIMEOUT 300
+)
+
+set_tests_properties(adjoint_sample_steps
+    PROPERTIES
+        LABELS "objectives;unit"
+        ENVIRONMENT "NEKO_LOG_FILE=adjoint_sample_steps.log"
         TIMEOUT 300
 )
 

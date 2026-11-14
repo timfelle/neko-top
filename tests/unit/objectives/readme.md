@@ -22,6 +22,8 @@ has to run a flow to a genuine steady state.
   across those runs and, optionally, against each other within a run.
 - `step_count.pf`: the pFUnit test for `end_time_step_count` alone, which
   checks where a run stops rather than what its objectives report.
+- `adjoint_sample_steps.pf`: the pFUnit test for `adjoint_sample_steps`
+  alone, which checks the steps at which the adjoint samples an objective.
 
 With `compare_steady` set it also runs the case with `simulation_t%unsteady`
 cleared — the flag `problem_t%compute` branches on — and requires that result
@@ -33,9 +35,9 @@ Only the objectives declared in the case file are checked. `problem_t` appends
 an internal augmented-Lagrangian objective of its own, which the driver skips.
 
 The driver calls `problem_t%compute` and never `compute_sensitivity`, so no
-adjoint is solved. That is what keeps these affordable as unit tests. The one
-exception is `end_time_step_count`, below, which solves a single adjoint of a
-ten-step run with its own driver.
+adjoint is solved. That is what keeps these affordable as unit tests. The two
+exceptions are `end_time_step_count` and `adjoint_sample_steps`, below, each
+of which solves a single adjoint of a ten-step run with its own driver.
 
 ## The scalar setup, restored from the example
 
@@ -341,6 +343,39 @@ The adjoint wrote joblimit00000.chkp, so it judged the run to have stopped short
 The file name is built the way the adjoint builds it, so a change to Neko's
 checkpoint naming cannot leave the test looking for the wrong file, and any
 copy left by an earlier failure is deleted before the adjoint runs.
+
+## `adjoint_sample_steps`
+
+The sample-step guard. The adjoint must accumulate an objective's
+sensitivity, and gate its forcing, at exactly the steps the forward run
+sampled the objective at. The test runs `time_window_run_length.case` moved
+to `start_time = 0.0125`, off the grid of its `dt = 0.005`, for ten steps,
+once forward and once backward. Its pFUnit test, `adjoint_sample_steps.pf`,
+adds three objectives of its own that do nothing but record the steps they
+are sampled at. Their windows hold the first two steps, steps 5 to 7 and the
+last three steps, with every boundary half a step from a sample. On the
+forward run each window must hold the steps whose time `start_time + n * dt`
+lies in it, and the adjoint must sample exactly those. It costs about a
+second.
+
+This is the property that was broken before. The adjoint took the time of a
+sample to be the length of the run less its own time, which starts at
+`start_time`, so it gated a sample at `t` as if it were at
+`t - 2 * start_time`, four steps early here. Against that code the test fails
+with
+
+```
+The adjoint sampled window 1 at steps 5 6 7, the forward run at 1 2
+```
+
+and it sampled the other two windows at step 10 and at no step. Counting the
+adjoint's time in steps, but from zero rather than from `start_time`, still
+fails, two and a half steps off: it samples the first window at steps 2 to 5.
+
+A non-zero start time is what this test needs to tell the two apart. The
+other way the old sample time went wrong, the round-off of a time summed over
+a long run, is checked by `tests/unit/problem/sample_time.pf` instead, which
+needs no simulation for its million steps.
 
 ## `steady_scalar_unconverged` and `steady_scalar_unconverged_simtime`
 

@@ -70,7 +70,10 @@ A window that never overlaps the simulated interval accumulates nothing. The
 objective then reports zero and a warning is written to the log.
 
 The unsteady adjoint applies an objective's forcing at exactly the timesteps
-its average samples, decided by the same test. A window boundary placed on a
+its average samples, decided by the same test. Both take the time of the
+\f$n\f$-th timestep to be \f$t_0 + n \Delta t\f$, with \f$t_0\f$ the
+simulation's own `start_time`, rather than a time summed step by step, whose
+round-off grows with the length of the run. A window boundary placed on a
 timestep therefore needs no special care, and an `end_time` equal to the
 simulation's own behaves as the `+\infty` default. The forcing is also scaled
 by the length of the run over \f$|W|\f$. The term that couples the adjoint to

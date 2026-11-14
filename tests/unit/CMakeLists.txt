@@ -134,3 +134,26 @@ set_tests_properties(problem-functional_name PROPERTIES
     TIMEOUT 120
 )
 add_dependencies(Unit problem-functional_name)
+
+add_pfunit_ctest(problem-sample_time
+    TEST_SOURCES problem/sample_time.pf
+    LINK_LIBRARIES Neko-TOP::neko-top
+    MAX_PES 1
+)
+
+if (CMAKE_Fortran_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(problem-sample_time PRIVATE
+        $<$<COMPILE_LANGUAGE:Fortran>:-Wno-unused-variable>
+    )
+endif()
+
+set_target_properties(problem-sample_time PROPERTIES
+    FOLDER "Tests/Unit"
+)
+set_tests_properties(problem-sample_time PROPERTIES
+    LABELS "unit"
+    ENVIRONMENT
+    "NEKO_LOG_FILE=${CMAKE_BINARY_DIR}/tests/unit/problem-sample_time.log"
+    TIMEOUT 120
+)
+add_dependencies(Unit problem-sample_time)

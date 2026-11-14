@@ -1,0 +1,159 @@
+!> Unit tests for the time an unsteady run samples its functionals at.
+!!
+!! The time window of a functional decides whether a sample counts, with a
+!! tolerance of `1e-6 * dt`, and the adjoint run must decide it for each
+!! sample as the forward run did. Both take the time of a sample from
+!! `time_after_steps`, which counts it in steps from the start time. A time
+!! summed step by step, as the simulation's own is, drifts away from the
+!! time of the step by more than that tolerance within a million steps. So
+!! did the time the adjoint used to sample at: the length of the run less a
+!! time summed by the adjoint itself.
+!!
+!! The exact time is taken in quadruple precision, in which the product of a
+!! step count and a time step in double precision is exact.
+module sample_time
+  use mpi
+  use pfunit
+  use num_types, only: dp, qp
+  use problem, only: time_after_steps
+
+  implicit none
+
+  @TestCase
+  type, extends(MPITestCase) :: test_sample_time_case
+   contains
+     procedure :: setUp
+     procedure :: tearDown
+  end type test_sample_time_case
+
+  !> The number of steps of each run checked. A summed time reaches the
+  !! tolerance of the time windows after some 3e5 steps.
+  integer, parameter :: n_steps = 1000000
+
+  !> The tolerance of the time windows, as a fraction of the time step.
+  real(kind=dp), parameter :: window_tolerance = 1.0e-6_dp
+
+contains
+
+  subroutine setUp(this)
+    class(test_sample_time_case), intent(inout) :: this
+  end subroutine setUp
+
+  subroutine tearDown(this)
+    class(test_sample_time_case), intent(inout) :: this
+  end subroutine tearDown
+
+  ! ========================================================================== !
+  ! Harness
+
+  !> The exact time after a number of steps.
+  !! @param start_time The start time of the run.
+  !! @param dt The time step.
+  !! @param n The number of steps taken.
+  !! @return The time after `n` steps, in quadruple precision.
+  pure function exact_time(start_time, dt, n) result(t)
+    real(kind=dp), intent(in) :: start_time
+    real(kind=dp), intent(in) :: dt
+    integer, intent(in) :: n
+    real(kind=qp) :: t
+
+    t = real(start_time, kind=qp) + real(n, kind=qp) * real(dt, kind=qp)
+  end function exact_time
+
+  !> The largest error of the time counted in steps over a run, as a
+  !! fraction of the time step.
+  !! @param start_time The start time of the run.
+  !! @param dt The time step.
+  !! @return The largest error after any step of the run.
+  function counted_error(start_time, dt) result(error)
+    real(kind=dp), intent(in) :: start_time
+    real(kind=dp), intent(in) :: dt
+    real(kind=dp) :: error
+    real(kind=qp) :: largest
+    integer :: i
+
+    largest = 0.0_qp
+    do i = 1, n_steps
+       largest = max(largest, abs(real(time_after_steps(start_time, dt, i), &
+            kind=qp) - exact_time(start_time, dt, i)))
+    end do
+    error = real(largest / real(dt, kind=qp), kind=dp)
+  end function counted_error
+
+  !> The largest errors of the summed times over a run, as a fraction of the
+  !! time step. The forward time is summed as the simulation sums its own.
+  !! The adjoint time is the one the adjoint used to sample at: the length
+  !! of the run less a time the adjoint summed from the start time, taken
+  !! before each adjoint step. Both are compared with the exact time of the
+  !! forward state the sample belongs to, so the run must start at zero.
+  !! @param dt The time step.
+  !! @param forward_error The largest error of the forward time.
+  !! @param adjoint_error The largest error of the adjoint's sample time.
+  subroutine summed_errors(dt, forward_error, adjoint_error)
+    real(kind=dp), intent(in) :: dt
+    real(kind=dp), intent(out) :: forward_error
+    real(kind=dp), intent(out) :: adjoint_error
+    real(kind=dp) :: t, total_time
+    real(kind=qp) :: largest
+    integer :: i
+
+    largest = 0.0_qp
+    t = 0.0_dp
+    do i = 1, n_steps
+       t = t + dt
+       largest = max(largest, abs(real(t, kind=qp) - exact_time(0.0_dp, dt, i)))
+    end do
+    forward_error = real(largest / real(dt, kind=qp), kind=dp)
+
+    largest = 0.0_qp
+    total_time = real(n_steps, kind=dp) * dt
+    t = 0.0_dp
+    do i = n_steps, 1, -1
+       largest = max(largest, abs(real(total_time - t, kind=qp) - &
+            exact_time(0.0_dp, dt, i)))
+       t = t + dt
+    end do
+    adjoint_error = real(largest / real(dt, kind=qp), kind=dp)
+  end subroutine summed_errors
+
+  ! ========================================================================== !
+  ! Tests
+
+  !> The time counted in steps stays far inside the tolerance of the time
+  !! windows over a million steps, with or without a start time. Its error is
+  !! that of rounding a single product and sum, below `1e-9 * dt` here.
+  @test(npes=[1])
+  subroutine counted_time_stays_exact(this)
+    class(test_sample_time_case), intent(inout) :: this
+    real(kind=dp), parameter :: margin = 1.0e-3_dp
+    real(kind=dp) :: error
+
+    error = counted_error(0.0_dp, 1.0e-3_dp)
+    @assertLessThan(error, margin * window_tolerance, "start 0, dt 1e-3")
+
+    error = counted_error(0.0_dp, 1.0e-2_dp)
+    @assertLessThan(error, margin * window_tolerance, "start 0, dt 1e-2")
+
+    error = counted_error(0.5_dp, 1.0e-3_dp)
+    @assertLessThan(error, margin * window_tolerance, "start 0.5, dt 1e-3")
+
+    error = counted_error(0.0125_dp, 5.0e-3_dp)
+    @assertLessThan(error, margin * window_tolerance, &
+         "start 0.0125, dt 5e-3")
+  end subroutine counted_time_stays_exact
+
+  !> The control: over the same million steps, a time summed step by step
+  !! drifts past the tolerance of the time windows, and so does the sample
+  !! time the adjoint used to take off the length of the run. Without this
+  !! the test above could pass on runs too short to tell the two apart.
+  @test(npes=[1])
+  subroutine summed_time_drifts(this)
+    class(test_sample_time_case), intent(inout) :: this
+    real(kind=dp) :: forward_error, adjoint_error
+
+    call summed_errors(1.0e-3_dp, forward_error, adjoint_error)
+    @assertGreaterThan(forward_error, window_tolerance, "forward, dt 1e-3")
+    @assertGreaterThan(adjoint_error, window_tolerance, "adjoint, dt 1e-3")
+  end subroutine summed_time_drifts
+
+end module sample_time
