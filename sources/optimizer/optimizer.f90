@@ -396,7 +396,10 @@ contains
     this%checkpoint_overwrite = .false.
 
     this%start_time = 0.0_rp
+    this%average_time = 0.0_rp
+    this%step_count = 0.0_rp
     this%current_iteration = 0
+    this%norm2_design_change = 0.0_rp
     call this%log_data%free()
     this%log_initialized = .false.
     this%log_extra_size = 0
