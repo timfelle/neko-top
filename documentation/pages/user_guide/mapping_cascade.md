@@ -108,7 +108,7 @@ following input parameters:
 | `tol`                | The desired tolerance used when solving the system.               | Real                      | `0.0000000001` |
 | `max_iter`           | Maximum number of iterations when solving the system.             | Integer                   | `200`          |
 | `solver`             | Numerical solver used to solve the system.                        | `cg`, `gmres`             | `cg`           |
-| `preconditioner`     | Pre-conditioner used to solve the system.                         | `ident`, `hsmg`, `jacobi` | `jacobi`       |
+| `preconditioner`     | Pre-conditioner used to solve the system.                         | `ident`, `jacobi`         | `jacobi`       |
 | `strict_convergence` | Stop with an error when a filter solve does not converge.         | `true` or `false`         | `false`        |
 
 Since the Helmholtz operator is Symmetric Positive Definite (SPD), `CG` is recommended.

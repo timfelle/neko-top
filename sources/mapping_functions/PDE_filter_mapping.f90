@@ -59,6 +59,8 @@ module PDE_filter_mapping
   use jacobi, only: jacobi_t
   use device_jacobi, only: device_jacobi_t
   use sx_jacobi, only: sx_jacobi_t
+  use identity, only: ident_t
+  use device_identity, only: device_ident_t
   use utils, only: neko_error
   use device_math, only: device_cfill, device_subcol3, device_cmult
   use json_utils, only: json_get, json_get_or_default
@@ -486,7 +488,15 @@ contains
 
   end subroutine PDE_filter_check_convergence
 
-  !> Initialize a Krylov preconditioner
+  !> Initialise the Krylov preconditioner of the filter, and attach it to
+  !! the Krylov solver.
+  !! @param pc The preconditioner.
+  !! @param ksp The Krylov solver.
+  !! @param coef The SEM coefficients.
+  !! @param dof The dofmap.
+  !! @param gs The gather-scatter handle.
+  !! @param bc_projector The boundary conditions of the filter.
+  !! @param pctype The type of the preconditioner.
   subroutine filter_precon_factory(pc, ksp, coef, dof, gs, bc_projector, &
        pctype)
     class(pc_t), allocatable, target, intent(inout) :: pc
@@ -499,6 +509,9 @@ contains
 
     call precon_allocator(pc, pctype)
 
+    ! Only the preconditioners set up from the SEM coefficients alone are
+    ! supported. Of the others, Neko's hsmg, built for the pressure Poisson
+    ! problem, does not converge on the Helmholtz problem of the filter.
     select type (pcp => pc)
     type is (jacobi_t)
        call pcp%init_from_components(coef, dof, gs)
@@ -506,6 +519,13 @@ contains
        call pcp%init_from_components(coef, dof, gs)
     type is (device_jacobi_t)
        call pcp%init_from_components(coef, dof, gs)
+    type is (ident_t)
+       ! Nothing to set up
+    type is (device_ident_t)
+       ! Nothing to set up
+    class default
+       call neko_error('The PDE filter does not support the "' // &
+            trim(pctype) // '" preconditioner, use "jacobi" or "ident"')
     end select
 
     call ksp%set_pc(pc)
