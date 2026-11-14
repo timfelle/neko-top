@@ -86,6 +86,18 @@ Currently, we have added tests for the following components:
   `+1.775e-2`; with one quadrature it is `+1.05e-5`, which is first-order
   truncation (`+5.25e-5` at `5e-4`). The tolerance of `1e-4` lies between the
   two.
+- `brinkman_dissipation_objective_t`, unsteady with a `steady` component
+  (`unsteady_brinkman_dissipation_steady.case`) — the case above with five
+  states in RAM instead of twenty, so that the adjoint gets most of its states
+  by recomputing them from the checkpoints of steps 2, 5, 10 and 15, and with
+  a `steady` component that computes at the first step and at `t = 0.016`.
+  Step 16 is the first step of the recompute from the checkpoint of step 15.
+  A recompute that runs the component's `compute` gives it the state it last
+  computed on, so it freezes the fluid, which then stays frozen for the rest
+  of the backward sweep: the error was `+3.83e-2`. Without, it is
+  `+1.05e-5`, and the whole finite-difference table is that of
+  `unsteady_brinkman_dissipation.case`: neither the recompute nor the
+  component changes the sensitivity. The tolerance is the same, `1e-4`.
 - `brinkman_dissipation_objective_t`, unsteady and masked
   (`unsteady_brinkman_dissipation_masked.case`) — the same case with the
   objective masked to the design domain. The PDE filter's transpose carries

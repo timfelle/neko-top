@@ -3,6 +3,7 @@ set(CMAKE_FOLDER "Tests/Unit/Sensitivity")
 
 # Provide a list of .case files
 set(test_list
+    "unsteady_brinkman_dissipation_steady.case"
     "volume.case"
     "volume_filtered.case"
     "viscous_dissipation.case"
