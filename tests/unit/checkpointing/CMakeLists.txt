@@ -201,7 +201,7 @@ if (HAVE_HDF5)
     )
     set_tests_properties(design_checkpoint_hdf5 PROPERTIES
         LABELS "unit;checkpointing;hdf5"
-        ENVIRONMENT "NEKO_LOG_FILE=design_checkpoint_hdf5.log"
+        ENVIRONMENT "NEKO_LOG_FILE=design_checkpoint_hdf5.log;OMP_NUM_THREADS=1"
         TIMEOUT 120
     )
     add_dependencies(Unit design_checkpoint_hdf5)
@@ -249,7 +249,7 @@ if (HAVE_HDF5)
         )
         set_tests_properties(${test_name} PROPERTIES
             LABELS "unit;checkpointing;hdf5"
-            ENVIRONMENT "NEKO_LOG_FILE=${test_name}.log"
+            ENVIRONMENT "NEKO_LOG_FILE=${test_name}.log;OMP_NUM_THREADS=1"
             TIMEOUT 900
         )
     endforeach()
