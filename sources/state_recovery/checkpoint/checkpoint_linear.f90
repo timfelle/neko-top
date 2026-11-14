@@ -49,6 +49,8 @@ submodule (state_recover_checkpoint) checkpoint_linear
   use profiler, only: profiler_start_region, profiler_end_region
   use mpi_f08, only: MPI_Wtime
 
+  implicit none
+
 contains
 
   !> Save the current state of the simulation in a linear fashion.
