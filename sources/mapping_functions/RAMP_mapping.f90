@@ -146,6 +146,9 @@ contains
   subroutine RAMP_mapping_free(this)
     class(RAMP_mapping_t), intent(inout) :: this
 
+    ! The scheduler must not update a parameter of a freed mapping.
+    call nekotop_continuation%deregister(this%f_max)
+    call nekotop_continuation%deregister(this%q)
     call this%free_base()
 
   end subroutine RAMP_mapping_free

@@ -16,6 +16,8 @@
 !      after the filter is deallocated and initialised anew does not write to
 !      the deallocated filter, and reaches the new one. Run under valgrind, a
 !      write to the deallocated filter shows as an invalid write.
+!   4. Every mapping, the filter among them, deregisters the parameters it
+!      registered for continuation when it is freed.
 !
 ! The filters are set up on rows of hex elements spanning unit cubes, at
 ! polynomial order 7 (lx = 8). The assertions come after the clean-up, so a
@@ -33,6 +35,7 @@ module mapping_pde_filter_lifecycle
   use field, only: field_t
   use coefs, only: coef_t
   use PDE_filter_mapping, only: PDE_filter_t
+  use mapping, only: mapping_t, mapping_factory
   use continuation_scheduler, only: nekotop_continuation
   use json_module, only: json_file
   use registry, only: neko_registry
@@ -467,5 +470,69 @@ contains
          message = 'Filtered with the stepped radius')
 
   end subroutine test_continuation_after_reinit
+
+  !> Every mapping deregisters the parameters it registered for
+  !! continuation when it is freed, so that the scheduler keeps no pointer
+  !! into a deallocated mapping.
+  @test(npes=[1])
+  subroutine test_mappings_deregister_on_free(this)
+    class(test_pde_filter_lifecycle), intent(inout) :: this
+    !> Each mapping, with every parameter it can continue given as an array.
+    character(len=*), parameter :: mapping_json(6) = [character(len=80) :: &
+         '{"type": "linear", "f_max": [1.0, 2.0]}', &
+         '{"type": "SIMP", "f_max": [1.0, 2.0], "p": [1.0, 3.0]}', &
+         '{"type": "RAMP", "f_max": [1.0, 2.0], "q": [1.0, 3.0]}', &
+         '{"type": "Borrvall_Petersson", "f_max": [1.0, 2.0], ' // &
+         '"q": [1.0, 3.0]}', &
+         '{"type": "heaviside_mapping", "beta": [1.0, 2.0]}', &
+         '{"type": "PDE_filter", "r": [0.1, 0.2]}']
+    !> The number of parameters each of them registers.
+    integer, parameter :: n_continued(6) = [1, 2, 2, 2, 1, 1]
+    type(mesh_t) :: msh
+    type(space_t) :: Xh
+    type(dofmap_t) :: dof
+    type(gs_t) :: gs
+    type(coef_t), target :: coef
+    class(mapping_t), allocatable :: map
+    type(json_file) :: json_root, json
+    integer :: n_registered(6), n_freed(6)
+    integer :: i, ierr
+
+    call MPI_Comm_dup(this%getMpiCommunicator(), NEKO_COMM%mpi_val, ierr)
+    pe_rank = this%getProcessRank()
+    pe_size = this%getNumProcesses()
+
+    call build_fixture(1, msh, Xh, dof, gs, coef)
+    call neko_scratch_registry%init(dof = dof)
+    call neko_registry%init()
+    call json_root%initialize()
+
+    do i = 1, size(mapping_json)
+       ! Each mapping is checked on its own, whatever the one before left.
+       call nekotop_continuation%init(json_root)
+
+       call json%initialize()
+       call json%load_from_string(trim(mapping_json(i)))
+       call mapping_factory(map, json, coef)
+       n_registered(i) = nekotop_continuation%get_n_params()
+
+       call map%free()
+       deallocate(map)
+       n_freed(i) = nekotop_continuation%get_n_params()
+       call json%destroy()
+    end do
+
+    call nekotop_continuation%free()
+    call json_root%destroy()
+    call neko_scratch_registry%free()
+    call neko_registry%free()
+    call free_fixture(msh, Xh, dof, gs, coef)
+
+    do i = 1, size(mapping_json)
+       @assertEqual(n_continued(i), n_registered(i), trim(mapping_json(i)))
+       @assertEqual(0, n_freed(i), trim(mapping_json(i)))
+    end do
+
+  end subroutine test_mappings_deregister_on_free
 
 end module mapping_pde_filter_lifecycle

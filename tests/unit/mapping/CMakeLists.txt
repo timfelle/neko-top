@@ -16,7 +16,7 @@
 # mapping_pde_filter_lifecycle: a filter re-initialised on other coefficients
 # uses them, a preconditioner the filter cannot initialise is rejected, and a
 # continuation step after the filter is re-initialised reaches the new filter
-# only.
+# only. Every mapping deregisters its continued parameters when it is freed.
 
 set(CMAKE_FOLDER "Tests/Unit/Mapping")
 

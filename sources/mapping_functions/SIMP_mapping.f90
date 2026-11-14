@@ -109,6 +109,9 @@ contains
   subroutine SIMP_mapping_free(this)
     class(SIMP_mapping_t), intent(inout) :: this
 
+    ! The scheduler must not update a parameter of a freed mapping.
+    call nekotop_continuation%deregister(this%f_max)
+    call nekotop_continuation%deregister(this%p)
     call this%free_base()
 
   end subroutine SIMP_mapping_free

@@ -101,6 +101,8 @@ contains
   subroutine linear_mapping_free(this)
     class(linear_mapping_t), intent(inout) :: this
 
+    ! The scheduler must not update a parameter of a freed mapping.
+    call nekotop_continuation%deregister(this%f_max)
     call this%free_base()
 
   end subroutine linear_mapping_free

@@ -124,6 +124,8 @@ contains
   subroutine heaviside_mapping_free(this)
     class(heaviside_mapping_t), intent(inout) :: this
 
+    ! The scheduler must not update a parameter of a freed mapping.
+    call nekotop_continuation%deregister(this%beta)
     call this%free_base()
   end subroutine heaviside_mapping_free
 
