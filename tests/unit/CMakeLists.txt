@@ -34,7 +34,7 @@ find_package(PFUNIT REQUIRED HINTS ${PFUNIT_DIR})
 add_custom_target(Unit COMMENT "Build all unit tests.")
 set_target_properties(Unit PROPERTIES
     FOLDER "Tests/Unit"
-    EXCLUDE_FROM_ALL $<IF:$<BOOL:BUILD_TESTING>,FALSE,TRUE>
+    EXCLUDE_FROM_ALL $<IF:$<BOOL:${BUILD_TESTING}>,FALSE,TRUE>
 )
 add_dependencies(Tests Unit)
 

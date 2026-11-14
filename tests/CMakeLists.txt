@@ -10,7 +10,7 @@ add_custom_target(Tests
     DEPENDS neko-top
 )
 set_target_properties(Tests PROPERTIES
-    EXCLUDE_FROM_ALL $<IF:$<BOOL:BUILD_TESTING>,FALSE,TRUE>
+    EXCLUDE_FROM_ALL $<IF:$<BOOL:${BUILD_TESTING}>,FALSE,TRUE>
     FOLDER "Tests"
 )
 
