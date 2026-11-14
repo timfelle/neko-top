@@ -139,6 +139,7 @@ fi
 
 if [ "$NEKO" == true ]; then
     source $MAIN_DIR/scripts/dependencies.sh
+    check_system_dependencies
     find_neko $NEKO_DIR
     if [ ! -d "$NEKO_DIR/examples" ]; then
         printf >&2 "\e[1;31mInvalid Neko directory:\e[m $NEKO_DIR\n"

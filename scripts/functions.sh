@@ -179,6 +179,7 @@ function prepare {
     # Ensure the environment is set up
 
     source $MAIN_DIR/scripts/dependencies.sh
+    check_system_dependencies
     find_json_fortran
     find_neko
 

@@ -128,6 +128,7 @@ source $MAIN_DIR/scripts/meshing.sh
 
 if [ "$BOX" == "true" ]; then
     # Create the box mesh using Neko genmeshbox
+    check_system_dependencies
     find_neko $NEKO_DIR
 
     [ -z "$OUTPUT_FILE" ] && OUTPUT_FILE="box.nmsh"

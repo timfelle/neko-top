@@ -72,6 +72,7 @@ MAIN_DIR=$(realpath $(dirname $0)/../)
 [ -f "$MAIN_DIR/prepare.env" ] && source "$MAIN_DIR/prepare.env"
 [ -z "$EXTERNAL_DIR" ] && export EXTERNAL_DIR="$MAIN_DIR/external"
 source "$MAIN_DIR/scripts/dependencies.sh"
+check_system_dependencies
 find_neko
 
 set +e # Continue execution even if individual tests fail
