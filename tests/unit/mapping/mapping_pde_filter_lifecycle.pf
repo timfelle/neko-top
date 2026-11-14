@@ -15,7 +15,9 @@
 !      Freeing the filter deregisters it, so that a continuation step taken
 !      after the filter is deallocated and initialised anew does not write to
 !      the deallocated filter, and reaches the new one. Run under valgrind, a
-!      write to the deallocated filter shows as an invalid write.
+!      write to the deallocated filter shows as an invalid write. A live
+!      filter re-initialised from JSON replaces its registration rather than
+!      adding a second, and one re-initialised from attributes removes it.
 !   4. Every mapping, the filter among them, deregisters the parameters it
 !      registered for continuation when it is freed.
 !
@@ -377,7 +379,9 @@ contains
   !> A continuation step taken after the filter whose radius it continues
   !! was deallocated and initialised anew updates the new filter only, and
   !! the new filter solves with the stepped radius. An unrelated parameter
-  !! registered before the filter keeps being continued.
+  !! registered before the filter keeps being continued. Re-initialising
+  !! the live filter, which frees it first, replaces or removes the
+  !! registration of its radius.
   @test(npes=[1])
   subroutine test_continuation_after_reinit(this)
     class(test_pde_filter_lifecycle), intent(inout) :: this
@@ -391,7 +395,7 @@ contains
     type(json_file) :: json_root, json_a, json_b, json_ref
     type(field_t) :: u, f, g
     real(kind=rp), target :: other
-    integer :: n_init, n_freed, n_reinit
+    integer :: n_init, n_freed, n_reinit, n_live, n_attr
     character(len=32) :: first_name
     real(kind=rp) :: r_stepped, other_stepped, d
     integer :: ierr
@@ -430,6 +434,11 @@ contains
     n_reinit = nekotop_continuation%get_n_params()
     first_name = nekotop_continuation%get_param_name(1)
 
+    ! Re-initialised from JSON while live, without freeing first: the radius
+    ! registration is replaced, not duplicated.
+    call map%init(json_b, coef)
+    n_live = nekotop_continuation%get_n_params()
+
     call nekotop_continuation%update(2)
     r_stepped = map%r
     other_stepped = other
@@ -444,6 +453,14 @@ contains
     call ref%init(json_ref, coef)
     call ref%forward_mapping(g, u)
     d = max_abs_diff(f, g)
+
+    ! Re-initialised from attributes while live, without freeing first:
+    ! nothing is registered from attributes, so the radius registration is
+    ! removed. Done after the filter was applied, so that the comparison
+    ! above shows the stepped radius, not this one, reaching the solve.
+    call map%init_from_attributes(coef, 0.5_rp, filter_tol, &
+         filter_max_iter, "cg", "jacobi", .false.)
+    n_attr = nekotop_continuation%get_n_params()
 
     call u%free()
     call f%free()
@@ -463,6 +480,9 @@ contains
     @assertEqual(2, n_init, 'Parameters registered with the first filter')
     @assertEqual(1, n_freed, 'Parameters registered once it was freed')
     @assertEqual(2, n_reinit, 'Parameters registered with the second filter')
+    @assertEqual(2, n_live, &
+         'Parameters registered after a live re-initialisation')
+    @assertEqual(1, n_attr, 'Parameters registered after init_from_attributes')
     @assertEqual('other', trim(first_name), 'First registered parameter')
     @assertEqual(0.5_rp, r_stepped, 'Radius of the new filter after the step')
     @assertEqual(2.0_rp, other_stepped, 'Other parameter after the step')
