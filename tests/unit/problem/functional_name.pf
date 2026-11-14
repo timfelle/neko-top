@@ -187,6 +187,22 @@ contains
     @assertEqual(expected, header)
   end subroutine header_outgrows_old_buffers
 
+  !> A name of 600 characters, ten times `LONG_NAME`, still arrives in full
+  !! rather than being cut at the 256-character buffer `get_log_headers` is
+  !! filled into.
+  @test(npes=[1])
+  subroutine header_outgrows_256_character_buffer(this)
+    class(test_functional_name_case), intent(inout) :: this
+    character(len=*), parameter :: name = LONG_NAME // LONG_NAME // &
+         LONG_NAME // LONG_NAME // LONG_NAME // LONG_NAME // LONG_NAME // &
+         LONG_NAME // LONG_NAME // LONG_NAME
+    character(len=:), allocatable :: header, expected
+
+    expected = expected_header(name)
+    header = problem_header(name)
+    @assertEqual(expected, header)
+  end subroutine header_outgrows_256_character_buffer
+
   !> A short name leaves at least the room every header had before names
   !! were unbounded, 128 characters, so a long suffix chosen by a
   !! user-defined objective still arrives in full.

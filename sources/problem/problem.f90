@@ -1012,14 +1012,16 @@ contains
   subroutine problem_append_log_headers(buff, functional)
     character(len=:), allocatable, intent(inout) :: buff
     class(base_functional_t), intent(in) :: functional
-    integer, parameter :: width = 256
-    character(len=width), allocatable :: headers(:)
-    integer :: j, n
+    integer, parameter :: min_width = 256
+    integer, parameter :: suffix_len = 32
+    character(len=:), allocatable :: headers(:)
+    integer :: j, n, width
 
     n = functional%get_log_size()
     if (n .lt. 1) return
 
-    allocate(headers(n))
+    width = max(min_width, len(functional%get_name()) + suffix_len)
+    allocate(character(len=width) :: headers(n))
     call functional%get_log_headers(headers)
 
     do j = 1, n
