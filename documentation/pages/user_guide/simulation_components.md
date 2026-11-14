@@ -70,18 +70,21 @@ since the fluid is then only frozen once the scalar has converged too.
 
 ### Parameters
 
-| Parameter         | Type         | Default   | Description                                                                       |
-| ----------------- | ------------ | --------- | --------------------------------------------------------------------------------- |
-| `type`            | string       | -         | Must be `"steady"`.                                                               |
-| `tol`             | real         | `1e-6`    | Convergence threshold for the field-increment norm.                               |
-| `log_frequency`   | integer      | `50`      | Write cadence (in timesteps) for convergence diagnostics.                         |
-| `scalar_coupled`  | bool         | `false`   | If `true`, require both fluid and scalar convergence before freezing fluid.       |
-| `compute_control` | string       | inherited | Standard Neko simulation-component scheduling control. Typical value: `"tsteps"`. |
-| `compute_value`   | integer/real | inherited | Scheduling interval/value associated with `compute_control`. Typical value: `1`.  |
+| Parameter         | Type         | Default                   | Description                                                                       |
+| ----------------- | ------------ | ------------------------- | --------------------------------------------------------------------------------- |
+| `type`            | string       | -                         | Must be `"steady"`.                                                               |
+| `name`            | string       | `"steady"`                | Name of the component, unique among the case's simulation components.             |
+| `tol`             | real         | `1e-6`                    | Convergence threshold for the field-increment norm.                               |
+| `log_frequency`   | integer      | `50`                      | Write cadence (in timesteps) for convergence diagnostics.                         |
+| `scalar_coupled`  | bool         | `false`                   | If `true`, require both fluid and scalar convergence before freezing fluid.       |
+| `output_filename` | string       | `"steady_state_data.csv"` | File the convergence diagnostics are written to.                                  |
+| `compute_control` | string       | inherited                 | Standard Neko simulation-component scheduling control. Typical value: `"tsteps"`. |
+| `compute_value`   | integer/real | inherited                 | Scheduling interval/value associated with `compute_control`. Typical value: `1`.  |
 
 ### Output
 
-The component writes convergence data to `steady_state_data.csv` with header:
+The component writes convergence data to `output_filename`, by default
+`steady_state_data.csv`, with header:
 
 `iter,time,u,v,w,p,scalar`
 
@@ -89,6 +92,13 @@ where each field column is the normed increment at that logging point.
 Rows continue after the fluid is frozen, so the scalar column follows the
 scalar to the end of the run. In those rows `u`, `v`, `w` and `p` are exactly
 zero, the increment of a frozen field.
+
+Rows are appended to the file if it already exists, so runs that share a
+working directory, such as tests run in parallel, need an `output_filename`
+each to keep their data apart. A case with more than one `steady` component
+must give each a distinct `name`, as Neko requires of simulation components,
+and should give each its own `output_filename` too: the default is the same
+file for all of them.
 
 ### Limitations
 

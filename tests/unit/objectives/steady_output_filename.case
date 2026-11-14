@@ -1,0 +1,102 @@
+{
+    "version": 1.0,
+    "case": {
+        "mesh_file": "../box.nmsh",
+        "output_checkpoints": false,
+        "output_at_end": false,
+        "output_boundary": false,
+        "time": {
+            "end_time": 0.06,
+            "timestep": 0.01
+        },
+        "numerics": {
+            "time_order": 3,
+            "polynomial_order": 3,
+            "dealias": false
+        },
+        "fluid": {
+            "scheme": "pnpn",
+            "Re": 5.0,
+            "output_control": "never",
+            "initial_condition": {
+                "type": "uniform",
+                "value": [
+                    0.0,
+                    0.0,
+                    0.0
+                ]
+            },
+            "velocity_solver": {
+                "type": "cg",
+                "preconditioner": {
+                    "type": "jacobi"
+                },
+                "absolute_tolerance": 1e-09,
+                "max_iterations": 800
+            },
+            "pressure_solver": {
+                "type": "gmres",
+                "preconditioner": {
+                    "type": "hsmg"
+                },
+                "absolute_tolerance": 1e-08,
+                "max_iterations": 800
+            },
+            "boundary_conditions": [
+                {
+                    "type": "velocity_value",
+                    "value": [
+                        1.0,
+                        0.0,
+                        0.0
+                    ],
+                    "zone_indices": [
+                        1
+                    ]
+                },
+                {
+                    "type": "outflow",
+                    "zone_indices": [
+                        2
+                    ]
+                },
+                {
+                    "type": "no_slip",
+                    "zone_indices": [
+                        3,
+                        4,
+                        5,
+                        6
+                    ]
+                }
+            ]
+        },
+        "simulation_components": [
+            {
+                "type": "steady",
+                "name": "steady_first",
+                "tol": 1e-12,
+                "compute_control": "tsteps",
+                "compute_value": 1,
+                "log_frequency": 1,
+                "output_filename": "steady_first.csv"
+            },
+            {
+                "type": "steady",
+                "name": "steady_second",
+                "tol": 1e-12,
+                "compute_control": "tsteps",
+                "compute_value": 1,
+                "log_frequency": 2,
+                "output_filename": "steady_second.csv"
+            },
+            {
+                "type": "steady",
+                "tol": 1e-12,
+                "compute_control": "tsteps",
+                "compute_value": 1,
+                "log_frequency": 3
+            }
+        ]
+    }
+}

@@ -386,6 +386,30 @@ The check is a separate test, `check_steady_log.cmake` run as a fixture of
 the case's own test, because the warnings only exist in the log. The driver
 has no handle on the simulation component that issues them.
 
+## `steady_output_filename`
+
+The `steady` component's output file. The case has three `steady`
+components, run on the plain Neko-TOP driver (`sources/drivers/neko.f90`)
+with a `tol` that none of them reaches in the six steps the run takes. Two
+name their files in `output_filename`: `steady_first.csv`, with a row every
+step, and `steady_second.csv`, with one every second step. The third names
+none and writes every third step. `check_steady_output_filename.cmake` runs
+the case and requires each file to hold exactly one header, so that it had a
+single writer, and the rows of the component that named it, 6, 3 and 2. The
+third file must be `steady_state_data.csv`, the default.
+
+The run has a directory of its own, `steady_output_filename/` in the build
+tree, since the other `steady` cases here write the default file too, and it
+reads the mesh from the directory above. The files are removed before the
+run, as the component appends to a file that already exists.
+
+The check was seen to fail three ways. Against the code before
+`output_filename` was added, the run itself aborts: the component had no
+`name`, so a second one fails Neko's requirement that simulation components
+have distinct names. With `name` read but `output_filename` still ignored,
+both named files are missing and `steady_state_data.csv` holds three headers
+and 11 rows. With the default changed, the default file is missing.
+
 ## Choosing window boundaries in new cases
 
 Prefer a closed `end_time` strictly inside the run rather than exactly equal

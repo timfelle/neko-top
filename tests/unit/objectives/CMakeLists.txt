@@ -157,6 +157,34 @@ add_steady_log_check(steady_unsteady_converged 2 0 2 2.00000E+01)
 add_steady_log_check(steady_scalar_unconverged_simtime 2 2 0 2.40000E+00)
 
 # ============================================================================ #
+# Output file check: two `steady` components that name their files write one
+# each, and one that names none writes the default `steady_state_data.csv`.
+# The case runs on the plain Neko-TOP driver, in a directory of its own, since
+# the other `steady` cases here write the default file too. It takes six steps.
+add_executable(plain_neko_bin EXCLUDE_FROM_ALL
+    ${Neko-TOP_SOURCE_DIR}/sources/drivers/neko.f90
+)
+target_link_libraries(plain_neko_bin PRIVATE Neko-TOP::neko-top)
+add_dependencies(Unit plain_neko_bin)
+
+set(STEADY_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/steady_output_filename)
+file(MAKE_DIRECTORY ${STEADY_OUTPUT_DIR})
+
+add_test(NAME steady_output_filename
+    COMMAND ${CMAKE_COMMAND}
+        -DDRIVER=$<TARGET_FILE:plain_neko_bin>
+        -DCASE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/steady_output_filename.case
+        -DSTEPS=6
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/check_steady_output_filename.cmake
+    WORKING_DIRECTORY ${STEADY_OUTPUT_DIR}
+)
+set_tests_properties(steady_output_filename PROPERTIES
+    LABELS "objectives;unit"
+    ENVIRONMENT "NEKO_LOG_FILE=steady_output_filename.log"
+    TIMEOUT 120
+)
+
+# ============================================================================ #
 # Run-length check: a run whose end_time lies on a step boundary must stop
 # there, on the steady and the unsteady path alike. The case file is copied
 # by the loop above.

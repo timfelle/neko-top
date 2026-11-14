@@ -55,6 +55,10 @@ module steady_simcomp
   private
   public :: steady_simcomp_allocate
 
+  !> The file the convergence data are written to, unless another is named.
+  character(len=*), parameter :: default_output_filename = &
+       'steady_state_data.csv'
+
   !> The `steady_simcomp_t` type is a simulation component that terminates a
   !! simulation when the normed difference between the old and new fields is
   !! below a certain tolerance. This allow us to compute steady-state solutions
@@ -64,6 +68,11 @@ module steady_simcomp
   !! still followed, and a warning is issued when the fluid is frozen while
   !! the scalar has not converged, as well as at the end of such a run if it
   !! still has not.
+  !!
+  !! The convergence data are written to `output_filename`, by default
+  !! `steady_state_data.csv`, and appended if the file exists. A case with
+  !! more than one such component must give each a distinct `name`, and
+  !! should give each its own `output_filename`.
   type, public, extends(simulation_component_t) :: steady_simcomp_t
      private
 
@@ -112,31 +121,45 @@ contains
     allocate(steady_simcomp_t::obj)
   end subroutine steady_simcomp_allocate
 
-  ! Constructor from json.
+  !> Constructor from json.
+  !! @param json The JSON object describing the component.
+  !! @param case The case the component belongs to.
   subroutine steady_simcomp_init_from_json(this, json, case)
     class(steady_simcomp_t), intent(inout), target :: this
     type(json_file), intent(inout) :: json
     class(case_t), intent(inout), target :: case
     real(kind=dp) :: tol
     integer :: log_frequency
+    character(len=:), allocatable :: output_filename
 
     call this%init_base(json, case)
 
+    ! Read the name, which must be unique among the simulation components
+    call json_get_or_default(json, "name", this%name, "steady")
     ! Read the tolerance
     call json_get_or_default(json, "tol", tol, 1.0e-6_dp)
     ! Read the log frequency
     call json_get_or_default(json, "log_frequency", log_frequency, 50)
     call json_get_or_default(json, "scalar_coupled", this%scalar_coupled, .false.)
+    ! Read the file the convergence data are written to
+    call json_get_or_default(json, "output_filename", output_filename, &
+         default_output_filename)
 
-    call this%init_from_attributes(tol, log_frequency)
+    call this%init_from_attributes(tol, log_frequency, output_filename)
 
   end subroutine steady_simcomp_init_from_json
 
-  ! Actual constructor.
-  subroutine steady_simcomp_init_from_attributes(this, tol, log_frequency)
+  !> Actual constructor.
+  !! @param tol The tolerance on the normed increments.
+  !! @param log_frequency The number of time steps between logged rows.
+  !! @param output_filename The file the convergence data are written to, by
+  !! default `steady_state_data.csv`.
+  subroutine steady_simcomp_init_from_attributes(this, tol, log_frequency, &
+       output_filename)
     class(steady_simcomp_t), intent(inout) :: this
     real(kind=dp), intent(in) :: tol
     integer, intent(in) :: log_frequency
+    character(len=*), intent(in), optional :: output_filename
 
     this%tol = tol
     this%log_frequency = log_frequency
@@ -155,7 +178,11 @@ contains
     end if
 
     ! initialize the logger
-    call this%logger%init('steady_state_data.csv')
+    if (present(output_filename)) then
+       call this%logger%init(output_filename)
+    else
+       call this%logger%init(default_output_filename)
+    end if
     call this%logger%set_header('iter,time,u,v,w,p,scalar')
     call this%log_data%init(7)
 
@@ -389,7 +416,7 @@ contains
 
   end function steady_simcomp_is_last_compute
 
-  !> Write one row of `steady_state_data.csv`.
+  !> Write one row of the convergence data.
   !! @param tstep The time step.
   !! @param t The time.
   !! @param fluid The normed increments of `u`, `v`, `w` and `p`.
