@@ -138,7 +138,8 @@ contains
     character(len=:), allocatable :: ksp_solver, precon_type
     logical :: strict_convergence
 
-    ! Freed first, as freeing clears the base, which is set up below.
+    ! Freed first, as freeing deregisters the radius and clears the base,
+    ! which are both set up below.
     call this%free()
 
     call nekotop_continuation%json_get_or_register(json, 'r', this%r, r)
@@ -237,6 +238,9 @@ contains
   !! @param this The filter.
   subroutine PDE_filter_free(this)
     class(PDE_filter_t), intent(inout) :: this
+
+    ! The scheduler must not update the radius of a freed filter.
+    call nekotop_continuation%deregister(this%r)
 
     if (allocated(this%Ax)) then
        call this%Ax%free()
