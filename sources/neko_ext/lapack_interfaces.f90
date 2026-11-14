@@ -33,22 +33,35 @@
 !! POSSIBILITY OF SUCH DAMAGE.
 
 module lapack_interfaces
-  use num_types, only: rp
+  use num_types, only: sp, dp
 
   implicit none
   private
 
-  public :: dgesv
+  public :: gesv, sgesv, dgesv
 
-  interface
-     pure subroutine dgesv(n, nrhs, a, lda, ipiv, b, ldb, info)
-       import :: rp
+  !> Solve a dense linear system with LAPACK in the precision of its
+  !! arguments, with sgesv in single and dgesv in double precision. The
+  !! right-hand sides are a single array of ldb * nrhs entries, so that the
+  !! generic also matches a right-hand side that is a vector.
+  interface gesv
+     pure subroutine sgesv(n, nrhs, a, lda, ipiv, b, ldb, info)
+       import :: sp
        integer, intent(in) :: n, nrhs, lda, ldb
-       real(kind=rp), intent(inout), dimension(lda, n) :: a
+       real(kind=sp), intent(inout), dimension(lda, n) :: a
        integer, intent(out), dimension(n) :: ipiv
-       real(kind=rp), intent(inout), dimension(ldb, nrhs) :: b
+       real(kind=sp), intent(inout), dimension(ldb * nrhs) :: b
+       integer, intent(out) :: info
+     end subroutine sgesv
+
+     pure subroutine dgesv(n, nrhs, a, lda, ipiv, b, ldb, info)
+       import :: dp
+       integer, intent(in) :: n, nrhs, lda, ldb
+       real(kind=dp), intent(inout), dimension(lda, n) :: a
+       integer, intent(out), dimension(n) :: ipiv
+       real(kind=dp), intent(inout), dimension(ldb * nrhs) :: b
        integer, intent(out) :: info
      end subroutine dgesv
-  end interface
+  end interface gesv
 
 end module lapack_interfaces

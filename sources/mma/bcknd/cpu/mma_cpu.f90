@@ -32,7 +32,7 @@
 !! POSSIBILITY OF SUCH DAMAGE.
 
 submodule (mma) mma_cpu
-  use lapack_interfaces, only: dgesv
+  use lapack_interfaces, only: gesv
   use mpi_f08, only: MPI_IN_PLACE, MPI_MAX, MPI_MIN
   use comm, only: neko_comm, pe_rank, mpi_real_precision
   use math, only: NEKO_EPS
@@ -486,7 +486,7 @@ contains
     real(kind=rp), dimension(this%m+1, this%m+1) :: AA
     real(kind=rp), dimension(this%m * this%m) :: AA_buffer
 
-    ! using DGESV in lapack to solve
+    ! using gesv in lapack to solve
     ! the linear system which needs the following parameters
     integer :: info
     integer, dimension(this%m+1) :: ipiv
@@ -699,10 +699,10 @@ contains
           AA(this%m+1, 1:this%m) = this%a%x
           AA(this%m+1, this%m+1) = - zeta/z
 
-          call DGESV(this%m + 1, 1, AA, this%m + 1, ipiv, bb, this%m + 1, info)
+          call gesv(this%m + 1, 1, AA, this%m + 1, ipiv, bb, this%m + 1, info)
 
           if (info .ne. 0) then
-             call neko_error("DGESV failed to solve the linear system in " // &
+             call neko_error("gesv failed to solve the linear system in " // &
                   "mma_subsolve_pdip.")
           end if
 
@@ -902,7 +902,7 @@ contains
     real(kind=rp) :: Hesstrace
 
 
-    ! using DGESV in lapack to solve
+    ! using gesv in lapack to solve
     ! the linear system which needs the following parameters
     integer :: info
     integer, dimension(this%m+1) :: ipiv
@@ -1066,11 +1066,11 @@ contains
                     max(-1.0e-4_rp*Hesstrace/this%m, 1.0e-7_rp)
             end do
 
-            call DGESV(this%m , 1, Hess, this%m , ipiv, &
+            call gesv(this%m , 1, Hess, this%m , ipiv, &
                  gradlambda, this%m, info)
 
             if (info .ne. 0) then
-               call neko_error("DGESV failed to solve the linear system in " // &
+               call neko_error("gesv failed to solve the linear system in " // &
                     "mma_subsolve_dip.")
             end if
             dlambda = gradlambda

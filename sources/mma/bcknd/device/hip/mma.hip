@@ -48,6 +48,41 @@
 #include <neko/math/bcknd/device/device_mpi_reduce.h>
 #include <neko/math/bcknd/device/device_mpi_op.h>
 
+// LU factorisation of the n x n matrix A, and the solve with it for the
+// right-hand side b, in the working precision: the overloads for float call
+// the S routines of hipSOLVER and those for double the D routines.
+inline hipsolverStatus_t mma_getrf_bufferSize(hipsolverDnHandle_t handle,
+    int n, float* A, int* lwork) {
+  return hipsolverDnSgetrf_bufferSize(handle, n, n, A, n, lwork);
+}
+
+inline hipsolverStatus_t mma_getrf_bufferSize(hipsolverDnHandle_t handle,
+    int n, double* A, int* lwork) {
+  return hipsolverDnDgetrf_bufferSize(handle, n, n, A, n, lwork);
+}
+
+inline hipsolverStatus_t mma_getrf(hipsolverDnHandle_t handle, int n,
+    float* A, float* work, int* ipiv, int* info) {
+  return hipsolverDnSgetrf(handle, n, n, A, n, work, ipiv, info);
+}
+
+inline hipsolverStatus_t mma_getrf(hipsolverDnHandle_t handle, int n,
+    double* A, double* work, int* ipiv, int* info) {
+  return hipsolverDnDgetrf(handle, n, n, A, n, work, ipiv, info);
+}
+
+inline hipsolverStatus_t mma_getrs(hipsolverDnHandle_t handle, int n,
+    float* A, int* ipiv, float* b, int* info) {
+  return hipsolverDnSgetrs(handle, HIPSOLVER_OP_N, n, 1, A, n, ipiv, b, n,
+                           info);
+}
+
+inline hipsolverStatus_t mma_getrs(hipsolverDnHandle_t handle, int n,
+    double* A, int* ipiv, double* b, int* info) {
+  return hipsolverDnDgetrs(handle, HIPSOLVER_OP_N, n, 1, A, n, ipiv, b, n,
+                           info);
+}
+
 // Local includes
 #include "mma_kernel.h"
 
@@ -91,25 +126,24 @@ void hipSOLVER_wrapper(void* A, void* b, int n, int* jj) {
     }
 
     int lwork;
-    double *workspace;
+    real *workspace;
     int *ipiv;
     int *info;  // Device pointer for hipSOLVER info
     int host_info = 0;  // Host variable to store the info
 
     // Workspace query
-    status = hipsolverDnDgetrf_bufferSize(handle, n, n, (double*)A, n, &lwork);
+    status = mma_getrf_bufferSize(handle, n, (real*)A, &lwork);
     if (status != HIPSOLVER_STATUS_SUCCESS) {
         hipsolverDnDestroy(handle);
         *jj = -1;
         return;
     }
-    HIP_CHECK(hipMalloc(&workspace, lwork * sizeof(double)));
+    HIP_CHECK(hipMalloc(&workspace, lwork * sizeof(real)));
     HIP_CHECK(hipMalloc(&ipiv, n * sizeof(int)));
     HIP_CHECK(hipMalloc(&info, sizeof(int)));
 
     // LU factorization and solve
-    status = hipsolverDnDgetrf(handle, n, n, (double*)A, n, workspace, ipiv,
-                               info);
+    status = mma_getrf(handle, n, (real*)A, workspace, ipiv, info);
 
     // Copy info from device to host to check if factorization succeeded.
     // A failed call may leave info unwritten, so it is reported as -1.
@@ -122,8 +156,7 @@ void hipSOLVER_wrapper(void* A, void* b, int n, int* jj) {
 
     if (host_info == 0) {
         // Only solve if factorization was successful
-        status = hipsolverDnDgetrs(handle, HIPSOLVER_OP_N, n, 1, (double*)A, n,
-                                   ipiv, (double*)b, n, info);
+        status = mma_getrs(handle, n, (real*)A, ipiv, (real*)b, info);
         // Copy the final info value
         HIP_CHECK(hipMemcpyAsync(&host_info, info, sizeof(int),
                                  hipMemcpyDeviceToHost, stream));

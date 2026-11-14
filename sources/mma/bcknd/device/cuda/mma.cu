@@ -48,6 +48,39 @@
 #include <neko/math/bcknd/device/device_mpi_reduce.h>
 #include <neko/math/bcknd/device/device_mpi_op.h>
 
+// LU factorisation of the n x n matrix A, and the solve with it for the
+// right-hand side b, in the working precision: the overloads for float call
+// the S routines of cuSOLVER and those for double the D routines.
+inline cusolverStatus_t mma_getrf_bufferSize(cusolverDnHandle_t handle,
+    int n, float* A, int* lwork) {
+  return cusolverDnSgetrf_bufferSize(handle, n, n, A, n, lwork);
+}
+
+inline cusolverStatus_t mma_getrf_bufferSize(cusolverDnHandle_t handle,
+    int n, double* A, int* lwork) {
+  return cusolverDnDgetrf_bufferSize(handle, n, n, A, n, lwork);
+}
+
+inline cusolverStatus_t mma_getrf(cusolverDnHandle_t handle, int n,
+    float* A, float* work, int* ipiv, int* info) {
+  return cusolverDnSgetrf(handle, n, n, A, n, work, ipiv, info);
+}
+
+inline cusolverStatus_t mma_getrf(cusolverDnHandle_t handle, int n,
+    double* A, double* work, int* ipiv, int* info) {
+  return cusolverDnDgetrf(handle, n, n, A, n, work, ipiv, info);
+}
+
+inline cusolverStatus_t mma_getrs(cusolverDnHandle_t handle, int n,
+    float* A, int* ipiv, float* b, int* info) {
+  return cusolverDnSgetrs(handle, CUBLAS_OP_N, n, 1, A, n, ipiv, b, n, info);
+}
+
+inline cusolverStatus_t mma_getrs(cusolverDnHandle_t handle, int n,
+    double* A, int* ipiv, double* b, int* info) {
+  return cusolverDnDgetrs(handle, CUBLAS_OP_N, n, 1, A, n, ipiv, b, n, info);
+}
+
 // Local includes
 #include "mma_kernel.h"
 
@@ -180,25 +213,24 @@ extern "C" {
     }
 
     int lwork;
-    double* workspace;
+    real* workspace;
     int* ipiv;
     int* info;  // Device pointer for cuSOLVER info
     int host_info = 0;  // Host variable to store the info
 
     // Workspace query
-    status = cusolverDnDgetrf_bufferSize(handle, n, n, (double*)A, n, &lwork);
+    status = mma_getrf_bufferSize(handle, n, (real*)A, &lwork);
     if (status != CUSOLVER_STATUS_SUCCESS) {
         cusolverDnDestroy(handle);
         *jj = -1;
         return;
     }
-    CUDA_CHECK(cudaMalloc(&workspace, lwork * sizeof(double)));
+    CUDA_CHECK(cudaMalloc(&workspace, lwork * sizeof(real)));
     CUDA_CHECK(cudaMalloc(&ipiv, n * sizeof(int)));
     CUDA_CHECK(cudaMalloc(&info, sizeof(int)));
 
     // LU factorization and solve
-    status = cusolverDnDgetrf(handle, n, n, (double*)A, n, workspace, ipiv,
-                              info);
+    status = mma_getrf(handle, n, (real*)A, workspace, ipiv, info);
 
     // Copy info from device to host to check if factorization succeeded.
     // A failed call may leave info unwritten, so it is reported as -1.
@@ -211,8 +243,7 @@ extern "C" {
 
     if (host_info == 0) {
         // Only solve if factorization was successful
-        status = cusolverDnDgetrs(handle, CUBLAS_OP_N, n, 1, (double*)A, n,
-                                  ipiv, (double*)b, n, info);
+        status = mma_getrs(handle, n, (real*)A, ipiv, (real*)b, info);
         // Copy the final info value
         CUDA_CHECK(cudaMemcpyAsync(&host_info, info, sizeof(int),
                                    cudaMemcpyDeviceToHost, stream));
