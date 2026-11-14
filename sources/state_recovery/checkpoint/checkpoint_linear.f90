@@ -100,9 +100,13 @@ contains
   !! checkpoint from disc and then we step forward in time to fill our cache.
   !! Finally, we copy the requested time step from our cache.
   !! @details The steps forward repeat those of the forward run, without the
-  !! simulation components' `compute` and the output, see
-  !! `checkpoint_recompute_step`. The fluid is frozen in them as it was in
-  !! the forward run.
+  !! simulation components' `compute`, the user's `compute` and the output,
+  !! see `checkpoint_recompute_step`. The fluid is frozen in them as it was in
+  !! the forward run. The case is restarted from the checkpoint file at the
+  !! time step of the file, so that the schedules in time steps of the
+  !! simulation components restart from it.
+  !! @param this The checkpoint object.
+  !! @param tstep The time step to restore.
   module subroutine checkpoint_restore_linear(this, tstep)
     class(state_recover_checkpoint_t), intent(inout) :: this
     integer, intent(in) :: tstep
@@ -132,11 +136,14 @@ contains
        call profiler_start_region("Checkpoint read from disk")
        call this%chkp_output%file_%read(this%neko_case%chkp)
        call profiler_end_region("Checkpoint read from disk")
+
+       ! The checkpoint file holds no time step, and the restart anchors the
+       ! schedules in time steps at the current one, so it is set first
+       this%neko_case%time%tstep = previous_save
        call simulation_restart(this%neko_case, this%neko_case%chkp)
 
-       ! Initialize the time step controller and set the time step
+       ! Initialize the time step controller
        call dt_controller%init(this%neko_case%params)
-       this%neko_case%time%tstep = previous_save
        this%loaded_checkpoint = this%neko_case%time%tstep
 
        call profiler_start_region("Checkpoint recompute")
@@ -173,9 +180,25 @@ contains
   !! `steady` component, which compares the state with the one it last
   !! computed on, would freeze the fluid on finding a state it has seen
   !! already. The freezes of the forward run are set by the caller instead.
+  !! Any other result of a `compute` that the next step reads is stale in
+  !! the recompute.
+  !!
   !! What prepares the step, the user's and the simulation components'
-  !! `preprocess`, is part of it, for instance the eddy viscosity of an LES
-  !! model, and runs again.
+  !! `preprocess`, runs again. An LES model, for one, computes there the eddy
+  !! viscosity the turbulent diffusivity of a scalar can depend on, through
+  !! `alphat.nut_dependency`. In the fluid an eddy viscosity needs the full
+  !! stress formulation, which the adjoint rejects. The user's `preprocess`
+  !! must depend on the time state, not on how often it is called. A
+  !! component's schedule in time steps is restarted from the checkpoint
+  !! file's time step, so it is that of the forward run with a value of 1 or
+  !! one that divides that time step, and is shifted against it otherwise.
+  !! Neko's LPT component advances its particles in its `preprocess`, so they
+  !! are advanced once more. They do not act on the flow, but their state
+  !! means nothing after the backward sweep.
+  !!
+  !! Newer versions of Neko also fit the time step to the next output time in
+  !! `simulation_step` (`land`), with `exact_output_time`, which requires a
+  !! variable time step. Unsteady problems reject one, so that is left out.
   !! @param neko_case The case.
   !! @param dt_controller The time-step controller.
   subroutine checkpoint_recompute_step(neko_case, dt_controller)
