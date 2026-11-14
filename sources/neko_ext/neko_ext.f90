@@ -43,6 +43,7 @@ module neko_ext
   use case, only: case_t
   use adjoint_case, only: adjoint_case_t
   use json_utils, only: json_get, json_get_or_default
+  use json_utils_ext, only: json_key_fallback
   use num_types, only: rp
   use simcomp_executor, only: neko_simcomps
   use flow_ic, only: set_flow_ic
@@ -262,8 +263,10 @@ contains
     ! Reset the "freeze" parameter of the flow
     ! ------------------------------------------------------------------------ !
 
+    ! Read the key Neko reads at initialisation, so a freeze from the case
+    ! file is kept and one a simulation component set is undone.
     call json_get_or_default(neko_case%params, &
-         'case.fluid.freeze_flow', freezeflow, .false.)
+         'case.fluid.freeze', freezeflow, .false.)
 
     neko_case%fluid%freeze = freezeflow
 
@@ -293,7 +296,7 @@ contains
     character(len=*), intent(in) :: output_base_fname
     real(kind=rp) :: t
     integer :: i
-    character(len=:), allocatable :: string_val
+    character(len=:), allocatable :: string_val, json_key
     logical :: has_scalar, freezeflow
     type(field_t), pointer :: u_adj, v_adj, w_adj, p_adj, s_adj
     type(json_file) :: json_subdict
@@ -442,8 +445,11 @@ contains
     ! Reset the "freeze" parameter of the flow
     ! ------------------------------------------------------------------------ !
 
-    call json_get_or_default(neko_case%params, &
-         'case.adjoint_fluid.freeze_flow', freezeflow, .false.)
+    ! Read the keys the adjoint fluid reads at initialisation, so a frozen
+    ! fluid also freezes its adjoint unless the adjoint fluid sets its own.
+    json_key = json_key_fallback(neko_case%params, &
+         'case.adjoint_fluid.freeze', 'case.fluid.freeze')
+    call json_get_or_default(neko_case%params, json_key, freezeflow, .false.)
 
     adjoint_case%fluid_adj%freeze = freezeflow
 
