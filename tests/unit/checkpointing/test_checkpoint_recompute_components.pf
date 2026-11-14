@@ -1,0 +1,390 @@
+!> @file test_checkpoint_recompute_components.pf
+!! pFUnit tests asserting that the checkpoint recompute reproduces the
+!! forward run, whatever the simulation components of the case.
+!!
+!! A state held neither in RAM nor on disk is restored by reading the
+!! checkpoint file before it and stepping the primal forward from there. The
+!! simulation components computed on these steps in the forward run, and must
+!! not compute on them again: the `steady` component compares each state with
+!! the one it last computed on, and freezes the fluid when they are the same,
+!! which a recomputed state the component has seen before is. A freeze the
+!! forward run did take, on the other hand, must be taken again, from the same
+!! step on.
+!!
+!! Each test runs the case forward, keeping a copy of every state, and then
+!! restores the states in the order of the adjoint and compares them with the
+!! copies. Of the 55 states, the last six are restored from RAM and the others
+!! are recomputed from the checkpoint files of steps 2, 10, 20, 30 and 40.
+module test_checkpoint_recompute_components
+  use pfunit
+  use num_types, only: dp, rp
+  use math, only: abscmp, NEKO_EPS
+  use json_module, only: json_file
+  use json_utils, only: json_get
+  use json_utils_ext, only: json_read_file
+  use case, only: case_t
+  use time_state, only: time_state_t
+  use simulation_component, only: simulation_component_t, &
+       simulation_component_allocate, register_simulation_component
+  use simulation_m, only: simulation_t
+  use state_recover_checkpoint, only: state_recover_checkpoint_t
+  use simulation, only: simulation_init, simulation_step, simulation_finalize
+  use time_step_controller, only: time_step_controller_t
+  use design, only: design_t, design_factory
+  use problem, only: problem_t
+  use field_array, only: field_array_t
+  use field, only: field_t
+  use field_math, only: field_copy
+  use logger, only: neko_log
+  use checkpointing_test_utils, only: initialize_runtime_once, &
+       finalize_case_objects, cleanup_runtime_state, &
+       allocate_snapshot_fields, free_snapshot_fields, rmse
+  implicit none
+
+  integer, parameter :: checkpoint_saves_in_memory = 10
+  integer, parameter :: n_forward_steps = 55
+  real(kind=rp), parameter :: restore_tolerance = NEKO_EPS
+  !> The tolerance of the `steady` component in `steady_freezes_forward_run`.
+  !! The largest of the norms it compares with it are those of the pressure,
+  !! 2.7e5 at the first step and 2.1e4 at step 25, so this leaves a factor of
+  !! 3.5 to either.
+  real(kind=dp), parameter :: steady_freeze_tolerance = 7.5e4_dp
+
+  @TestCase
+  type, extends(MPITestCase) :: recompute_components_case
+   contains
+     procedure :: setUp
+     procedure :: tearDown
+  end type recompute_components_case
+
+  !> A simulation component counting how often it runs, for
+  !! `components_compute_once`.
+  type, extends(simulation_component_t) :: counting_simcomp_t
+   contains
+     procedure, pass(this) :: init => counting_simcomp_init
+     procedure, pass(this) :: free => counting_simcomp_free
+     procedure, pass(this) :: preprocess_ => counting_simcomp_preprocess
+     procedure, pass(this) :: compute_ => counting_simcomp_compute
+  end type counting_simcomp_t
+
+  !> How often the counting component ran its `preprocess` and `compute`.
+  integer :: n_preprocess = 0, n_compute = 0
+
+  logical :: initialized_lock = .false.
+
+contains
+
+  subroutine setUp(this)
+    class(recompute_components_case), intent(inout) :: this
+    procedure(simulation_component_allocate), pointer :: counter
+
+    if (initialized_lock) return
+    initialized_lock = .true.
+
+    call initialize_runtime_once()
+
+    counter => counting_simcomp_allocate
+    call register_simulation_component('counter', counter)
+  end subroutine setUp
+
+  !> Clear the registries, which the next case registers its fields in.
+  subroutine tearDown(this)
+    class(recompute_components_case), intent(inout) :: this
+
+    call cleanup_runtime_state()
+  end subroutine tearDown
+
+  !> Without simulation components, the recompute must reproduce the forward
+  !! run all the same.
+  @test(npes=[2])
+  subroutine without_components(this)
+    class(recompute_components_case), intent(inout) :: this
+    type(json_file) :: parameters
+
+    call read_case(parameters)
+    call parameters%remove('case.simulation_components')
+
+    call check_recompute(parameters, 'recompute_without_components/', 0)
+  end subroutine without_components
+
+  !> The `steady` component computes on a schedule in simulation time, at the
+  !! first step and at step 41, which the recompute from the checkpoint of
+  !! step 40 steps through. Computing on the recomputed state of step 41, it
+  !! would find it equal to the state it last computed on, and freeze the
+  !! fluid for the rest of the block and for all the blocks before it.
+  @test(npes=[2])
+  subroutine steady_sees_its_last_state(this)
+    class(recompute_components_case), intent(inout) :: this
+    type(json_file) :: parameters
+    real(kind=dp) :: dt
+    logical :: found
+
+    call read_case(parameters)
+    call json_get(parameters, 'case.time.timestep', dt)
+    call parameters%update('case.simulation_components(1).compute_control', &
+         'simulationtime', found)
+    call parameters%update('case.simulation_components(1).compute_value', &
+         41.0_dp * dt, found)
+    call parameters%update('case.simulation_components(1).tol', &
+         1.0e-6_dp, found)
+
+    call check_recompute(parameters, 'recompute_steady_last_state/', 0)
+  end subroutine steady_sees_its_last_state
+
+  !> The flow starts uniform, and the Brinkman term slows it down in the
+  !! ball. The `steady` component computes at the first step, where it
+  !! compares the flow with zero, and every 25 steps after. Its tolerance lies
+  !! between the norms of these two changes, so it freezes the fluid at step
+  !! 25, inside the block the recompute from the checkpoint of step 20 steps
+  !! through. The recompute must freeze it there too, and must neither freeze
+  !! it before, nor leave it free after.
+  @test(npes=[2])
+  subroutine steady_freezes_forward_run(this)
+    class(recompute_components_case), intent(inout) :: this
+    type(json_file) :: parameters
+    real(kind=dp) :: dt
+    logical :: found
+
+    call read_case(parameters)
+    call json_get(parameters, 'case.time.timestep', dt)
+    call parameters%update('case.fluid.initial_condition.value(1)', &
+         1.0_dp, found)
+    call parameters%update('case.simulation_components(1).compute_control', &
+         'simulationtime', found)
+    call parameters%update('case.simulation_components(1).compute_value', &
+         25.0_dp * dt, found)
+    call parameters%update('case.simulation_components(1).tol', &
+         steady_freeze_tolerance, found)
+
+    call check_recompute(parameters, 'recompute_steady_freeze/', 25)
+  end subroutine steady_freezes_forward_run
+
+  !> A component's `compute` follows a time step and runs on the steps of the
+  !! forward run only, while its `preprocess`, which prepares a time step,
+  !! runs on the recomputed steps as well. The counting component runs both on
+  !! every step, on a schedule in simulation time, which a restart from a
+  !! checkpoint file continues.
+  @test(npes=[2])
+  subroutine components_compute_once(this)
+    class(recompute_components_case), intent(inout) :: this
+    type(json_file) :: parameters
+    real(kind=dp) :: dt
+    integer :: forward(2)
+    logical :: found
+    character(len=256) :: msg
+
+    call read_case(parameters)
+    call json_get(parameters, 'case.time.timestep', dt)
+    call parameters%update('case.simulation_components(1).type', &
+         'counter', found)
+    call parameters%update('case.simulation_components(1).compute_control', &
+         'simulationtime', found)
+    call parameters%update('case.simulation_components(1).compute_value', &
+         dt, found)
+    call parameters%update( &
+         'case.simulation_components(1).preprocess_control', &
+         'simulationtime', found)
+    call parameters%update('case.simulation_components(1).preprocess_value', &
+         dt, found)
+
+    n_preprocess = 0
+    n_compute = 0
+    call check_recompute(parameters, 'recompute_counter/', 0, forward)
+
+    write(msg, '(A,2(1X,I0),A,2(1X,I0))') 'Counting component, preprocess ' &
+         // 'and compute runs, forward run:', forward, ', in all:', &
+         n_preprocess, n_compute
+    call neko_log%message(trim(msg))
+
+    write(msg, '(A,I0,A,I0,A,I0)') 'The counting component must run on ' // &
+         'each of the ', n_forward_steps, ' steps of the forward run, it ' // &
+         'ran its preprocess ', forward(1), ' and its compute ', forward(2)
+    @assertTrue(all(forward .eq. n_forward_steps), trim(msg))
+
+    write(msg, '(A,I0,A,I0)') 'The recompute must not run the components'' ' &
+         // 'compute: the forward run ran it ', forward(2), &
+         ' times, the restores ', n_compute - forward(2)
+    @assertEqual(forward(2), n_compute, trim(msg))
+
+    write(msg, '(A,I0,A,I0)') 'The recompute must run the components'' ' // &
+         'preprocess: the forward run ran it ', forward(1), &
+         ' times, the restores ', n_preprocess - forward(1)
+    @assertTrue(n_preprocess .gt. forward(1), trim(msg))
+  end subroutine components_compute_once
+
+  !> Read the case and end it after `n_forward_steps` steps.
+  !! @param parameters The case.
+  subroutine read_case(parameters)
+    type(json_file), intent(inout) :: parameters
+    real(kind=dp) :: dt
+    logical :: found
+
+    parameters = json_read_file('checkpoint.case')
+    call json_get(parameters, 'case.time.timestep', dt)
+    call parameters%update('case.time.end_time', &
+         real(n_forward_steps, dp) * dt, found)
+  end subroutine read_case
+
+  !> Run the case forward, then restore every state as the adjoint does and
+  !! compare it with the copy taken during the run.
+  !! @param parameters The case.
+  !! @param path The directory of the checkpoint files.
+  !! @param freeze_step The step from which the forward run is to have the
+  !! fluid frozen, or 0 if it is not to freeze it.
+  !! @param forward How often the counting component had run its
+  !! `preprocess` and its `compute` at the end of the forward run.
+  subroutine check_recompute(parameters, path, freeze_step, forward)
+    type(json_file), intent(inout) :: parameters
+    character(len=*), intent(in) :: path
+    integer, intent(in) :: freeze_step
+    integer, intent(out), optional :: forward(2)
+
+    type(simulation_t), target :: sim
+    type(state_recover_checkpoint_t) :: chkp
+    class(design_t), allocatable :: des
+    type(problem_t) :: prob
+    type(json_file) :: design_parameters
+    type(time_step_controller_t) :: dt_controller
+    type(field_array_t) :: p_fields, u_fields, v_fields, w_fields
+    type(field_t), pointer :: p, u, v, w
+    type(field_t), pointer :: p_copy, u_copy, v_copy, w_copy
+    logical :: frozen(n_forward_steps)
+    logical :: run_ok, restore_ok
+    real(kind=rp) :: err(4), failing_err(4), max_err
+    integer :: i, j, first_frozen, failing_tstep
+    character(len=256) :: msg
+
+    call json_get(parameters, 'optimization.design', design_parameters)
+    call sim%init(parameters)
+    call design_factory(des, design_parameters, sim)
+    call prob%init(parameters, des, sim)
+
+    p => sim%neko_case%fluid%p
+    u => sim%neko_case%fluid%u
+    v => sim%neko_case%fluid%v
+    w => sim%neko_case%fluid%w
+    call allocate_snapshot_fields(p, u, v, w, n_forward_steps, p_fields, &
+         u_fields, v_fields, w_fields)
+
+    call chkp%init_from_components(sim%neko_case, 'linear', &
+         n_saves_memory = checkpoint_saves_in_memory, &
+         path = path, &
+         filename = 'checkpoint', &
+         fmt = 'chkp', &
+         keep_checkpoints = .false.)
+
+    call dt_controller%init(sim%neko_case%params)
+    call simulation_init(sim%neko_case, dt_controller)
+
+    do i = 1, n_forward_steps
+       call simulation_step(sim%neko_case, dt_controller)
+       frozen(i) = sim%neko_case%fluid%freeze
+
+       p_copy => p_fields%get(i)
+       u_copy => u_fields%get(i)
+       v_copy => v_fields%get(i)
+       w_copy => w_fields%get(i)
+       call field_copy(p_copy, p)
+       call field_copy(u_copy, u)
+       call field_copy(v_copy, v)
+       call field_copy(w_copy, w)
+
+       call chkp%save()
+    end do
+
+    call simulation_finalize(sim%neko_case)
+    if (present(forward)) forward = [n_preprocess, n_compute]
+
+    ! The forward run must be the one the test is about
+    first_frozen = findloc(frozen, .true., dim = 1)
+    run_ok = first_frozen .eq. freeze_step
+    if (first_frozen .gt. 0) run_ok = run_ok .and. all(frozen(first_frozen:))
+
+    restore_ok = .true.
+    failing_tstep = 0
+    failing_err = 0.0_rp
+    max_err = 0.0_rp
+    do i = n_forward_steps, 1, -1
+       call chkp%restore(i)
+
+       p_copy => p_fields%get(i)
+       u_copy => u_fields%get(i)
+       v_copy => v_fields%get(i)
+       w_copy => w_fields%get(i)
+       err(1) = rmse(p_copy, p)
+       err(2) = rmse(u_copy, u)
+       err(3) = rmse(v_copy, v)
+       err(4) = rmse(w_copy, w)
+       max_err = max(max_err, maxval(err))
+
+       do j = 1, size(err)
+          if (restore_ok .and. &
+               .not. abscmp(err(j), 0.0_rp, restore_tolerance)) then
+             restore_ok = .false.
+             failing_tstep = i
+             failing_err = err
+          end if
+       end do
+    end do
+
+    write(msg, '(A,A,A,ES12.4)') 'Largest restore RMSE in ', path, ': ', &
+         max_err
+    call neko_log%message(trim(msg))
+
+    call free_snapshot_fields(p_fields, u_fields, v_fields, w_fields)
+    call finalize_case_objects(sim, des, prob, chkp)
+
+    write(msg, '(A,I0,A,I0)') 'The forward run must freeze the fluid ' // &
+         'from step ', freeze_step, ' on, it does from step ', first_frozen
+    @assertTrue(run_ok, trim(msg))
+
+    write(msg, '(A,I0,A,4(ES12.4,1X),A)') &
+         'Restore mismatch at timestep ', failing_tstep, &
+         ' (p/u/v/w RMSE = ', failing_err, ')'
+    @assertTrue(restore_ok, trim(msg))
+  end subroutine check_recompute
+
+  !> Allocate a counting component.
+  !! @param obj The component.
+  subroutine counting_simcomp_allocate(obj)
+    class(simulation_component_t), allocatable, intent(inout) :: obj
+    allocate(counting_simcomp_t::obj)
+  end subroutine counting_simcomp_allocate
+
+  !> Initialise the counting component from its JSON.
+  !! @param json The JSON of the component.
+  !! @param case The case.
+  subroutine counting_simcomp_init(this, json, case)
+    class(counting_simcomp_t), intent(inout), target :: this
+    type(json_file), intent(inout) :: json
+    class(case_t), intent(inout), target :: case
+
+    call this%init_base(json, case)
+  end subroutine counting_simcomp_init
+
+  !> Free the counting component.
+  subroutine counting_simcomp_free(this)
+    class(counting_simcomp_t), intent(inout) :: this
+
+    call this%free_base()
+  end subroutine counting_simcomp_free
+
+  !> Count a run of `preprocess`.
+  !! @param time The time state.
+  subroutine counting_simcomp_preprocess(this, time)
+    class(counting_simcomp_t), intent(inout) :: this
+    type(time_state_t), intent(in) :: time
+
+    n_preprocess = n_preprocess + 1
+  end subroutine counting_simcomp_preprocess
+
+  !> Count a run of `compute`.
+  !! @param time The time state.
+  subroutine counting_simcomp_compute(this, time)
+    class(counting_simcomp_t), intent(inout) :: this
+    type(time_state_t), intent(in) :: time
+
+    n_compute = n_compute + 1
+  end subroutine counting_simcomp_compute
+
+end module test_checkpoint_recompute_components
