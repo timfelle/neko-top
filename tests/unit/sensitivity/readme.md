@@ -4,6 +4,23 @@ This test verifies the sensitivity analysis of a design variable using finite
 difference methods. It checks that the computed sensitivities match the
 expected values within a specified tolerance.
 
+The check stops with an error, rather than passing, when it cannot tell a
+correct sensitivity from a missing one:
+
+- when the computed sensitivity is identically zero. The probed design
+  variable is then simply the first one, which need not lie inside the
+  design domain;
+- when the functional does not change, beyond round-off, under the largest
+  perturbation of the sweep, so that the perturbation never reached it.
+
+In either case every finite difference is zero. Compared with a sensitivity
+that is zero too, or nearly so, that gives an error of zero or nearly so, and
+the test would pass without having tested anything. There is no opt-out: the
+driver probes the design variable with the largest sensitivity, and a
+functional that does not depend on it leaves a finite difference nothing to
+check. Both checks are made in `tests/shared/sensitivity.f90`, so the
+regression suite makes them too.
+
 The test is tagged as a `unit` test, which means it is mandatory for the
 build to pass our CI/CD pipeline.
 
@@ -103,6 +120,17 @@ Currently, we have added tests for the following components:
   mixed setting has no value its sensitivity is the gradient of, so the
   objective must raise `neko_error`; pFUnit consumes that expected exception
   as a successful test.
+- `unsteady_brinkman_dissipation_window_after_run.case`, registered as
+  `unsteady_brinkman_dissipation_window_after_run_rejected` — the window case
+  with its objective window starting at `0.03`, after the run has ended at
+  `0.02`. The adjoint is never forced, so the sensitivity is identically
+  zero, and the functional stays zero under every perturbation. The test
+  passes only if the run stops with the zero-sensitivity error; without that
+  check, the finite-difference test of this case passed with an error of
+  zero. The objective has a short name: the warning that its window missed
+  the run is written through a 79-character buffer, which a name longer than
+  16 characters overflows, stopping the run, until neko-top#573 removes the
+  buffer.
 - `viscous_dissipation_objective_t`, masked (`viscous_dissipation_masked.case`
   and `unsteady_viscous_dissipation_masked.case`) — `viscous_dissipation.case`
   and `unsteady_brinkman_dissipation_masked.case` with a viscous dissipation

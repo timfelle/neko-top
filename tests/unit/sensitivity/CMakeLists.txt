@@ -143,5 +143,37 @@ set_tests_properties(${case_name}
 )
 
 # ============================================================================ #
+# The finite-difference check must stop, not pass, when the computed
+# sensitivity is identically zero. This case's objective window starts after
+# the run ends, so its adjoint is never forced, and the check would otherwise
+# compare a finite difference of zero with a sensitivity of zero. The test
+# passes only if the run stops with the guard's message.
+set(case_name "unsteady_brinkman_dissipation_window_after_run")
+add_custom_target(
+    ${case_name}_case_file
+    COMMENT "Copying case file ${case_name}.case to the test directory"
+    SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/${case_name}.case
+    BYPRODUCTS ${CMAKE_CURRENT_BINARY_DIR}/${case_name}.case
+    COMMAND
+        ${CMAKE_COMMAND} -E copy_if_different
+        ${CMAKE_CURRENT_SOURCE_DIR}/${case_name}.case
+        ${CMAKE_CURRENT_BINARY_DIR}/${case_name}.case
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+)
+add_dependencies(sensitivity_test_prepare ${case_name}_case_file)
+
+add_test(NAME ${case_name}_rejected
+    COMMAND $<TARGET_FILE:problem_tester_sensitivity_bin> ${case_name}.case
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+)
+set_tests_properties(${case_name}_rejected
+    PROPERTIES
+        LABELS "sensitivity;unit"
+        ENVIRONMENT "NEKO_LOG_FILE=${case_name}.log"
+        PASS_REGULAR_EXPRESSION "The computed sensitivity is identically zero"
+        TIMEOUT 300
+)
+
+# ============================================================================ #
 # Final dependencies
 add_dependencies(Unit sensitivity_test_prepare)

@@ -7,6 +7,10 @@
 !!    is correct both single-rank (unit) and multi-rank (regression, `mpirun`).
 !!  * A real tolerance assertion on the analytic-vs-finite-difference agreement,
 !!    so both lanes actually gate on correctness rather than only logging a CSV.
+!!  * Two guards that stop the check rather than let that assertion pass
+!!    without having tested anything: the computed sensitivity must not be
+!!    identically zero (`fd_require_sensitivity`), and the functional must
+!!    change under the largest perturbation (`fd_require_response`).
 !!
 !! The assertion is deliberately made on the error at the *smallest*
 !! perturbation. For a one-sided forward difference the error at large
@@ -21,7 +25,7 @@ module sensitivity
   use design, only: design_t
   use utils, only: neko_error
   use num_types, only: rp
-  use math, only: abscmp, NEKO_EPS, glsum
+  use math, only: abscmp, NEKO_EPS, glsum, glamax
   use vector, only: vector_t
   use neko_config, only: NEKO_BCKND_DEVICE
   use problem, only : problem_t
@@ -87,6 +91,8 @@ contains
             target_sensitivities%x_d, target_sensitivities%size(), &
             DEVICE_TO_HOST, .true.)
     end if
+
+    call fd_require_sensitivity(target_sensitivities)
 
     ! Get global target sensitivity. Only the owning rank (i >= 0) holds the
     ! entry; every other rank contributes zero to the reduction so all ranks
@@ -183,6 +189,11 @@ contains
           call logger%write(log_data)
        end if
 
+       ! If even the largest perturbation leaves F unchanged, none reached it.
+       if (ip .eq. maxloc(abs(perturbations), dim = 1)) then
+          call fd_require_response(constraint, perturbed_constraint, perturb)
+       end if
+
        ! Track the error at the smallest-magnitude perturbation: this is the
        ! Taylor floor the analytic sensitivity must converge to.
        if (.not. floor_set .or. abs(perturb) .lt. abs(floor_perturb)) then
@@ -239,5 +250,58 @@ contains
     err = (a - b) / max(abs(b), NEKO_EPS)
 
   end function relative_error
+
+  !> Stop unless the analytic sensitivity is non-zero somewhere.
+  !!
+  !! An identically zero sensitivity, such as that of an adjoint which was
+  !! never forced because the objective's time window missed every step it
+  !! sampled, leaves no design variable worth probing. `maxloc` then returns
+  !! the first one, which need not lie inside the design domain; perturbing it
+  !! leaves the functional unchanged, and the finite difference of zero agrees
+  !! exactly with the zero it is compared with.
+  !!
+  !! Collective: every rank must call this.
+  !! @param sensitivities The analytic sensitivities, on the host.
+  subroutine fd_require_sensitivity(sensitivities)
+    type(vector_t), intent(in) :: sensitivities
+
+    if (glamax(sensitivities%x, sensitivities%size()) .gt. 0.0_rp) return
+
+    call neko_error('The computed sensitivity is identically zero, so ' // &
+         'the finite-difference check has nothing to test. Check that ' // &
+         'the adjoint is forced, e.g. that the objective''s time window ' // &
+         'overlaps the run.')
+  end subroutine fd_require_sensitivity
+
+  !> Stop if the functional did not change under the largest perturbation.
+  !!
+  !! A perturbation that never reaches the functional, of a design variable
+  !! outside the design domain for instance, leaves it unchanged, and every
+  !! finite difference of the sweep is then zero. That zero agrees with an
+  !! analytic sensitivity which is zero there too, or merely far below
+  !! `NEKO_EPS`, to within any tolerance. A change within ten units of
+  !! round-off of the functional counts as no change.
+  !!
+  !! Collective: the functional values are globally reduced, so every rank
+  !! takes the same branch.
+  !! @param value The functional at the unperturbed design.
+  !! @param perturbed_value The functional at the largest perturbation.
+  !! @param perturb The largest perturbation.
+  subroutine fd_require_response(value, perturbed_value, perturb)
+    real(kind=rp), intent(in) :: value, perturbed_value, perturb
+    character(len=16) :: change_str, perturb_str
+
+    if (abs(perturbed_value - value) .gt. &
+         10.0_rp * NEKO_EPS * max(abs(value), abs(perturbed_value))) return
+
+    write(change_str, '(ES12.4)') perturbed_value - value
+    write(perturb_str, '(ES12.4)') perturb
+    call neko_error('The functional changed by ' // &
+         trim(adjustl(change_str)) // ' under the largest perturbation (' // &
+         trim(adjustl(perturb_str)) // '), within round-off of its value, ' // &
+         'so the perturbation did not reach it and the finite-difference ' // &
+         'check has nothing to test. Check that the probed design ' // &
+         'variable lies inside the design domain.')
+  end subroutine fd_require_response
 
 end module sensitivity
