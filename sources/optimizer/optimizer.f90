@@ -626,7 +626,7 @@ contains
             this%max_iterations, ' iterations.'
        call neko_log%warning(msg)
     case (2)
-       write(msg, '(A,A,F8.2,A)') 'Optimizer stopped, design change ', &
+       write(msg, '(A,A,ES12.4,A)') 'Optimizer stopped, design change ', &
             'below threshold of: ', this%stop_design_change, '.'
        call neko_log%warning(msg)
     case (3)
