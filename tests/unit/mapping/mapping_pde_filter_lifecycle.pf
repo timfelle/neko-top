@@ -144,7 +144,9 @@ contains
        call msh%add_element(e, e, p(id(1)), p(id(2)), p(id(3)), p(id(4)), &
             p(id(5)), p(id(6)), p(id(7)), p(id(8)))
     end do
-    call msh%generate_conn()
+    ! Generates the connectivity and the element flags, such as which
+    ! elements are deformed, which the Jacobi preconditioner reads.
+    call msh%finalize()
 
     call Xh%init(GLL, LX, LX, LX)
     call dof%init(msh, Xh)
@@ -327,7 +329,7 @@ contains
     call neko_scratch_registry%init(dof = dof)
     call neko_registry%init()
 
-    ! Neither initialised nor applied, as applying it would fail.
+    ! Not applied, as applying it would fail: its hsmg is never set up.
     call json_hsmg%initialize()
     call json_hsmg%load_from_string('{"r": 0.2, "preconditioner": "hsmg"}')
     throw_error => throw_to_pfunit
