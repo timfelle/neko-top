@@ -86,7 +86,7 @@ add_dependencies(end_time_step_count objectives_test_prepare)
 # The adjoint must sample the steps the forward run sampled, also for a run
 # that does not start at zero. It reuses `time_window_run_length.case` too.
 add_pfunit_ctest(adjoint_sample_steps
-    TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/adjoint_sample_steps.pf
+    TEST_SOURCES adjoint_sample_steps.pf
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     LINK_LIBRARIES objectives_user_obj Neko-TOP::neko-top
     MAX_PES 1
