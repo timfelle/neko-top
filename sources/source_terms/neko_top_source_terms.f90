@@ -47,6 +47,8 @@ submodule(neko_top) neko_top_source_terms
        adjoint_scalar_convection_source_term_allocate
   use simple_brinkman_source_term, only: simple_brinkman_source_term_allocate
 
+  implicit none
+
 contains
 
   !> @brief Register the known source terms from Neko-TOP in the Neko system.

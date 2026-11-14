@@ -48,6 +48,8 @@ submodule (design) design_hdf5_io
   use scratch_registry, only: neko_scratch_registry
   use hdf5_session, only: hdf5_session_init, hdf5_session_finalize
 
+  implicit none
+
 contains
 
   !> Write the Design object to an HDF5 file (parallel-aware).

@@ -41,6 +41,8 @@ submodule (advection_adjoint) advection_adjoint_fctry
   use adv_lin_dealias, only: adv_lin_dealias_t
   use adv_lin_no_dealias, only: adv_lin_no_dealias_t
 
+  implicit none
+
 contains
 
   !> A factory for \ref advection_t decendants. Both creates and initializes
