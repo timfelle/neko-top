@@ -15,24 +15,9 @@ module test_design_checkpoint_hdf5
   use num_types, only: rp
   use neko, only: neko_init
   use comm, only: NEKO_COMM, pe_rank, MPI_REAL_PRECISION
-  use vector, only: vector_t
-  use design, only: design_t
-  use device, only: HOST_TO_DEVICE, DEVICE_TO_HOST
+  use checkpointing_test_utils, only: stored_design_t
 
   implicit none
-
-  !> Design that stores its values, so that a checkpoint can be compared.
-  type, extends(design_t) :: stored_design_t
-     type(vector_t) :: values
-   contains
-     procedure, pass(this) :: init => stored_design_init
-     procedure, pass(this) :: free => stored_design_free
-     procedure, pass(this) :: get_values => stored_design_get_values
-     procedure, pass(this) :: update_design => stored_design_update_design
-     procedure, pass(this) :: map_forward => stored_design_map_forward
-     procedure, pass(this) :: map_backward => stored_design_map_backward
-     procedure, pass(this) :: write => stored_design_write
-  end type stored_design_t
 
   @TestCase
   type, extends(MPITestCase) :: test_design_checkpoint_case
@@ -133,65 +118,5 @@ contains
     deallocate(x_saved, x_loaded)
 
   end subroutine round_trip
-
-  ! ========================================================================== !
-  ! stored_design_t
-
-  !> Initialise the design with the values given on this rank.
-  !! @param x0 The values.
-  subroutine stored_design_init(this, x0)
-    class(stored_design_t), intent(inout) :: this
-    real(kind=rp), intent(in) :: x0(:)
-
-    call this%init_base('stored_design', size(x0))
-    this%values = x0
-
-  end subroutine stored_design_init
-
-  subroutine stored_design_free(this)
-    class(stored_design_t), intent(inout) :: this
-
-    call this%values%free()
-    call this%free_base()
-
-  end subroutine stored_design_free
-
-  !> Copy the stored values into `values`, on the host and the device.
-  !! @param values The vector to fill.
-  subroutine stored_design_get_values(this, values)
-    class(stored_design_t), intent(in) :: this
-    type(vector_t), intent(inout) :: values
-
-    if (this%size() .gt. 0) values%x(1:this%size()) = this%values%x(:)
-    call values%copy_from(HOST_TO_DEVICE, .true.)
-
-  end subroutine stored_design_get_values
-
-  !> Store `values`, whose device side is current.
-  !! @param values The new values.
-  subroutine stored_design_update_design(this, values)
-    class(stored_design_t), intent(inout) :: this
-    type(vector_t), intent(inout) :: values
-
-    if (this%size() .eq. 0) return
-    call values%copy_from(DEVICE_TO_HOST, .true.)
-    this%values%x(:) = values%x(1:this%size())
-    call this%values%copy_from(HOST_TO_DEVICE, .true.)
-
-  end subroutine stored_design_update_design
-
-  subroutine stored_design_map_forward(this)
-    class(stored_design_t), intent(inout) :: this
-  end subroutine stored_design_map_forward
-
-  subroutine stored_design_map_backward(this, sensitivity)
-    class(stored_design_t), intent(inout) :: this
-    type(vector_t), intent(in) :: sensitivity
-  end subroutine stored_design_map_backward
-
-  subroutine stored_design_write(this, idx)
-    class(stored_design_t), intent(inout) :: this
-    integer, intent(in) :: idx
-  end subroutine stored_design_write
 
 end module test_design_checkpoint_hdf5

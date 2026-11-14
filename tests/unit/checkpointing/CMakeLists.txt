@@ -196,7 +196,7 @@ if (HAVE_HDF5)
         TEST_SOURCES
             ${CMAKE_CURRENT_SOURCE_DIR}/test_design_checkpoint_hdf5.pf
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-        LINK_LIBRARIES Neko-TOP::neko-top
+        LINK_LIBRARIES checkpointing_test_utils Neko-TOP::neko-top
         MAX_PES 2
     )
     set_tests_properties(design_checkpoint_hdf5 PROPERTIES
@@ -220,10 +220,8 @@ if (HAVE_HDF5)
     add_executable(checkpoint_rank_change EXCLUDE_FROM_ALL
         ${CMAKE_CURRENT_SOURCE_DIR}/checkpoint_rank_change.f90
     )
-    target_link_libraries(checkpoint_rank_change PRIVATE Neko-TOP::neko-top)
-    set_target_properties(checkpoint_rank_change PROPERTIES
-        Fortran_MODULE_DIRECTORY
-            ${CMAKE_CURRENT_BINARY_DIR}/mod/checkpoint_rank_change
+    target_link_libraries(checkpoint_rank_change
+        PRIVATE checkpointing_test_utils Neko-TOP::neko-top
     )
     add_dependencies(Unit checkpoint_rank_change)
 
