@@ -64,6 +64,7 @@ module problem
   use utils, only: neko_error
   implicit none
   private
+  public :: time_after_steps
 
   !> The abstract problem type.
   type, public :: problem_t
@@ -524,6 +525,7 @@ contains
     class(design_t), intent(inout) :: design
     type(time_step_controller_t) :: dt_controller
     real(kind=dp) :: loop_start
+    type(time_state_t) :: sample_time
 
     call dt_controller%init(simulation%neko_case%params)
 
@@ -547,8 +549,13 @@ contains
        call simulation_step(simulation%neko_case, dt_controller, loop_start)
        this%run_time = this%run_time + &
             real(simulation%neko_case%time%dt, kind=xp)
-       ! accumulate objective value
-       call this%accumulate_objectives(design, simulation%neko_case%time)
+       ! accumulate objective value, at the time the adjoint run gives the
+       ! same sample, see `time_after_steps`
+       sample_time = simulation%neko_case%time
+       sample_time%t = time_after_steps( &
+            simulation%neko_case%time%start_time, &
+            simulation%neko_case%time%dt, simulation%n_timesteps)
+       call this%accumulate_objectives(design, sample_time)
        ! save a checkpoint
        call simulation%state_recover%save()
     end do
@@ -617,7 +624,11 @@ contains
        call simulation%state_recover%restore(i)
        ! accumulate objective sensitivity
        accumulation_time = simulation%adjoint_case%time
-       accumulation_time%t = total_time - simulation%adjoint_case%time%t
+       ! at the time the forward run sampled the restored state at, after i
+       ! of its steps, rather than one derived from the adjoint's own time
+       accumulation_time%t = time_after_steps( &
+            simulation%neko_case%time%start_time, &
+            simulation%neko_case%time%dt, i)
        call this%accumulate_objective_sensitivities(design, accumulation_time)
        ! The step's forcings consume the same primal sample, so each
        ! objective gates and scales its forcing by its own window there.
@@ -1059,4 +1070,29 @@ contains
     end if
 
   end function problem_get_log_size
+
+  !> The time of an unsteady run after a number of its time steps.
+  !!
+  !! The time is counted in steps from the start time, rather than summed
+  !! step by step as the simulation's own time is. The round-off of that sum
+  !! grows with the number of steps, and after a few hundred thousand of them
+  !! it reaches the tolerance of `1e-6 * dt` that the time windows of the
+  !! functionals allow. A window boundary on a step could then be decided
+  !! differently by the forward run and by the adjoint run, which sums a time
+  !! of its own. Both therefore take the time of a sample from here.
+  !! @note All the steps are of the same length: `simulation_t` rejects a
+  !! variable time step for an unsteady problem. With a variable one the time
+  !! after each step would have to be recorded instead.
+  !! @param start_time The start time of the run.
+  !! @param dt The time step.
+  !! @param n_steps The number of time steps taken.
+  !! @return The time after `n_steps` time steps.
+  pure function time_after_steps(start_time, dt, n_steps) result(t)
+    real(kind=dp), intent(in) :: start_time
+    real(kind=dp), intent(in) :: dt
+    integer, intent(in) :: n_steps
+    real(kind=dp) :: t
+
+    t = start_time + real(n_steps, kind=dp) * dt
+  end function time_after_steps
 end module problem
