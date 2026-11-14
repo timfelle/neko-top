@@ -14,10 +14,12 @@
 # TIME_LIMIT  The time limit of each run, in seconds. A run that does not stop
 #             within it hangs, which fails the test.
 #
-# Each case saves both checkpoints on some ranks and loads each of them on
-# others. A load must stop with the expected error on every rank: the driver
-# makes each rank wait for the others before it stops, so the output holds
-# one message per rank, and an error raised on some ranks only hangs.
+# Each case saves both checkpoints on some ranks and loads each of them on as
+# many, which must complete, so that the checkpoint is known to be sound. It
+# then loads each on others, which must stop with the expected error on every
+# rank: the driver makes each rank wait for the others before it stops, so
+# the output holds one message per rank, and an error raised on some ranks
+# only hangs.
 
 foreach(var DRIVER MPIEXEC NUMPROC_FLAG CASES TIME_LIMIT)
     if (NOT DEFINED ${var})
@@ -50,8 +52,9 @@ function(count_matches pattern text count_var)
     set(${count_var} ${count} PARENT_SCOPE)
 endfunction()
 
-# Save on `save_ranks` ranks, then load each checkpoint on `load_ranks` ranks
-# with the given layout, and require `expected` from every loading rank.
+# Save on `save_ranks` ranks. Then load each checkpoint on as many ranks,
+# which must complete, and on `load_ranks` ranks with the given layout, which
+# must stop with `expected` from every loading rank.
 function(check_case save_ranks load_ranks layout expected)
     set(case "saved on ${save_ranks}, loaded on ${load_ranks} ${layout}")
     message(STATUS "Case: ${case}")
@@ -68,6 +71,17 @@ function(check_case save_ranks load_ranks layout expected)
     endif()
 
     foreach(kind mma design)
+        run_driver(${save_ranks} load_${kind} even result output)
+        count_matches("load_${kind} completed on rank" "${output}" completed)
+        if (NOT result EQUAL 0 OR NOT completed EQUAL save_ranks)
+            message(STATUS "${output}")
+            message(STATUS "FAIL: ${kind} load as saved (exit: ${result}, "
+                "completed on ${completed} of ${save_ranks} ranks)")
+            set(failed TRUE PARENT_SCOPE)
+            continue()
+        endif()
+        message(STATUS "${kind}: loads as saved, on ${save_ranks} ranks")
+
         run_driver(${load_ranks} load_${kind} ${layout} result output)
         count_matches("${kind}: ${expected}" "${output}" errors)
         count_matches("load_${kind} completed" "${output}" completed)
