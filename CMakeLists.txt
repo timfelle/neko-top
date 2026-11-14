@@ -115,6 +115,7 @@ endif()
 # Setup of JSON-Fortran
 
 # Set the proper paths for the JSON_FORTRAN_DIR directory
+reset_cache_if_env_changed(JSON_FORTRAN_DIR JSON_FORTRAN_DIR)
 if (DEFINED ENV{JSON_FORTRAN_DIR} AND IS_ABSOLUTE $ENV{JSON_FORTRAN_DIR})
     set(JSON_FORTRAN_DIR $ENV{JSON_FORTRAN_DIR} CACHE STRING
         "Path to the JSON-Fortran installation")
@@ -130,6 +131,7 @@ set(CMAKE_PREFIX_PATH ${JSON_FORTRAN_DIR} ${CMAKE_PREFIX_PATH})
 prepend_pkg_config_path("${JSON_FORTRAN_DIR}")
 
 # Find the JSON-Fortran library
+force_pkg_config_recheck_on_prefix_change(json-fortran "${JSON_FORTRAN_DIR}")
 pkg_check_modules(json-fortran REQUIRED IMPORTED_TARGET json-fortran)
 restore_pkg_config_path()
 
@@ -137,6 +139,7 @@ restore_pkg_config_path()
 # Setup of the Neko library
 
 # Set the proper paths for the NEKO_DIR
+reset_cache_if_env_changed(NEKO_DIR NEKO_DIR)
 if (DEFINED ENV{NEKO_DIR} AND IS_ABSOLUTE $ENV{NEKO_DIR})
     set(NEKO_DIR $ENV{NEKO_DIR} CACHE STRING
         "Path to the Neko installation")
@@ -167,6 +170,7 @@ set(CMAKE_PREFIX_PATH ${NEKO_DIR} ${_neko_hdf5_root} ${CMAKE_PREFIX_PATH})
 prepend_pkg_config_path("${NEKO_DIR}" "${_neko_hdf5_root}")
 
 # Find the Neko library
+force_pkg_config_recheck_on_prefix_change(neko "${NEKO_DIR}")
 pkg_check_modules(neko REQUIRED IMPORTED_TARGET neko)
 pkg_get_variable(DEVICE_TYPE neko backend)
 restore_pkg_config_path()
