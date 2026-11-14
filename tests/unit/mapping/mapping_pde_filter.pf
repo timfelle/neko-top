@@ -175,15 +175,12 @@ contains
 
   end subroutine build_fixture
 
-  !> Attach coef to the mapping and construct it from attributes. `coef` must
-  !! be declared `target` at the call site, since PDE_filter_init_from_json's
-  !! usual `this%coef => coef` wiring (normally done by mapping_init_base) is
-  !! bypassed here in favour of calling init_from_attributes directly.
+  !> Construct the mapping from attributes. `coef` must be declared `target`
+  !! at the call site, as the mapping keeps a pointer to it.
   subroutine build_map(map, coef)
     type(PDE_filter_t), intent(inout) :: map
     type(coef_t), target, intent(inout) :: coef
 
-    map%coef => coef
     call map%init_from_attributes(coef, filter_r, filter_tol, &
          filter_max_iter, "cg", "jacobi", .false.)
 

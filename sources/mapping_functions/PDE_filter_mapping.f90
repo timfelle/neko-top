@@ -124,6 +124,9 @@ module PDE_filter_mapping
 contains
 
   !> Constructor from json.
+  !! @param this The filter.
+  !! @param json The JSON object of the filter.
+  !! @param coef The SEM coefficients.
   subroutine PDE_filter_init_from_json(this, json, coef)
     class(PDE_filter_t), intent(inout) :: this
     type(json_file), intent(inout) :: json
@@ -132,6 +135,9 @@ contains
     integer :: max_iter
     character(len=:), allocatable :: ksp_solver, precon_type
     logical :: strict_convergence
+
+    ! Freed first, as freeing clears the base, which is set up below.
+    call this%free()
 
     call nekotop_continuation%json_get_or_register(json, 'r', this%r, r)
     call json_get_or_default(json, 'tol', tol, 0.0000000001_rp)
@@ -142,12 +148,16 @@ contains
          .false.)
 
     call this%init_base(json, coef, "PDE_filter_mapping")
-    call this%init_from_attributes(coef, r, tol, max_iter, &
-         ksp_solver, precon_type, strict_convergence)
+    ! Not init_from_attributes, as it frees the filter first.
+    call PDE_filter_init_common(this, r, tol, max_iter, ksp_solver, &
+         precon_type, strict_convergence)
+
+    deallocate(ksp_solver)
+    deallocate(precon_type)
 
   end subroutine PDE_filter_init_from_json
 
-  !> Actual constructor.
+  !> Constructor from attributes.
   !! @param this The filter.
   !! @param coef The SEM coefficients.
   !! @param r The filter radius.
@@ -157,10 +167,40 @@ contains
   !! @param precon_type The preconditioner of the filter solve.
   !! @param strict_convergence Whether a filter solve that does not converge
   !! is an error rather than a warning.
+  !! @note Unlike the JSON constructor, this registers nothing for
+  !! continuation and sets up no field for the unmapped input, so the filter
+  !! is applied with `forward_mapping` and `backward_mapping` only.
   subroutine PDE_filter_init_from_attributes(this, coef, r, tol, max_iter, &
        ksp_solver, precon_type, strict_convergence)
     class(PDE_filter_t), intent(inout) :: this
-    type(coef_t), intent(inout) :: coef
+    type(coef_t), target, intent(inout) :: coef
+    real(kind=rp), intent(in) :: r, tol
+    integer, intent(in) :: max_iter
+    character(len=*), intent(in) :: ksp_solver, precon_type
+    logical, intent(in) :: strict_convergence
+
+    call this%free()
+
+    this%coef => coef
+    call PDE_filter_init_common(this, r, tol, max_iter, ksp_solver, &
+         precon_type, strict_convergence)
+
+  end subroutine PDE_filter_init_from_attributes
+
+  !> Set the attributes of the filter and set up its solver on the SEM
+  !! coefficients the filter points to. Shared by the constructors, which
+  !! free the filter and point it to the coefficients first.
+  !! @param this The filter.
+  !! @param r The filter radius.
+  !! @param tol The absolute tolerance of the filter solve.
+  !! @param max_iter The maximum number of iterations of the filter solve.
+  !! @param ksp_solver The Krylov solver of the filter solve.
+  !! @param precon_type The preconditioner of the filter solve.
+  !! @param strict_convergence Whether a filter solve that does not converge
+  !! is an error rather than a warning.
+  subroutine PDE_filter_init_common(this, r, tol, max_iter, ksp_solver, &
+       precon_type, strict_convergence)
+    class(PDE_filter_t), intent(inout) :: this
     real(kind=rp), intent(in) :: r, tol
     integer, intent(in) :: max_iter
     character(len=*), intent(in) :: ksp_solver, precon_type
@@ -189,13 +229,15 @@ contains
          this%coef, this%coef%dof, this%coef%gs_h, &
          this%bc_projector_filt, this%precon_type_filt)
 
-  end subroutine PDE_filter_init_from_attributes
+  end subroutine PDE_filter_init_common
 
   !> Destructor.
+  !! @param this The filter.
   subroutine PDE_filter_free(this)
     class(PDE_filter_t), intent(inout) :: this
 
     if (allocated(this%Ax)) then
+       call this%Ax%free()
        deallocate(this%Ax)
     end if
 
@@ -210,6 +252,14 @@ contains
     end if
 
     call this%bc_projector_filt%free()
+
+    if (allocated(this%ksp_solver)) then
+       deallocate(this%ksp_solver)
+    end if
+
+    if (allocated(this%precon_type_filt)) then
+       deallocate(this%precon_type_filt)
+    end if
 
     call this%free_base()
 
