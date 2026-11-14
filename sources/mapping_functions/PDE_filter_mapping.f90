@@ -104,7 +104,7 @@ module PDE_filter_mapping
    contains
      !> Constructor from json.
      procedure, pass(this) :: init => PDE_filter_init_from_json
-     !> Actual constructor.
+     !> Constructor from attributes.
      procedure, pass(this) :: init_from_attributes => &
           PDE_filter_init_from_attributes
      !> Destructor.
@@ -509,7 +509,7 @@ contains
     type(dofmap_t), target, intent(in) :: dof
     type(gs_t), target, intent(inout) :: gs
     type(scalar_bc_projector_t), target, intent(inout) :: bc_projector
-    character(len=*) :: pctype
+    character(len=*), intent(in) :: pctype
 
     call precon_allocator(pc, pctype)
 
