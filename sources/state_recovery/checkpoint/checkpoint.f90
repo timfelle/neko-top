@@ -87,10 +87,11 @@ module state_recover_checkpoint
      type(field_list_t) :: state_list
      type(host_array_t), dimension(:,:), allocatable :: state_storage
 
-     !> Whether the fluid was frozen after each saved time step, indexed by
-     !! the time step. The `steady` simulation component freezes the fluid,
-     !! and does not run in the recompute, so the recompute takes the
-     !! freezes of the forward run from here.
+     !> Whether the fluid was frozen after each saved time step, indexed as
+     !! the restored time steps are, by the number of saves up to it. The
+     !! `steady` simulation component freezes the fluid, and does not run in
+     !! the recompute, so the recompute takes the freezes of the forward run
+     !! from here.
      logical, dimension(:), allocatable :: fluid_frozen
 
      ! Structures to hold the checkpoint data
@@ -496,27 +497,30 @@ contains
 
   !> Record whether the fluid is frozen after the current time step, which is
   !! whether the next time step leaves it unchanged.
+  !! @details The record is indexed by the number of saves, which is the time
+  !! step the state is restored as, so every time step that can be restored
+  !! has its entry.
   !! @param this The checkpoint object.
   subroutine checkpoint_record_freeze(this)
     class(state_recover_checkpoint_t), intent(inout) :: this
     logical, dimension(:), allocatable :: grown
-    integer :: tstep, n
+    integer :: i_save, n
 
-    tstep = this%neko_case%time%tstep
+    i_save = this%get_n_timesteps()
 
-    ! Make room for the time step, doubling the record as the run goes on
+    ! Make room for the save, doubling the record as the run goes on
     if (.not. allocated(this%fluid_frozen)) then
-       allocate(this%fluid_frozen(0:tstep))
+       allocate(this%fluid_frozen(0:i_save))
        this%fluid_frozen = .false.
-    else if (tstep .gt. ubound(this%fluid_frozen, 1)) then
+    else if (i_save .gt. ubound(this%fluid_frozen, 1)) then
        n = ubound(this%fluid_frozen, 1)
-       allocate(grown(0:max(tstep, 2 * n + 1)))
+       allocate(grown(0:max(i_save, 2 * n + 1)))
        grown = .false.
        grown(0:n) = this%fluid_frozen
        call move_alloc(grown, this%fluid_frozen)
     end if
 
-    this%fluid_frozen(tstep) = this%neko_case%fluid%freeze
+    this%fluid_frozen(i_save) = this%neko_case%fluid%freeze
   end subroutine checkpoint_record_freeze
 
   ! ========================================================================== !
