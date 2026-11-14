@@ -12,8 +12,9 @@
 #
 # This script lists the undefined symbols of the library with `nm` and fails,
 # naming each object file, if any of them is an F77 MPI binding: a lower-case
-# `mpi_..._` symbol other than the mpi_f08 bindings (`..._f08_`, `..._f08ts_`)
-# and the `mpi_fortran_..._` constants such as MPI_IN_PLACE.
+# `mpi_..._` symbol other than the mpi_f08 bindings (`..._f08_`, `..._f08ts_`),
+# the `mpi_fortran_..._` constants such as MPI_IN_PLACE, and the
+# `mpi_sizeof_..._` procedures of MPI_Sizeof, which has no F77 binding.
 #
 # Usage:
 #   cmake -DNM=<nm> -DLIBRARY=<library> -P check_mpi_bindings.cmake
@@ -57,7 +58,8 @@ foreach(line IN LISTS nm_lines)
 
     if (symbol MATCHES "^_?mpi_[a-z0-9_]*_$"
             AND NOT symbol MATCHES "_f08(ts)?_$"
-            AND NOT symbol MATCHES "^_?mpi_fortran_")
+            AND NOT symbol MATCHES "^_?mpi_fortran_"
+            AND NOT symbol MATCHES "^_?mpi_sizeof_")
         string(APPEND invalid "\n  ${object}: ${symbol}")
     endif()
 endforeach()
