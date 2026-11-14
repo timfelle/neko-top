@@ -76,6 +76,9 @@ module problem
      integer :: n_objectives = 0
      !> Number of constraints in the problem.
      integer :: n_constraints = 0
+     !> The time the last unsteady forward run started from: the start time
+     !! of the case, or the time of the checkpoint a restarted run read.
+     real(kind=dp) :: run_start_time = 0.0_dp
      !> Length of the last unsteady forward run. It is summed step by step
      !! as the functionals sum `value_weight`, so that it equals that of a
      !! functional without a time window bit for bit.
@@ -241,6 +244,7 @@ contains
     this%n_design = 0
     this%n_objectives = 0
     this%n_constraints = 0
+    this%run_start_time = 0.0_dp
     this%run_time = 0.0_xp
 
     ! Free the objective list
@@ -543,6 +547,8 @@ contains
     loop_start = MPI_WTIME()
     simulation%n_timesteps = 0
     this%run_time = 0.0_xp
+    ! A restart from a checkpoint moves the time, but not the start time
+    this%run_start_time = simulation%neko_case%time%t
     do while (.not. simulation%neko_case%time%is_done())
        simulation%n_timesteps = simulation%n_timesteps + 1
        ! step forward
@@ -552,8 +558,7 @@ contains
        ! accumulate objective value, at the time the adjoint run gives the
        ! same sample, see `time_after_steps`
        sample_time = simulation%neko_case%time
-       sample_time%t = time_after_steps( &
-            simulation%neko_case%time%start_time, &
+       sample_time%t = time_after_steps(this%run_start_time, &
             simulation%neko_case%time%dt, simulation%n_timesteps)
        call this%accumulate_objectives(design, sample_time)
        ! save a checkpoint
@@ -626,8 +631,7 @@ contains
        accumulation_time = simulation%adjoint_case%time
        ! at the time the forward run sampled the restored state at, after i
        ! of its steps, rather than one derived from the adjoint's own time
-       accumulation_time%t = time_after_steps( &
-            simulation%neko_case%time%start_time, &
+       accumulation_time%t = time_after_steps(this%run_start_time, &
             simulation%neko_case%time%dt, i)
        call this%accumulate_objective_sensitivities(design, accumulation_time)
        ! The step's forcings consume the same primal sample, so each
@@ -1073,17 +1077,18 @@ contains
 
   !> The time of an unsteady run after a number of its time steps.
   !!
-  !! The time is counted in steps from the start time, rather than summed
-  !! step by step as the simulation's own time is. The round-off of that sum
-  !! grows with the number of steps, and after a few hundred thousand of them
-  !! it reaches the tolerance of `1e-6 * dt` that the time windows of the
-  !! functionals allow. A window boundary on a step could then be decided
-  !! differently by the forward run and by the adjoint run, which sums a time
-  !! of its own. Both therefore take the time of a sample from here.
+  !! The time is counted in steps from the time the run starts from, rather
+  !! than summed step by step as the simulation's own time is. The round-off
+  !! of that sum grows with the number of steps, and after a few hundred
+  !! thousand of them it reaches the tolerance of `1e-6 * dt` that the time
+  !! windows of the functionals allow. A window boundary on a step could then
+  !! be decided differently by the forward run and by the adjoint run, which
+  !! sums a time of its own. Both therefore take the time of a sample from
+  !! here.
   !! @note All the steps are of the same length: `simulation_t` rejects a
   !! variable time step for an unsteady problem. With a variable one the time
   !! after each step would have to be recorded instead.
-  !! @param start_time The start time of the run.
+  !! @param start_time The time the run starts from.
   !! @param dt The time step.
   !! @param n_steps The number of time steps taken.
   !! @return The time after `n_steps` time steps.
