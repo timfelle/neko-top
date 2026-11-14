@@ -114,7 +114,7 @@ add_pfunit_ctest(checkpoint_end_of_run_gating
 
 add_pfunit_ctest(checkpoint_recompute_components
     TEST_SOURCES
-        ${CMAKE_CURRENT_SOURCE_DIR}/test_checkpoint_recompute_components.pf
+        test_checkpoint_recompute_components.pf
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     LINK_LIBRARIES checkpointing_test_utils Neko-TOP::neko-top
     MAX_PES 2
