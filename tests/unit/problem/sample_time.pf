@@ -10,7 +10,11 @@
 !! time summed by the adjoint itself.
 !!
 !! The exact time is taken in quadruple precision, in which the product of a
-!! step count and a time step in double precision is exact.
+!! step count up to a million and a time step in double precision is exact,
+!! and so is its sum with each start time used here. That holds only where
+!! `qp` is quadruple precision: Neko's `num_types` takes `REAL128` for it,
+!! and falls back to single precision for a compiler without that kind, so
+!! both tests check it first.
 module sample_time
   use mpi
   use pfunit
@@ -128,6 +132,9 @@ contains
     real(kind=dp), parameter :: margin = 1.0e-3_dp
     real(kind=dp) :: error
 
+    @assertTrue(precision(1.0_qp) .gt. precision(1.0_dp), &
+         'needs REAL128; num_types qp falls back to single precision')
+
     error = counted_error(0.0_dp, 1.0e-3_dp)
     @assertLessThan(error, margin * window_tolerance, "start 0, dt 1e-3")
 
@@ -150,6 +157,9 @@ contains
   subroutine summed_time_drifts(this)
     class(test_sample_time_case), intent(inout) :: this
     real(kind=dp) :: forward_error, adjoint_error
+
+    @assertTrue(precision(1.0_qp) .gt. precision(1.0_dp), &
+         'needs REAL128; num_types qp falls back to single precision')
 
     call summed_errors(1.0e-3_dp, forward_error, adjoint_error)
     @assertGreaterThan(forward_error, window_tolerance, "forward, dt 1e-3")
