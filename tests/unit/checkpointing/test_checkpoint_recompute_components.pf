@@ -43,6 +43,10 @@ module test_checkpoint_recompute_components
 
   integer, parameter :: checkpoint_saves_in_memory = 10
   integer, parameter :: n_forward_steps = 55
+  !> The number of recomputed steps, steps 3 to 9, 11 to 19, 21 to 29, 31 to
+  !! 39 and 41 to 49, which the recompute takes from the checkpoint files of
+  !! steps 2, 10, 20, 30 and 40.
+  integer, parameter :: n_recomputed_steps = 43
   real(kind=rp), parameter :: restore_tolerance = NEKO_EPS
   !> The tolerance of the `steady` component in `steady_freezes_forward_run`.
   !! The largest of the norms it compares with it are those of the pressure,
@@ -58,7 +62,7 @@ module test_checkpoint_recompute_components
   end type recompute_components_case
 
   !> A simulation component counting how often it runs, for
-  !! `components_compute_once`.
+  !! `check_component_runs`.
   type, extends(simulation_component_t) :: counting_simcomp_t
    contains
      procedure, pass(this) :: init => counting_simcomp_init
@@ -161,17 +165,15 @@ contains
 
   !> A component's `compute` follows a time step and runs on the steps of the
   !! forward run only, while its `preprocess`, which prepares a time step,
-  !! runs on the recomputed steps as well. The counting component runs both on
-  !! every step, on a schedule in simulation time, which a restart from a
-  !! checkpoint file continues.
+  !! runs on every recomputed step as well. The counting component runs both
+  !! on every step, on a schedule in simulation time, which a restart from a
+  !! checkpoint file continues from the restored time.
   @test(npes=[2])
   subroutine components_compute_once(this)
     class(recompute_components_case), intent(inout) :: this
     type(json_file) :: parameters
     real(kind=dp) :: dt
-    integer :: forward(2)
     logical :: found
-    character(len=256) :: msg
 
     call read_case(parameters)
     call json_get(parameters, 'case.time.timestep', dt)
@@ -187,13 +189,43 @@ contains
     call parameters%update('case.simulation_components(1).preprocess_value', &
          dt, found)
 
+    call check_component_runs(parameters, 'recompute_counter/')
+  end subroutine components_compute_once
+
+  !> As `components_compute_once`, with the counting component on the default
+  !! schedule, every time step. A schedule in time steps is restarted from
+  !! the time step of the case, which the recompute must set to the restored
+  !! one before it restarts the case from the checkpoint file.
+  @test(npes=[2])
+  subroutine components_compute_once_step_schedule(this)
+    class(recompute_components_case), intent(inout) :: this
+    type(json_file) :: parameters
+    logical :: found
+
+    call read_case(parameters)
+    call parameters%update('case.simulation_components(1).type', &
+         'counter', found)
+
+    call check_component_runs(parameters, 'recompute_counter_steps/')
+  end subroutine components_compute_once_step_schedule
+
+  !> Run the case with the counting component, and check how often the
+  !! component ran in the forward run and in the restores.
+  !! @param parameters The case.
+  !! @param path The directory of the checkpoint files.
+  subroutine check_component_runs(parameters, path)
+    type(json_file), intent(inout) :: parameters
+    character(len=*), intent(in) :: path
+    integer :: forward(2)
+    character(len=256) :: msg
+
     n_preprocess = 0
     n_compute = 0
-    call check_recompute(parameters, 'recompute_counter/', 0, forward)
+    call check_recompute(parameters, path, 0, forward)
 
-    write(msg, '(A,2(1X,I0),A,2(1X,I0))') 'Counting component, preprocess ' &
-         // 'and compute runs, forward run:', forward, ', in all:', &
-         n_preprocess, n_compute
+    write(msg, '(A,A,A,2(1X,I0),A,2(1X,I0))') 'Counting component in ', &
+         path, ', preprocess and compute runs, forward run:', forward, &
+         ', in all:', n_preprocess, n_compute
     call neko_log%message(trim(msg))
 
     write(msg, '(A,I0,A,I0,A,I0)') 'The counting component must run on ' // &
@@ -207,10 +239,10 @@ contains
     @assertEqual(forward(2), n_compute, trim(msg))
 
     write(msg, '(A,I0,A,I0)') 'The recompute must run the components'' ' // &
-         'preprocess: the forward run ran it ', forward(1), &
-         ' times, the restores ', n_preprocess - forward(1)
-    @assertTrue(n_preprocess .gt. forward(1), trim(msg))
-  end subroutine components_compute_once
+         'preprocess once on each of its ', n_recomputed_steps, &
+         ' steps, it ran it ', n_preprocess - forward(1)
+    @assertEqual(n_recomputed_steps, n_preprocess - forward(1), trim(msg))
+  end subroutine check_component_runs
 
   !> Read the case and end it after `n_forward_steps` steps.
   !! @param parameters The case.
