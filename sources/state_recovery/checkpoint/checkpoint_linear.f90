@@ -44,7 +44,10 @@
 !! requires large amounts of memory and disk space.
 submodule (state_recover_checkpoint) checkpoint_linear
   use num_types, only: dp
-  use simulation, only: simulation_step, simulation_restart
+  use simulation, only: simulation_restart
+  use simcomp_executor, only: neko_simcomps
+  use time_state, only: time_state_t
+  use time_scheme_controller, only: time_scheme_controller_t
   use time_step_controller, only: time_step_controller_t
   use profiler, only: profiler_start_region, profiler_end_region
 
@@ -96,14 +99,15 @@ contains
   !! If the requested time step is not in memory, we load the nearest
   !! checkpoint from disc and then we step forward in time to fill our cache.
   !! Finally, we copy the requested time step from our cache.
+  !! @details The steps forward repeat those of the forward run, without the
+  !! simulation components' `compute` and the output, see
+  !! `checkpoint_recompute_step`. The fluid is frozen in them as it was in
+  !! the forward run.
   module subroutine checkpoint_restore_linear(this, tstep)
     class(state_recover_checkpoint_t), intent(inout) :: this
     integer, intent(in) :: tstep
     type(time_step_controller_t) :: dt_controller
-    real(kind=dp) :: loop_start
     integer :: k, previous_save, next_save, local_idx, counter
-
-    loop_start = MPI_WTIME()
 
     ! Determine the nearest save states on both sides
     previous_save = tstep - modulo(tstep, this%n_saves_memory)
@@ -142,8 +146,11 @@ contains
           ! Do not run simulation step on the first iteration
           if (k .ne. previous_save) then
              if (this%neko_case%time%is_done()) exit
-             call simulation_step(this%neko_case, dt_controller, loop_start)
+             call checkpoint_recompute_step(this%neko_case, dt_controller)
           end if
+
+          ! Freeze the fluid, or not, as after this step of the forward run
+          this%neko_case%fluid%freeze = this%fluid_frozen(k)
 
           ! Save the restored state in memory
           local_idx = modulo(k, this%n_saves_memory) + 1
@@ -156,6 +163,81 @@ contains
     local_idx = modulo(tstep, this%n_saves_memory) + 1
     call this%load_data(local_idx)
   end subroutine checkpoint_restore_linear
+
+  !> Take a time step of the forward run again, to recompute its state.
+  !! @details This is the time step of Neko's `simulation_step` up to the end
+  !! of the fluid and scalar steps. What follows them there, the simulation
+  !! components' `compute`, the user's `compute` and the output, ran on the
+  !! step in the forward run, and must not run on it again: the output would
+  !! be written twice and statistics would count the step twice, and the
+  !! `steady` component, which compares the state with the one it last
+  !! computed on, would freeze the fluid on finding a state it has seen
+  !! already. The freezes of the forward run are set by the caller instead.
+  !! What prepares the step, the user's and the simulation components'
+  !! `preprocess`, is part of it, for instance the eddy viscosity of an LES
+  !! model, and runs again.
+  !! @param neko_case The case.
+  !! @param dt_controller The time-step controller.
+  subroutine checkpoint_recompute_step(neko_case, dt_controller)
+    type(case_t), intent(inout) :: neko_case
+    type(time_step_controller_t), intent(inout) :: dt_controller
+    real(kind=dp) :: cfl
+
+    cfl = neko_case%fluid%compute_cfl(neko_case%time%dt)
+    call dt_controller%set_dt(neko_case%time, cfl)
+    call checkpoint_recompute_settime(neko_case%time, neko_case%fluid%ext_bdf)
+
+    call neko_case%time%status()
+    call neko_log%begin()
+
+    call neko_case%user%preprocess(neko_case%time)
+    call neko_simcomps%preprocess(neko_case%time)
+
+    call neko_log%section('Fluid')
+    call neko_case%fluid%step(neko_case%time, dt_controller)
+    call neko_log%end_section()
+
+    if (allocated(neko_case%scalars)) then
+       call neko_log%section('Scalar')
+       call neko_case%scalars%step(neko_case%time, neko_case%fluid%ext_bdf, &
+            dt_controller)
+       call neko_log%end_section()
+    end if
+
+    call neko_log%end()
+  end subroutine checkpoint_recompute_step
+
+  !> Advance the time by one time step, as `simulation_step` does. This is a
+  !! copy of `simulation_settime`, which is private to Neko's `simulation`
+  !! module. A difference between the two would show as a difference between
+  !! the recomputed states and those of the forward run.
+  !! @param time The time state.
+  !! @param ext_bdf The time scheme of the fluid.
+  subroutine checkpoint_recompute_settime(time, ext_bdf)
+    type(time_state_t), intent(inout) :: time
+    type(time_scheme_controller_t), allocatable, intent(inout) :: ext_bdf
+    integer :: i
+
+    do i = 10, 2, -1
+       time%tlag(i) = time%tlag(i-1)
+       time%dtlag(i) = time%dtlag(i-1)
+    end do
+
+    time%dtlag(1) = time%dt
+    time%tlag(1) = time%t
+
+    if (allocated(ext_bdf)) then
+       if (ext_bdf%ndiff .eq. 0) then
+          time%dtlag(2) = time%dt
+          time%tlag(2) = time%t
+       end if
+
+       call ext_bdf%set_coeffs(real(time%dtlag, kind=rp))
+    end if
+
+    time%tstep = time%tstep + 1
+    time%t = time%t + time%dt
+  end subroutine checkpoint_recompute_settime
 
   pure function determine_counter(tstep, n_memory, first) result(counter)
     integer, intent(in) :: tstep, n_memory, first
