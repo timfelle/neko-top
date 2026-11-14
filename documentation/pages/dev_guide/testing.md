@@ -29,6 +29,13 @@ runtime known passing checks for `Debug` builds and disables them otherwise.
 Setting `ON` enables all runtime checks regardless of the build type, and
 setting `OFF` disables all runtime checks.
 
+On a device backend (CUDA or HIP), `AUTO` leaves out the floating-point
+exception traps. The traps apply to the whole process, including the GPU
+driver, and the CUDA driver's just-in-time compilation of device code can
+raise `SIGFPE` under them. `ON` keeps the traps on every backend; on CUDA, set
+`CUDA_ARCH` to the architecture of the GPU so that the driver has no device
+code to compile at run time.
+
 ### Known failing tests with runtime checks enabled
 
 - Several tests currently fail with it enabled, due to collapsed-index loops in

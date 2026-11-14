@@ -56,6 +56,12 @@ endif()
 # - bounds/do/pointer/recursion checks
 # - FPE traps
 # - poisoning values for uninitialised variables
+#
+# FPE traps apply to the whole process once the main program has enabled
+# them, so they are also active inside the GPU driver and runtime. The CUDA
+# driver's just-in-time compiler for device code can raise SIGFPE under them,
+# so AUTO enables the traps on the CPU backend only, whereas ON enables them
+# on every backend.
 
 if (NEKO_TOP_RUNTIME_CHECKS STREQUAL "ON")
     add_compile_options(
@@ -71,13 +77,17 @@ elseif (NEKO_TOP_RUNTIME_CHECKS STREQUAL "AUTO"
         AND CMAKE_BUILD_TYPE STREQUAL "Debug")
      add_compile_options(
         $<$<COMPILE_LANGUAGE:Fortran>:-fcheck=all,no-array-temps,no-bounds>
-        $<$<COMPILE_LANGUAGE:Fortran>:-ffpe-trap=invalid,zero,overflow>
         $<$<COMPILE_LANGUAGE:Fortran>:-finit-real=snan>
         $<$<COMPILE_LANGUAGE:Fortran>:-finit-integer=-99999999>
         $<$<COMPILE_LANGUAGE:Fortran>:-finit-character=1>
         $<$<COMPILE_LANGUAGE:Fortran>:-finit-logical=true>
         $<$<COMPILE_LANGUAGE:Fortran>:-finit-derived>
     )
+    if (DEVICE_TYPE STREQUAL "CPU")
+        add_compile_options(
+            $<$<COMPILE_LANGUAGE:Fortran>:-ffpe-trap=invalid,zero,overflow>
+        )
+    endif()
 elseif (NEKO_TOP_RUNTIME_CHECKS STREQUAL "AUTO"
         AND NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
     # No runtime checks for Release and Testing builds
