@@ -1,0 +1,471 @@
+! Verification of the lifecycle of PDE_filter_t, the PDE filter mapping:
+! re-initialisation, preconditioners the filter cannot initialise, and
+! continuation of the filter radius across a re-initialisation.
+!
+!   1. A filter re-initialised from attributes, without being freed first,
+!      uses the coefficients and the radius it is given, and filters as a
+!      filter initialised only once with them does. So does a filter freed
+!      and re-initialised from JSON.
+!   2. A preconditioner the filter cannot initialise, hsmg, is rejected with
+!      an error when the filter is initialised, rather than failing on the
+!      first application. The error is redirected to a pFUnit exception, so
+!      that it can be caught. The identity preconditioner, which needs no
+!      initialisation, is still accepted.
+!   3. A filter radius given as an array is registered for continuation.
+!      Freeing the filter deregisters it, so that a continuation step taken
+!      after the filter is deallocated and initialised anew does not write to
+!      the deallocated filter, and reaches the new one. Run under valgrind, a
+!      write to the deallocated filter shows as an invalid write.
+!
+! The filters are set up on rows of hex elements spanning unit cubes, at
+! polynomial order 7 (lx = 8). The assertions come after the clean-up, so a
+! failing test leaves nothing behind for the next one.
+module mapping_pde_filter_lifecycle
+  use mpi
+  use pfunit
+  use funit, only: throw, catch, SourceLocation
+  use num_types, only: rp, dp
+  use mesh, only: mesh_t
+  use point, only: point_t
+  use space, only: space_t, GLL
+  use dofmap, only: dofmap_t
+  use gather_scatter, only: gs_t
+  use field, only: field_t
+  use coefs, only: coef_t
+  use PDE_filter_mapping, only: PDE_filter_t
+  use continuation_scheduler, only: nekotop_continuation
+  use json_module, only: json_file
+  use registry, only: neko_registry
+  use scratch_registry, only: neko_scratch_registry
+  use comm, only: NEKO_COMM, pe_rank, pe_size, comm_init
+  use neko_config, only: NEKO_BCKND_DEVICE
+  use device, only: device_init, device_finalize, device_memcpy, &
+       HOST_TO_DEVICE, DEVICE_TO_HOST
+  use logger, only: neko_log
+  use utils, only: throw_error, default_throw_error
+  implicit none
+
+  !> Polynomial order of the test space (order 7 => lx = 8).
+  integer, parameter :: LX = 8
+
+  !> Attributes of the filters compared against each other.
+  real(kind=rp), parameter :: filter_r = 0.3_rp
+  real(kind=rp), parameter :: filter_tol = 1.0e-10_rp
+  integer, parameter :: filter_max_iter = 200
+
+  !> Largest difference accepted between two filters set up alike, which
+  !! run the same operations and so agree to round-off. A filter set up on
+  !! other coefficients or with another radius is off by far more.
+  real(kind=rp), parameter :: same_filter_tol = 1.0e-8_rp
+
+  @TestCase
+  type, extends(MPITestCase) :: test_pde_filter_lifecycle
+   contains
+     procedure :: setUp
+     procedure :: tearDown
+  end type test_pde_filter_lifecycle
+
+contains
+
+  subroutine setUp(this)
+    class(test_pde_filter_lifecycle), intent(inout) :: this
+    if (NEKO_BCKND_DEVICE .eq. 1) then
+       call device_init
+    end if
+    call comm_init
+    call neko_log%init()
+  end subroutine setUp
+
+  subroutine tearDown(this)
+    class(test_pde_filter_lifecycle), intent(inout) :: this
+    ! A test that fails early must not leave neko_error redirected.
+    throw_error => default_throw_error
+    call neko_log%free()
+    if (NEKO_BCKND_DEVICE .eq. 1) then
+       call device_finalize
+    end if
+  end subroutine tearDown
+
+  !> Raise a pFUnit exception in place of stopping, so that a test can catch
+  !! the error raised when a filter is initialised.
+  !! @param filename The file that raised the error.
+  !! @param line_number The line that raised the error.
+  !! @param message The error message, if any.
+  subroutine throw_to_pfunit(filename, line_number, message)
+    character(len=*), intent(in) :: filename
+    integer, intent(in) :: line_number
+    character(len=*), optional, intent(in) :: message
+
+    call throw('neko_error was called', SourceLocation(filename, line_number))
+
+  end subroutine throw_to_pfunit
+
+  !> Build the SEM coefficients on a row of `nelv` hex elements along x,
+  !! each spanning a unit cube.
+  !! @param nelv The number of elements.
+  !! @param msh The mesh.
+  !! @param Xh The function space.
+  !! @param dof The dofmap.
+  !! @param gs The gather-scatter handle.
+  !! @param coef The SEM coefficients.
+  subroutine build_fixture(nelv, msh, Xh, dof, gs, coef)
+    integer, intent(in) :: nelv
+    type(mesh_t), intent(inout) :: msh
+    type(space_t), intent(inout) :: Xh
+    type(dofmap_t), intent(inout) :: dof
+    type(gs_t), intent(inout) :: gs
+    type(coef_t), intent(inout) :: coef
+    type(point_t), allocatable :: p(:)
+    integer :: e, i, ix, iy, iz, id(8)
+
+    ! Corner points, numbered so that neighbouring elements share theirs.
+    allocate(p(4 * (nelv + 1)))
+    do iz = 0, 1
+       do iy = 0, 1
+          do ix = 0, nelv
+             i = 1 + ix + (nelv + 1) * (iy + 2 * iz)
+             call p(i)%init(real(ix, dp), real(iy, dp), real(iz, dp))
+             call p(i)%set_id(i)
+          end do
+       end do
+    end do
+
+    call msh%init(3, nelv)
+    do e = 1, nelv
+       do i = 1, 8
+          id(i) = e + mod(i - 1, 2) + (nelv + 1) * (mod((i - 1) / 2, 2) &
+               + 2 * ((i - 1) / 4))
+       end do
+       call msh%add_element(e, e, p(id(1)), p(id(2)), p(id(3)), p(id(4)), &
+            p(id(5)), p(id(6)), p(id(7)), p(id(8)))
+    end do
+    call msh%generate_conn()
+
+    call Xh%init(GLL, LX, LX, LX)
+    call dof%init(msh, Xh)
+    call gs%init(dof)
+    call coef%init(gs)
+
+    deallocate(p)
+
+  end subroutine build_fixture
+
+  !> Free everything build_fixture set up.
+  !! @param msh The mesh.
+  !! @param Xh The function space.
+  !! @param dof The dofmap.
+  !! @param gs The gather-scatter handle.
+  !! @param coef The SEM coefficients.
+  subroutine free_fixture(msh, Xh, dof, gs, coef)
+    type(mesh_t), intent(inout) :: msh
+    type(space_t), intent(inout) :: Xh
+    type(dofmap_t), intent(inout) :: dof
+    type(gs_t), intent(inout) :: gs
+    type(coef_t), intent(inout) :: coef
+
+    call coef%free()
+    call gs%free()
+    call dof%free()
+    call Xh%free()
+    call msh%free()
+
+  end subroutine free_fixture
+
+  !> An impulse at an interior node of the first element, set on the host
+  !! and copied to the device, as the filter reads the device copy on device
+  !! backends.
+  !! @param f The field to set.
+  subroutine make_impulse(f)
+    type(field_t), intent(inout) :: f
+
+    f%x = 0.0_rp
+    f%x(4, 4, 4, 1) = 1.0_rp
+    if (NEKO_BCKND_DEVICE .eq. 1) then
+       call device_memcpy(f%x, f%x_d, f%size(), HOST_TO_DEVICE, .true.)
+    end if
+
+  end subroutine make_impulse
+
+  !> Largest pointwise difference between two fields, compared on the host.
+  !! Only meaningful on a single rank, as there is no global reduction.
+  !! @param a The first field, copied to the host on device backends.
+  !! @param b The second field, copied to the host on device backends.
+  function max_abs_diff(a, b) result(d)
+    type(field_t), intent(inout) :: a, b
+    real(kind=rp) :: d
+
+    if (NEKO_BCKND_DEVICE .eq. 1) then
+       call device_memcpy(a%x, a%x_d, a%size(), DEVICE_TO_HOST, .true.)
+       call device_memcpy(b%x, b%x_d, b%size(), DEVICE_TO_HOST, .true.)
+    end if
+    d = maxval(abs(a%x - b%x))
+
+  end function max_abs_diff
+
+  !> A filter re-initialised from attributes on other coefficients, and with
+  !! another radius, filters as one initialised only once with them, and so
+  !! does a filter freed and re-initialised from JSON.
+  @test(npes=[1])
+  subroutine test_reinit_uses_new_coef(this)
+    class(test_pde_filter_lifecycle), intent(inout) :: this
+    type(mesh_t) :: msh_a, msh_b
+    type(space_t) :: Xh_a, Xh_b
+    type(dofmap_t) :: dof_a, dof_b
+    type(gs_t) :: gs_a, gs_b
+    type(coef_t), target :: coef_a, coef_b
+    type(PDE_filter_t) :: map, ref
+    type(json_file) :: json_a, json_b, json_ref
+    type(field_t) :: u_a, f_a, u_b, f_b, g_b
+    logical :: uses_coef_b
+    real(kind=rp) :: d_attributes, d_json
+    integer :: ierr
+
+    call MPI_Comm_dup(this%getMpiCommunicator(), NEKO_COMM%mpi_val, ierr)
+    pe_rank = this%getProcessRank()
+    pe_size = this%getNumProcesses()
+
+    call build_fixture(1, msh_a, Xh_a, dof_a, gs_a, coef_a)
+    call build_fixture(2, msh_b, Xh_b, dof_b, gs_b, coef_b)
+    call neko_registry%init()
+
+    ! A filter set up from JSON on one element, with a smaller radius, and
+    ! applied once.
+    call neko_scratch_registry%init(dof = dof_a)
+    call json_a%initialize()
+    call json_a%load_from_string('{"r": 0.1}')
+    call map%init(json_a, coef_a)
+    call u_a%init(dof_a, 'u_a')
+    call f_a%init(dof_a, 'f_a')
+    call make_impulse(u_a)
+    call map%forward_mapping(f_a, u_a)
+
+    ! The same filter re-initialised from attributes on two elements, without
+    ! freeing it first.
+    call neko_scratch_registry%init(dof = dof_b)
+    call map%init_from_attributes(coef_b, filter_r, filter_tol, &
+         filter_max_iter, "cg", "jacobi", .false.)
+    uses_coef_b = associated(map%coef, coef_b)
+
+    call u_b%init(dof_b, 'u_b')
+    call f_b%init(dof_b, 'f_b')
+    call g_b%init(dof_b, 'g_b')
+    call make_impulse(u_b)
+
+    ! The reference, initialised once with the same attributes: those of
+    ! the JSON defaults.
+    call json_ref%initialize()
+    call json_ref%load_from_string('{"r": 0.3}')
+    call ref%init(json_ref, coef_b)
+    call ref%forward_mapping(g_b, u_b)
+
+    ! A filter still set up on the first mesh is not applied to the second.
+    d_attributes = huge(1.0_rp)
+    if (uses_coef_b) then
+       call map%forward_mapping(f_b, u_b)
+       d_attributes = max_abs_diff(f_b, g_b)
+    end if
+
+    ! Freed, and re-initialised from JSON with the radius of the reference.
+    call map%free()
+    call json_b%initialize()
+    call json_b%load_from_string('{"r": 0.3}')
+    call map%init(json_b, coef_b)
+    call map%forward_mapping(f_b, u_b)
+    d_json = max_abs_diff(f_b, g_b)
+
+    call u_a%free()
+    call f_a%free()
+    call u_b%free()
+    call f_b%free()
+    call g_b%free()
+    call map%free()
+    call ref%free()
+    call json_a%destroy()
+    call json_b%destroy()
+    call json_ref%destroy()
+    call neko_scratch_registry%free()
+    call neko_registry%free()
+    call free_fixture(msh_a, Xh_a, dof_a, gs_a, coef_a)
+    call free_fixture(msh_b, Xh_b, dof_b, gs_b, coef_b)
+
+    @assertTrue(uses_coef_b, 'Re-initialised filter kept its old coef')
+    @assertEqual(0.0_rp, d_attributes, tolerance = same_filter_tol, &
+         message = 'Re-initialised from attributes')
+    @assertEqual(0.0_rp, d_json, tolerance = same_filter_tol, &
+         message = 'Freed and re-initialised from JSON')
+
+  end subroutine test_reinit_uses_new_coef
+
+  !> A filter that asks for hsmg, which it cannot initialise, raises an error
+  !! when it is initialised. The identity preconditioner is accepted, and
+  !! filters as the default Jacobi preconditioner does.
+  @test(npes=[1])
+  subroutine test_hsmg_is_rejected(this)
+    class(test_pde_filter_lifecycle), intent(inout) :: this
+    type(mesh_t) :: msh
+    type(space_t) :: Xh
+    type(dofmap_t) :: dof
+    type(gs_t) :: gs
+    type(coef_t), target :: coef
+    type(PDE_filter_t) :: map, ref
+    type(json_file) :: json_hsmg, json_ident, json_jacobi
+    type(field_t) :: u, f, g
+    logical :: hsmg_raised, ident_raised, ident_converged
+    real(kind=rp) :: d
+    integer :: ierr
+
+    call MPI_Comm_dup(this%getMpiCommunicator(), NEKO_COMM%mpi_val, ierr)
+    pe_rank = this%getProcessRank()
+    pe_size = this%getNumProcesses()
+
+    call build_fixture(1, msh, Xh, dof, gs, coef)
+    call neko_scratch_registry%init(dof = dof)
+    call neko_registry%init()
+
+    ! Neither initialised nor applied, as applying it would fail.
+    call json_hsmg%initialize()
+    call json_hsmg%load_from_string('{"r": 0.2, "preconditioner": "hsmg"}')
+    throw_error => throw_to_pfunit
+    call map%init(json_hsmg, coef)
+    hsmg_raised = catch()
+    throw_error => default_throw_error
+    call map%free()
+
+    call json_ident%initialize()
+    call json_ident%load_from_string('{"r": 0.2, "preconditioner": "ident"}')
+    throw_error => throw_to_pfunit
+    call map%init(json_ident, coef)
+    ident_raised = catch()
+    throw_error => default_throw_error
+
+    call u%init(dof, 'u')
+    call f%init(dof, 'f')
+    call g%init(dof, 'g')
+    call make_impulse(u)
+    call map%forward_mapping(f, u)
+    ident_converged = map%ksp_results(1)%converged
+
+    call json_jacobi%initialize()
+    call json_jacobi%load_from_string('{"r": 0.2}')
+    call ref%init(json_jacobi, coef)
+    call ref%forward_mapping(g, u)
+    d = max_abs_diff(f, g)
+
+    call u%free()
+    call f%free()
+    call g%free()
+    call map%free()
+    call ref%free()
+    call json_hsmg%destroy()
+    call json_ident%destroy()
+    call json_jacobi%destroy()
+    call neko_scratch_registry%free()
+    call neko_registry%free()
+    call free_fixture(msh, Xh, dof, gs, coef)
+
+    @assertTrue(hsmg_raised, 'A filter with hsmg raised no error')
+    @assertFalse(ident_raised, 'A filter with ident raised an error')
+    @assertTrue(ident_converged, 'The solve with ident did not converge')
+    @assertEqual(0.0_rp, d, tolerance = 1.0e-6_rp, &
+         message = 'ident and jacobi differ')
+
+  end subroutine test_hsmg_is_rejected
+
+  !> A continuation step taken after the filter whose radius it continues
+  !! was deallocated and initialised anew updates the new filter only, and
+  !! the new filter solves with the stepped radius. An unrelated parameter
+  !! registered before the filter keeps being continued.
+  @test(npes=[1])
+  subroutine test_continuation_after_reinit(this)
+    class(test_pde_filter_lifecycle), intent(inout) :: this
+    type(mesh_t) :: msh
+    type(space_t) :: Xh
+    type(dofmap_t) :: dof
+    type(gs_t) :: gs
+    type(coef_t), target :: coef
+    type(PDE_filter_t), allocatable :: map
+    type(PDE_filter_t) :: ref
+    type(json_file) :: json_root, json_a, json_b, json_ref
+    type(field_t) :: u, f, g
+    real(kind=rp), target :: other
+    integer :: n_init, n_freed, n_reinit
+    character(len=32) :: first_name
+    real(kind=rp) :: r_stepped, other_stepped, d
+    integer :: ierr
+
+    call MPI_Comm_dup(this%getMpiCommunicator(), NEKO_COMM%mpi_val, ierr)
+    pe_rank = this%getProcessRank()
+    pe_size = this%getNumProcesses()
+
+    call build_fixture(1, msh, Xh, dof, gs, coef)
+    call neko_scratch_registry%init(dof = dof)
+    call neko_registry%init()
+
+    ! One iteration per value, the default.
+    call json_root%initialize()
+    call nekotop_continuation%init(json_root)
+
+    other = 0.0_rp
+    call nekotop_continuation%register_parameter('other', other, &
+         [1.0_rp, 2.0_rp, 3.0_rp])
+
+    allocate(map)
+    call json_a%initialize()
+    call json_a%load_from_string('{"r": [0.1, 0.2, 0.3]}')
+    call map%init(json_a, coef)
+    n_init = nekotop_continuation%get_n_params()
+
+    ! Deallocated, so that a pointer to the old radius would dangle.
+    call map%free()
+    deallocate(map)
+    n_freed = nekotop_continuation%get_n_params()
+
+    allocate(map)
+    call json_b%initialize()
+    call json_b%load_from_string('{"r": [0.4, 0.5, 0.6]}')
+    call map%init(json_b, coef)
+    n_reinit = nekotop_continuation%get_n_params()
+    first_name = nekotop_continuation%get_param_name(1)
+
+    call nekotop_continuation%update(2)
+    r_stepped = map%r
+    other_stepped = other
+
+    call u%init(dof, 'u')
+    call f%init(dof, 'f')
+    call g%init(dof, 'g')
+    call make_impulse(u)
+    call map%forward_mapping(f, u)
+    call json_ref%initialize()
+    call json_ref%load_from_string('{"r": 0.5}')
+    call ref%init(json_ref, coef)
+    call ref%forward_mapping(g, u)
+    d = max_abs_diff(f, g)
+
+    call u%free()
+    call f%free()
+    call g%free()
+    call map%free()
+    deallocate(map)
+    call ref%free()
+    call nekotop_continuation%free()
+    call json_root%destroy()
+    call json_a%destroy()
+    call json_b%destroy()
+    call json_ref%destroy()
+    call neko_scratch_registry%free()
+    call neko_registry%free()
+    call free_fixture(msh, Xh, dof, gs, coef)
+
+    @assertEqual(2, n_init, 'Parameters registered with the first filter')
+    @assertEqual(1, n_freed, 'Parameters registered once it was freed')
+    @assertEqual(2, n_reinit, 'Parameters registered with the second filter')
+    @assertEqual('other', trim(first_name), 'First registered parameter')
+    @assertEqual(0.5_rp, r_stepped, 'Radius of the new filter after the step')
+    @assertEqual(2.0_rp, other_stepped, 'Other parameter after the step')
+    @assertEqual(0.0_rp, d, tolerance = same_filter_tol, &
+         message = 'Filtered with the stepped radius')
+
+  end subroutine test_continuation_after_reinit
+
+end module mapping_pde_filter_lifecycle
