@@ -3,13 +3,14 @@
 # on some ranks only or hanging.
 #
 #   cmake -DDRIVER=<exe> -DMPIEXEC=<launcher> -DNUMPROC_FLAG=<flag> \
-#         [-DPREFLAGS=<flags>] -DMAX_RANKS=<n> -DTIME_LIMIT=<seconds> \
-#         -P check_checkpoint_rank_change.cmake
+#         [-DPREFLAGS=<flags>] -DCASES=<rank_count|uneven> \
+#         -DTIME_LIMIT=<seconds> -P check_checkpoint_rank_change.cmake
 #
 # DRIVER      The checkpoint_rank_change executable.
 # MPIEXEC     The MPI launcher, with NUMPROC_FLAG and PREFLAGS as for pFUnit.
-# MAX_RANKS   The number of ranks available. The case that needs three ranks
-#             is skipped below that.
+# CASES       `rank_count`: loads on fewer and on more ranks than the save.
+#             `uneven`: a load on as many ranks with another layout, which
+#             needs three ranks.
 # TIME_LIMIT  The time limit of each run, in seconds. A run that does not stop
 #             within it hangs, which fails the test.
 #
@@ -18,7 +19,7 @@
 # makes each rank wait for the others before it stops, so the output holds
 # one message per rank, and an error raised on some ranks only hangs.
 
-foreach(var DRIVER MPIEXEC NUMPROC_FLAG MAX_RANKS TIME_LIMIT)
+foreach(var DRIVER MPIEXEC NUMPROC_FLAG CASES TIME_LIMIT)
     if (NOT DEFINED ${var})
         message(FATAL_ERROR "${var} is not set")
     endif()
@@ -89,18 +90,19 @@ function(check_case save_ranks load_ranks layout expected)
     endforeach()
 endfunction()
 
-# Fewer ranks than the save: the stored per-rank sizes no longer fit.
-check_case(2 1 even "${rank_count_error}")
+if (CASES STREQUAL "rank_count")
+    # Fewer ranks than the save: the stored per-rank sizes no longer fit.
+    check_case(2 1 even "${rank_count_error}")
 
-# More ranks than the save.
-check_case(1 2 even "${rank_count_error}")
-
-# The same number of ranks, but one rank holds a different share. Only some
-# ranks see their own size differ, so all must agree before reading on.
-if (MAX_RANKS GREATER_EQUAL 3)
+    # More ranks than the save.
+    check_case(1 2 even "${rank_count_error}")
+elseif (CASES STREQUAL "uneven")
+    # The same number of ranks, but one rank holds a different share. Only
+    # some ranks see their own size differ, so all must agree before reading
+    # on.
     check_case(3 3 uneven "mismatch in n during HDF5 read")
 else()
-    message(STATUS "Skipping the uneven case, which needs 3 ranks")
+    message(FATAL_ERROR "Unknown CASES: '${CASES}'")
 endif()
 
 file(REMOVE ${checkpoint})

@@ -213,10 +213,10 @@ if (HAVE_HDF5)
     endif()
 
     # checkpoint_rank_change: the MMA and the design checkpoints must stop with
-    # an error on every rank when loaded into a run they do not match, such as
-    # one on a different number of ranks. The error stops the run, so the
-    # driver runs outside pFUnit, from a script that launches it on varying
-    # numbers of ranks under a time limit.
+    # an error on every rank when loaded on fewer or more ranks than the save.
+    # checkpoint_rank_change_uneven: the same on as many ranks with another
+    # layout, which needs three ranks. The error stops the run, so the driver
+    # runs outside pFUnit, from a script that launches it under a time limit.
     add_executable(checkpoint_rank_change EXCLUDE_FROM_ALL
         ${CMAKE_CURRENT_SOURCE_DIR}/checkpoint_rank_change.f90
     )
@@ -225,22 +225,38 @@ if (HAVE_HDF5)
     )
     add_dependencies(Unit checkpoint_rank_change)
 
-    file(MAKE_DIRECTORY
-        ${CMAKE_CURRENT_BINARY_DIR}/run/checkpoint_rank_change)
-    add_test(NAME checkpoint_rank_change
-        COMMAND ${CMAKE_COMMAND}
-            -DDRIVER=$<TARGET_FILE:checkpoint_rank_change>
-            -DMPIEXEC=${MPIEXEC_EXECUTABLE}
-            -DNUMPROC_FLAG=${MPIEXEC_NUMPROC_FLAG}
-            "-DPREFLAGS=${MPIEXEC_PREFLAGS}"
-            -DMAX_RANKS=${MPIEXEC_MAX_NUMPROCS}
-            -DTIME_LIMIT=60
-            -P ${CMAKE_CURRENT_SOURCE_DIR}/check_checkpoint_rank_change.cmake
-        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/run/checkpoint_rank_change
-    )
-    set_tests_properties(checkpoint_rank_change PROPERTIES
-        LABELS "unit;checkpointing;hdf5"
-        ENVIRONMENT "NEKO_LOG_FILE=checkpoint_rank_change.log"
-        TIMEOUT 600
-    )
+    set(rank_change_script
+        ${CMAKE_CURRENT_SOURCE_DIR}/check_checkpoint_rank_change.cmake)
+    foreach(cases rank_count uneven)
+        set(test_name checkpoint_rank_change)
+        if (NOT cases STREQUAL "rank_count")
+            string(APPEND test_name "_${cases}")
+        endif()
+
+        # A directory per test, as both write the same checkpoint file
+        set(run_dir ${CMAKE_CURRENT_BINARY_DIR}/run/${test_name})
+        file(MAKE_DIRECTORY ${run_dir})
+        add_test(NAME ${test_name}
+            COMMAND ${CMAKE_COMMAND}
+                -DDRIVER=$<TARGET_FILE:checkpoint_rank_change>
+                -DMPIEXEC=${MPIEXEC_EXECUTABLE}
+                -DNUMPROC_FLAG=${MPIEXEC_NUMPROC_FLAG}
+                "-DPREFLAGS=${MPIEXEC_PREFLAGS}"
+                -DCASES=${cases}
+                -DTIME_LIMIT=60
+                -P ${rank_change_script}
+            WORKING_DIRECTORY ${run_dir}
+        )
+        set_tests_properties(${test_name} PROPERTIES
+            LABELS "unit;checkpointing;hdf5"
+            ENVIRONMENT "NEKO_LOG_FILE=${test_name}.log"
+            TIMEOUT 900
+        )
+    endforeach()
+
+    if (NOT MPIEXEC_MAX_NUMPROCS OR MPIEXEC_MAX_NUMPROCS LESS 3)
+        set_tests_properties(checkpoint_rank_change_uneven PROPERTIES
+            DISABLED TRUE
+        )
+    endif()
 endif()
