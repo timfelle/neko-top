@@ -7,7 +7,7 @@
 module time_window
   use mpi
   use pfunit
-  use num_types, only: rp
+  use num_types, only: rp, dp
   use neko, only: neko_init
   use time_state, only: time_state_t
   use vector, only: vector_t
@@ -169,7 +169,7 @@ contains
     call functional%reset_value()
     call functional%reset_sensitivity()
 
-    call time%init(0.0_rp, sim_end, dt)
+    call time%init(0.0_dp, real(sim_end, kind=dp), real(dt, kind=dp))
 
     n_steps = nint(sim_end / dt)
     do step = 1, n_steps

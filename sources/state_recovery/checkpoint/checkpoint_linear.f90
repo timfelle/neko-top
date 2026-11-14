@@ -56,7 +56,7 @@ contains
   module subroutine checkpoint_save_linear(this)
     class(state_recover_checkpoint_t), intent(inout) :: this
     integer :: index, tstep, counter, n_total
-    real(kind=rp) :: time, start_time, end_time, dt
+    real(kind=dp) :: time, start_time, end_time, dt
 
     time = this%neko_case%time%t
     dt = this%neko_case%time%dt

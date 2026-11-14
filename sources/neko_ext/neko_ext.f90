@@ -155,7 +155,8 @@ contains
 
     ! Reset the external BDF coefficients
     do i = 1, size(neko_case%time%dtlag)
-       call neko_case%fluid%ext_bdf%set_coeffs(neko_case%time%dtlag)
+       call neko_case%fluid%ext_bdf%set_coeffs( &
+            real(neko_case%time%dtlag, kind=rp))
     end do
 
     ! Restart the simulation components
@@ -341,7 +342,8 @@ contains
 
     ! Reset the external BDF coefficients
     do i = 1, size(adjoint_case%time%dtlag)
-       call adjoint_case%fluid_adj%ext_bdf%set_coeffs(adjoint_case%time%dtlag)
+       call adjoint_case%fluid_adj%ext_bdf%set_coeffs( &
+            real(adjoint_case%time%dtlag, kind=rp))
     end do
 
     ! ------------------------------------------------------------------------ !

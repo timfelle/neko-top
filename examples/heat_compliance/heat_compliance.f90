@@ -31,7 +31,7 @@
 ! POSSIBILITY OF SUCH DAMAGE.
 
 module heat_compliance
-  use num_types, only: rp, sp
+  use num_types, only: rp, sp, dp
   use objective, only: objective_t
   use design, only: design_t
   use constraint, only: constraint_t
@@ -95,7 +95,7 @@ module heat_compliance
      type(field_t) :: thermal_conductivity
      type(mapping_handler_t) :: mapping
      integer :: ksp_n, n, i
-     real(kind=rp) :: writting_counter
+     real(kind=dp) :: writting_counter
      type(fld_file_output_t), private :: output
      real(kind=rp) :: avg_B
      logical :: enable_output
@@ -170,7 +170,7 @@ contains
 
     call this%init_base(name, design%size(), 1.0_rp)
     this%coef => coef
-    this%writting_counter = 1.0_rp
+    this%writting_counter = 1.0_dp
 
     call json_get_or_default(parameters, 'optimization.solver.enable_output', &
          enable_output, .true.)

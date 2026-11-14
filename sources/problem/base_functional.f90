@@ -339,7 +339,8 @@ contains
     ! Rectangle rule; could potentially use higher order trapezoidal/Simpson
     ! etc, but this should suffice.
     call vector_add3s2(this%sensitivity, &
-         sensitivity_new, sensitivity_old, weight_new, weight_old)
+         sensitivity_new, sensitivity_old, real(weight_new, kind=rp), &
+         real(weight_old, kind=rp))
     this%sensitivity_weight = this%sensitivity_weight + dt
 
     nullify(sensitivity_new)

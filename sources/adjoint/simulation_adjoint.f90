@@ -123,7 +123,7 @@ contains
   subroutine simulation_adjoint_step(C, dt_controller, cfl, &
        tstep_loop_start_time, final_time)
     type(adjoint_case_t), intent(inout) :: C
-    real(kind=rp), intent(inout) :: cfl
+    real(kind=dp), intent(inout) :: cfl
     type(time_step_controller_t), intent(inout) :: dt_controller
     real(kind=dp), intent(in) :: tstep_loop_start_time
     real(kind=rp), optional, intent(in) :: final_time
@@ -234,7 +234,7 @@ contains
           time%tlag(2) = time%t
        end if
 
-       call ext_bdf%set_coeffs(time%dtlag)
+       call ext_bdf%set_coeffs(real(time%dtlag, kind=rp))
     end if
 
     time%t = time%t + time%dt
@@ -270,7 +270,7 @@ contains
 
     ! Free the previous mesh, dont need it anymore
     do i = 1, size(C%time%dtlag)
-       call C%case%fluid%ext_bdf%set_coeffs(C%time%dtlag)
+       call C%case%fluid%ext_bdf%set_coeffs(real(C%time%dtlag, kind=rp))
     end do
 
     call C%fluid_adj%restart(C%case%chkp)
@@ -331,7 +331,7 @@ contains
   !> Write a checkpoint at joblimit
   subroutine simulation_adjoint_joblimit_chkp(C, t)
     type(adjoint_case_t), intent(inout) :: C
-    real(kind=rp), intent(inout) :: t
+    real(kind=dp), intent(inout) :: t
     type(file_t) :: chkpf
     character(len=:), allocatable :: chkp_format
     character(len=LOG_SIZE) :: log_buf

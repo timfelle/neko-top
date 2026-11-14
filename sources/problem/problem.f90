@@ -587,7 +587,7 @@ contains
     class(design_t), intent(inout) :: design
     type(time_step_controller_t) :: dt_controller
     real(kind=dp) :: loop_start
-    real(kind=rp) :: cfl
+    real(kind=dp) :: cfl
     real(kind=rp) :: total_time
     integer :: i, j
     type(time_state_t) :: accumulation_time

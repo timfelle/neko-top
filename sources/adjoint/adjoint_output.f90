@@ -34,7 +34,7 @@
 !
 !> Defines an output for a adjoint
 module adjoint_output
-  use num_types, only: rp
+  use num_types, only: dp
   use adjoint_fluid_scheme, only: adjoint_fluid_scheme_t
   use scalar_scheme, only: scalar_scheme_t
   use adjoint_scalar_scheme, only: adjoint_scalar_scheme_t
@@ -156,7 +156,7 @@ contains
   !! @param[in] t The time.
   subroutine adjoint_output_sample(this, t)
     class(adjoint_output_t), intent(inout) :: this
-    real(kind=rp), intent(in) :: t
+    real(kind=dp), intent(in) :: t
     integer :: i
 
     if (NEKO_BCKND_DEVICE .eq. 1) then
