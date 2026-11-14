@@ -261,6 +261,7 @@ contains
     integer :: ierr, info, mpi_comm, mismatch
     integer :: n, n_global, n_accum, n_array(pe_size)
     real(kind=rp) :: empty(1)
+    character(len=128) :: msg
 
     character(len=*), parameter :: h5_group = '/Design/checkpoint'
 
@@ -316,12 +317,17 @@ contains
     ! rank of the run that wrote the checkpoint, so it must match the rank
     ! count. The extent is the same on every rank, so all of them stop here.
     call h5aopen_f(grp_id, 'n', attr_id, ierr)
+    if (ierr .ne. 0) then
+       call neko_error('design: checkpoint has no attribute n')
+    end if
     call h5aget_space_f(attr_id, space_id, ierr)
     call h5sget_simple_extent_npoints_f(space_id, n_stored, ierr)
     call h5sclose_f(space_id, ierr)
     if (n_stored .ne. int(pe_size, hsize_t)) then
-       call neko_error('design: checkpoint was written with a different ' // &
-            'number of ranks')
+       write(msg, '(A,I0,A,I0,A)') 'design: checkpoint was written with ' // &
+            'a different number of ranks (', n_stored, ', this run has ', &
+            pe_size, ')'
+       call neko_error(trim(msg))
     end if
 
     n_array = -1
@@ -332,6 +338,10 @@ contains
     ! ------------------------------------------------------------------------ !
     ! Ensure the Design object is allocated with the same configuration as the file
 
+    if (n_global .ne. this%n_global) then
+       call neko_error('design: mismatch in n_global during HDF5 read')
+    end if
+
     ! The local sizes differ per rank, so agree on the outcome before the
     ! collective reads
     mismatch = 0
@@ -340,9 +350,6 @@ contains
          NEKO_COMM, ierr)
     if (mismatch .ne. 0) then
        call neko_error('design: mismatch in n during HDF5 read')
-    end if
-    if (n_global .ne. this%n_global) then
-       call neko_error('design: mismatch in n_global during HDF5 read')
     end if
     if (trim(name) .ne. trim(this%name)) then
        call neko_error('design: mismatch in name during HDF5 read' // &

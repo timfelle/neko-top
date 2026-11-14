@@ -357,9 +357,11 @@ contains
 
     character(len=*), parameter :: h5_group = '/MMA/checkpoint'
     character(len=12) :: bcknd, subsolver
+    character(len=128) :: msg
 
     ! Initialize reader values
     n = -1
+    n_global = -1
     m = -1
     max_iter = -1
     asyinit = -1.0_rp
@@ -456,12 +458,17 @@ contains
     ! rank of the run that wrote the checkpoint, so it must match the rank
     ! count. The extent is the same on every rank, so all of them stop here.
     call h5aopen_f(grp_id, 'n', attr_id, ierr)
+    if (ierr .ne. 0) then
+       call neko_error('mma: checkpoint has no attribute n')
+    end if
     call h5aget_space_f(attr_id, space_id, ierr)
     call h5sget_simple_extent_npoints_f(space_id, n_stored, ierr)
     call h5sclose_f(space_id, ierr)
     if (n_stored .ne. int(pe_size, hsize_t)) then
-       call neko_error('mma: checkpoint was written with a different ' // &
-            'number of ranks')
+       write(msg, '(A,I0,A,I0,A)') 'mma: checkpoint was written with a ' // &
+            'different number of ranks (', n_stored, ', this run has ', &
+            pe_size, ')'
+       call neko_error(trim(msg))
     end if
 
     n_array = -1
@@ -472,6 +479,10 @@ contains
     ! ------------------------------------------------------------------------ !
     ! Ensure the MMA object is allocated with the same configuration as the file
 
+    if (n_global .ne. object%n_global) then
+       call neko_error('mma: mismatch in n_global during HDF5 read')
+    end if
+
     ! The local sizes differ per rank, so agree on the outcome before the
     ! collective reads
     mismatch = 0
@@ -480,9 +491,6 @@ contains
          NEKO_COMM, ierr)
     if (mismatch .ne. 0) then
        call neko_error('mma: mismatch in n during HDF5 read')
-    end if
-    if (n_global .ne. object%n_global) then
-       call neko_error('mma: mismatch in n_global during HDF5 read')
     end if
     if (m .ne. object%m) then
        call neko_error('mma: mismatch in m during HDF5 read')
