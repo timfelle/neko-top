@@ -4,14 +4,18 @@
 # Neko-TOP. It is included in the main CMakeLists.txt file and can be used by
 # other CMake scripts in the project.
 
-# Prepend the pkg-config directories of an installation prefix to the
-# PKG_CONFIG_PATH environment variable. FindPkgConfig searches the environment
-# PKG_CONFIG_PATH before the CMAKE_PREFIX_PATH entries, so without this the
-# configured prefix (JSON_FORTRAN_DIR or NEKO_DIR, including their defaults
-# under ${EXTERNAL_DIR}) loses to any matching .pc file already on it.
+# Prepend the pkg-config directories of one or more installation prefixes to
+# the PKG_CONFIG_PATH environment variable. FindPkgConfig searches the
+# environment PKG_CONFIG_PATH before the CMAKE_PREFIX_PATH entries, so without
+# this the configured prefixes (JSON_FORTRAN_DIR, NEKO_DIR, HDF5_ROOT,
+# including their defaults under ${EXTERNAL_DIR}) lose to any matching .pc
+# file already on it.
 # Callers run restore_pkg_config_path() once the package has been resolved,
-# so the prefix cannot leak into later lookups. An empty prefix is ignored.
-function(prepend_pkg_config_path prefix)
+# so the prefixes cannot leak into later lookups. Accepts any number of
+# prefixes (e.g. NEKO_DIR plus HDF5_ROOT, so a single pkg_check_modules(neko)
+# call can resolve a `Requires: hdf5_fortran`); an empty prefix is ignored,
+# so callers may pass an unset/empty variable unconditionally.
+function(prepend_pkg_config_path)
     # Record the previous value, and whether it was set at all, for
     # restore_pkg_config_path().
     if (DEFINED ENV{PKG_CONFIG_PATH})
@@ -21,14 +25,14 @@ function(prepend_pkg_config_path prefix)
         set(_had_pkg_config_path FALSE PARENT_SCOPE)
     endif()
 
-    if ("${prefix}" STREQUAL "")
-        return()
-    endif()
-
     set(_dirs)
-    foreach(_sub lib/pkgconfig lib64/pkgconfig share/pkgconfig)
-        if (IS_DIRECTORY "${prefix}/${_sub}")
-            list(APPEND _dirs ${prefix}/${_sub})
+    foreach(_prefix ${ARGN})
+        if (NOT "${_prefix}" STREQUAL "")
+            foreach(_sub lib/pkgconfig lib64/pkgconfig share/pkgconfig)
+                if (IS_DIRECTORY "${_prefix}/${_sub}")
+                    list(APPEND _dirs ${_prefix}/${_sub})
+                endif()
+            endforeach()
         endif()
     endforeach()
 

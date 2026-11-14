@@ -148,13 +148,29 @@ else()
         CACHE STRING "Path to the Neko installation")
 endif()
 
-set(CMAKE_PREFIX_PATH ${NEKO_DIR} ${CMAKE_PREFIX_PATH})
-prepend_pkg_config_path("${NEKO_DIR}")
+# Neko's neko.pc can declare `Requires: ... hdf5_fortran` (see the HDF5
+# Support section below for the full HDF5_ROOT handling used by
+# find_package(HDF5)); make the same HDF5_ROOT visible to pkg-config here,
+# before resolving neko, so that Requires: line resolves instead of failing
+# with "Package 'hdf5_fortran', required by 'neko', not found" whenever
+# HDF5 is only known via HDF5_ROOT and not already on pkg-config's default
+# search path.
+if (DEFINED HDF5_ROOT)
+    set(_neko_hdf5_root "${HDF5_ROOT}")
+elseif (DEFINED ENV{HDF5_ROOT})
+    set(_neko_hdf5_root "$ENV{HDF5_ROOT}")
+else()
+    set(_neko_hdf5_root "")
+endif()
+
+set(CMAKE_PREFIX_PATH ${NEKO_DIR} ${_neko_hdf5_root} ${CMAKE_PREFIX_PATH})
+prepend_pkg_config_path("${NEKO_DIR}" "${_neko_hdf5_root}")
 
 # Find the Neko library
 pkg_check_modules(neko REQUIRED IMPORTED_TARGET neko)
 pkg_get_variable(DEVICE_TYPE neko backend)
 restore_pkg_config_path()
+unset(_neko_hdf5_root)
 
 # ............................................................................ #
 # HDF5 Support
