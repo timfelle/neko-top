@@ -42,8 +42,10 @@ module lapack_interfaces
 
   !> Solve a dense linear system with LAPACK in the precision of its
   !! arguments, with sgesv in single and dgesv in double precision. The
-  !! right-hand sides are a single array of ldb * nrhs entries, so that the
-  !! generic also matches a right-hand side that is a vector.
+  !! dummy b is declared as a flat array of ldb * nrhs entries, so the
+  !! generic interface matches only a rank-1 (vector) b. A rank-2 b (nrhs
+  !! right-hand sides held as matrix columns) must call sgesv or dgesv
+  !! directly: both still accept it via sequence association.
   interface gesv
      pure subroutine sgesv(n, nrhs, a, lda, ipiv, b, ldb, info)
        import :: sp
