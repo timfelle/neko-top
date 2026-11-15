@@ -1,6 +1,6 @@
 !> @file adjoint_scalars.f90
 !! @copyright
-!! Copyright (c) 2025, The Neko-TOP Authors
+!! Copyright (c) 2025-2026, The Neko-TOP Authors
 !! All rights reserved.
 !!
 !! Redistribution and use in source and binary forms, with or without
@@ -286,7 +286,8 @@ contains
 
     do i = 1, size(this%adjoint_scalar_fields)
        if (this%adjoint_scalar_fields(i)%freeze) cycle
-       call scalar_step_info(time, ksp_results(i))
+       call scalar_step_info(time, ksp_results(i), &
+            this%adjoint_scalar_fields(i)%strict_convergence)
     end do
   end subroutine adjoint_scalars_step
 

@@ -143,5 +143,57 @@ set_tests_properties(${case_name}
 )
 
 # ============================================================================ #
+# The strict_convergence key of the adjoint scalar. Each case caps the adjoint
+# scalar solver at one iteration, so none of its solves converge. The topology
+# optimisation driver, run for no optimiser iterations, solves the forward and
+# the adjoint problem once. Without the key the run completes. With the key in
+# the adjoint scalar's object, or in the primal scalar's object it falls back
+# to, the run must stop at the first adjoint scalar solve.
+add_executable(topopt_driver_bin EXCLUDE_FROM_ALL
+    ${CMAKE_SOURCE_DIR}/sources/drivers/topopt.f90
+)
+target_link_libraries(topopt_driver_bin
+    PRIVATE Neko-TOP::neko-top
+)
+add_dependencies(Unit topopt_driver_bin)
+
+foreach(case_name
+        adjoint_scalar_capped
+        adjoint_scalar_capped_strict
+        adjoint_scalar_capped_strict_primal)
+    add_custom_target(
+        ${case_name}_case_file
+        COMMENT "Copying case file ${case_name}.case to the test directory"
+        SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/${case_name}.case
+        BYPRODUCTS ${CMAKE_CURRENT_BINARY_DIR}/${case_name}.case
+        COMMAND
+            ${CMAKE_COMMAND} -E copy_if_different
+            ${CMAKE_CURRENT_SOURCE_DIR}/${case_name}.case
+            ${CMAKE_CURRENT_BINARY_DIR}/${case_name}.case
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    )
+    add_dependencies(sensitivity_test_prepare ${case_name}_case_file)
+
+    add_test(NAME ${case_name}
+        COMMAND $<TARGET_FILE:topopt_driver_bin> ${case_name}.case
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    )
+    set_tests_properties(${case_name}
+        PROPERTIES
+            LABELS "sensitivity;unit"
+            ENVIRONMENT "NEKO_LOG_FILE=${case_name}.log"
+            TIMEOUT 300
+    )
+endforeach()
+
+# These pass only if the run stops with the error of a strict scalar solve.
+set_tests_properties(
+    adjoint_scalar_capped_strict adjoint_scalar_capped_strict_primal
+    PROPERTIES
+        PASS_REGULAR_EXPRESSION
+        "ERROR: Scalar solver did not converge for Adjoint Scalar"
+)
+
+# ============================================================================ #
 # Final dependencies
 add_dependencies(Unit sensitivity_test_prepare)

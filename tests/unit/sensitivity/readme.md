@@ -72,6 +72,17 @@ Currently, we have added tests for the following components:
   `chi * dt` below 20/21, and `chi` reaches 100 here. The driver also
   checks that the adjoint's clock did stop short, so that the check cannot
   pass vacuously.
+- `adjoint_scalar_capped.case`, `adjoint_scalar_capped_strict.case` and
+  `adjoint_scalar_capped_strict_primal.case` check the `strict_convergence`
+  key of the adjoint scalar, and compare no sensitivity. Each caps the adjoint
+  scalar solver at one iteration, so none of its solves converge. They are
+  run by the topology optimisation driver with no optimiser iterations, which
+  solves the forward and the adjoint problem once. Without the key the run
+  must complete. With the key in `case.adjoint_scalar`, or only in
+  `case.scalar`, which the adjoint scalar falls back to, the run must stop at
+  the first adjoint scalar solve. These two pass only if the output contains
+  the error printed when the run stops, which `PASS_REGULAR_EXPRESSION`
+  checks.
 - The guards against a variable timestep in an unsteady problem
   (`unsteady_variable_timestep.case`) and against a variable timestep
   without the `timestep` that caps its first step

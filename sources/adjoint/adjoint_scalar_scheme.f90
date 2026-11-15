@@ -1,6 +1,6 @@
 !> @file adjoint_scalar_scheme.f90
 !! @copyright
-!! Copyright (c) 2025, The Neko-TOP Authors
+!! Copyright (c) 2025-2026, The Neko-TOP Authors
 !! All rights reserved.
 !!
 !! Redistribution and use in source and binary forms, with or without
@@ -147,6 +147,8 @@ module adjoint_scalar_scheme
           user_material_properties => null()
      !> Freeze the scheme, i.e. do nothing in step()
      logical :: freeze = .false.
+     !> Whether to stop the run when a solve does not converge.
+     logical :: strict_convergence = .false.
    contains
      !> Constructor for the base type.
      procedure, pass(this) :: scheme_init => adjoint_scalar_scheme_init
@@ -314,6 +316,12 @@ contains
     call json_get_or_default(params_selected, &
          'solver.projection_hold_steps', &
          this%projection_activ_step, 5)
+
+    ! Strict convergence for the adjoint scalar solver
+    params_selected => json_key_fallback(params_adjoint, params_primal, &
+         'strict_convergence')
+    call json_get_or_default(params_selected, 'strict_convergence', &
+         this%strict_convergence, .false.)
 
 
     write(log_buf, '(A, A)') 'Type       : ', trim(scheme)

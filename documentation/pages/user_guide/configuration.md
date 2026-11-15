@@ -354,6 +354,37 @@ default. It is now read from
 `optimization.augmented_lagrangian.dealias_sensitivity`. The old path is no
 longer consulted.
 
+## Adjoint scalar solver settings {#configuration-adjoint-scalar-solver}
+
+The adjoint scalar is configured under `case.adjoint_scalar`, as the adjoint of
+the scalar in `case.scalar`. Adjoints of several scalars, under
+`case.adjoint_scalars`, are not supported yet.
+
+Each of the following keys is read from `case.adjoint_scalar` if it is set
+there, and otherwise from `case.scalar`:
+
+- `solver.type`
+- `solver.preconditioner.type`
+- `solver.preconditioner`, the object with the settings of the preconditioner
+- `solver.absolute_tolerance`
+- `solver.max_iterations`
+- `solver.projection_space_size`
+- `solver.projection_hold_steps`
+- `solver.monitor`
+- `strict_convergence`
+
+For example, setting only `solver.max_iterations` under `case.adjoint_scalar`
+changes that limit for the adjoint scalar alone. The adjoint scalar does not
+read `solver.space_size`, so a `gmres` solver for it uses the default Krylov
+space size.
+
+By default, an adjoint scalar solve that does not reach its tolerance within
+its iteration limit is reported in the log, and the run continues. With
+`"strict_convergence": true` the run stops with an error instead. Set in
+`case.scalar`, the key applies to the adjoint scalar too, unless
+`case.adjoint_scalar` sets its own. The adjoint scalar does not follow
+`case.fluid.strict_convergence`.
+
 ## Additional reading {#configuration-additional}
 
 The individual components are described in greater detail in the linked
