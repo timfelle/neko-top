@@ -60,6 +60,7 @@ module simulation_m
        simulation_restart
   use state_recover, only: state_recover_t, state_recover_factory
   use runtime_stats, only: neko_rt_stats
+  use comm, only: pe_size, global_pe_size
   use utils, only: neko_error
   implicit none
   private
@@ -152,6 +153,18 @@ contains
     character(len=:), allocatable :: output_directory, precision_s, file_format
     integer :: precision
     logical :: unsteady, subdivide, variable_dt, found
+
+    ! In an MPMD run Neko takes collectives on the global communicator, which
+    ! every coupled simulation has to take as well: in the initialisation of
+    ! a time-step controller, and in the job-limit check of its driver at
+    ! every time step. A problem initialises a controller for every forward,
+    ! adjoint and recomputed run, and its time loops leave out the job-limit
+    ! check, so a coupled run would hang. The test is that of Neko's
+    ! `is_mpmd`, which older versions of Neko do not provide.
+    if (global_pe_size .gt. 0 .and. pe_size .ne. global_pe_size) then
+       call neko_error("Neko-TOP optimisation and sensitivity problems " // &
+            "do not support MPMD runs")
+    end if
 
     ! initialize the primal Neko objects
     call this%neko_case%init(parameters)
