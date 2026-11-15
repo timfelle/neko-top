@@ -98,11 +98,6 @@ Currently, we have added tests for the following components:
   the mask only while its probe stays that close to the boundary. Whenever the
   case or the driver's probe selection changes, confirm again that the test
   fails with the mask removed from `update_sensitivity`.
-- `brinkman_dissipation_rejection` — checks the invalid mixed-dealias
-  configuration directly through Neko's pFUnit error-redirection fixture. A
-  mixed setting has no value its sensitivity is the gradient of, so the
-  objective must raise `neko_error`; pFUnit consumes that expected exception
-  as a successful test.
 - `viscous_dissipation_objective_t`, masked (`viscous_dissipation_masked.case`
   and `unsteady_viscous_dissipation_masked.case`) — `viscous_dissipation.case`
   and `unsteady_brinkman_dissipation_masked.case` with a viscous dissipation
