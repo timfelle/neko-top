@@ -185,11 +185,12 @@ contains
        ! its subdict
        ! note: the default primal name is s.
        ! So we search for it if not specified
-       call json_get_or_default(params_adjoint, 'primal_name', primal_name, 's')
+       call json_get_or_default(json_subdict_adjoint, 'primal_name', &
+            primal_name, 's')
 
        found_primal = .false.
        do j = 1, n_primal_scalars
-          ! Extract element i from the "adjoint_scalars" array
+          ! Extract element j from the "scalars" array
           call json_extract_item(params_primal, "", j, json_subdict_primal)
 
           ! Try to get name from JSON
