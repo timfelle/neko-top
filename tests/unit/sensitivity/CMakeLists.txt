@@ -16,6 +16,7 @@ set(test_list
     "unsteady_viscous_dissipation_masked.case"
     "unsteady_brinkman_dissipation_window.case"
     "unsteady_brinkman_dissipation_window_end.case"
+    "unsteady_lagrangian_particles.case"
 )
 
 # Path to the common driver source
@@ -105,6 +106,42 @@ foreach(case_file ${test_list})
             TIMEOUT 300
     )
 endforeach()
+
+# ============================================================================ #
+# Cases that the set-up must reject. Each test passes only if the driver stops
+# with the error the message names, as the regular expression matches it in
+# the output and the exit code is ignored.
+function(add_rejected_case case_name message)
+    add_custom_target(
+        ${case_name}_case_file
+        COMMENT "Copying case file ${case_name}.case to the test directory"
+        SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/${case_name}.case
+        BYPRODUCTS ${CMAKE_CURRENT_BINARY_DIR}/${case_name}.case
+        COMMAND
+            ${CMAKE_COMMAND} -E copy_if_different
+            ${CMAKE_CURRENT_SOURCE_DIR}/${case_name}.case
+            ${CMAKE_CURRENT_BINARY_DIR}/${case_name}.case
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    )
+    add_dependencies(sensitivity_test_prepare ${case_name}_case_file)
+
+    add_test(NAME ${case_name}_rejected
+        COMMAND $<TARGET_FILE:problem_tester_sensitivity_bin> ${case_name}.case
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    )
+    set_tests_properties(${case_name}_rejected
+        PROPERTIES
+            LABELS "sensitivity;unit"
+            ENVIRONMENT "NEKO_LOG_FILE=${case_name}.log"
+            PASS_REGULAR_EXPRESSION "${message}"
+            TIMEOUT 300
+    )
+endfunction()
+
+# The checkpoint recompute of an unsteady problem does not guarantee the LES
+# state of the forward run, which a scalar can depend on.
+add_rejected_case(unsteady_scalar_nut_dependency
+    "do not support alphat.nut_dependency")
 
 # ============================================================================ #
 # A steady adjoint takes as many steps as the forward run, with time steps of

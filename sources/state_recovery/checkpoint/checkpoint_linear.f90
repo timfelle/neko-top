@@ -172,29 +172,31 @@ contains
   end subroutine checkpoint_restore_linear
 
   !> Take a time step of the forward run again, to recompute its state.
-  !! @details This is the time step of Neko's `simulation_step` up to the end
-  !! of the fluid and scalar steps. What follows them there, the simulation
-  !! components' `compute`, the user's `compute` and the output, ran on the
-  !! step in the forward run, and must not run on it again: the output would
-  !! be written twice and statistics would count the step twice, and the
-  !! `steady` component, which compares the state with the one it last
-  !! computed on, would freeze the fluid on finding a state it has seen
-  !! already. The freezes of the forward run are set by the caller instead.
-  !! Any other result of a `compute` that the next step reads is stale in
-  !! the recompute.
+  !! @details This is the time step of Neko's `simulation_step`, as in Neko
+  !! 445b58032 and 55708566b, up to the end of the fluid and scalar steps.
+  !! What follows them there, the simulation components' `compute`, the
+  !! user's `compute` and the output, ran on the step in the forward run,
+  !! and must not run on it again: the output would be written twice and
+  !! statistics would count the step twice, and the `steady` component,
+  !! which compares the state with the one it last computed on, would freeze
+  !! the fluid on finding a state it has seen already. The freezes of the
+  !! forward run are set by the caller instead. Any other result of a
+  !! `compute` that the next step reads is stale in the recompute.
   !!
   !! What prepares the step, the user's and the simulation components'
   !! `preprocess`, runs again. An LES model, for one, computes there the eddy
-  !! viscosity the turbulent diffusivity of a scalar can depend on, through
-  !! `alphat.nut_dependency`. In the fluid an eddy viscosity needs the full
-  !! stress formulation, which the adjoint rejects. The user's `preprocess`
-  !! must depend on the time state, not on how often it is called. A
-  !! component's schedule in time steps is restarted from the checkpoint
-  !! file's time step, so it is that of the forward run with a value of 1 or
-  !! one that divides that time step, and is shifted against it otherwise.
-  !! Neko's LPT component advances its particles in its `preprocess`, so they
-  !! are advanced once more. They do not act on the flow, but their state
-  !! means nothing after the backward sweep.
+  !! viscosity, which the recompute does not guarantee to be that of the
+  !! forward run, so a scalar depending on it, through
+  !! `alphat.nut_dependency`, is rejected when the checkpointing is set up,
+  !! see `checkpoint_check_case`. In the fluid an eddy viscosity needs the
+  !! full stress formulation, which the adjoint rejects. The user's
+  !! `preprocess` must depend on the time state, not on how often it is
+  !! called. A component's schedule in time steps is restarted from the
+  !! checkpoint file's time step, so it is that of the forward run with a
+  !! value of 1 or one that divides that time step, and is shifted against
+  !! it otherwise. Neko's LPT component advances its particles in its
+  !! `preprocess`, so they are advanced once more. They do not act on the
+  !! flow, but their state means nothing after the backward sweep.
   !!
   !! Newer versions of Neko also fit the time step to the next output time in
   !! `simulation_step` (`land`), with `exact_output_time`, which requires a
@@ -232,8 +234,9 @@ contains
 
   !> Advance the time by one time step, as `simulation_step` does. This is a
   !! copy of `simulation_settime`, which is private to Neko's `simulation`
-  !! module. A difference between the two would show as a difference between
-  !! the recomputed states and those of the forward run.
+  !! module, and the same in Neko 445b58032 and 55708566b. A difference
+  !! between the two would show as a difference between the recomputed states
+  !! and those of the forward run.
   !! @param time The time state.
   !! @param ext_bdf The time scheme of the fluid.
   subroutine checkpoint_recompute_settime(time, ext_bdf)

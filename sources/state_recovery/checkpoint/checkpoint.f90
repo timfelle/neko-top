@@ -211,6 +211,7 @@ contains
     logical :: exists
 
     call this%free()
+    call checkpoint_check_case(neko_case)
     this%neko_case => neko_case
 
     ! Assign parameters from arguments or defaults
@@ -315,6 +316,40 @@ contains
     call neko_log%end_section()
 
   end subroutine checkpoint_init_from_components
+
+  !> Stop on a case whose forward run the recompute does not guarantee to
+  !! reproduce.
+  !! @details The recompute restarts the case from a checkpoint file and
+  !! steps it forward again. The file holds the fluid and the scalars, but
+  !! no state of an LES model: the restart computes the eddy viscosity anew
+  !! from the restarted velocity, the running averages of the dynamic
+  !! Smagorinsky model are not checkpointed, and the schedule on which the
+  !! model updates the eddy viscosity is anchored anew at every restart. The
+  !! recompute therefore does not guarantee the eddy viscosity of the
+  !! forward run, nor a scalar whose diffusivity depends on it, through
+  !! `alphat.nut_dependency`, and the adjoint restores that scalar. The check
+  !! is conservative: it stops on such a scalar whatever the LES model, also
+  !! where the recompute would give the eddy viscosity of the forward run.
+  !! An eddy viscosity in the fluid needs the full stress formulation, which
+  !! the adjoint rejects.
+  !! @param[in] neko_case Case data structure.
+  subroutine checkpoint_check_case(neko_case)
+    class(case_t), intent(in) :: neko_case
+    integer :: i
+
+    if (.not. allocated(neko_case%scalars)) return
+
+    do i = 1, size(neko_case%scalars%scalar_fields)
+       associate(scalar => neko_case%scalars%scalar_fields(i)%scalar)
+         if (len_trim(scalar%nut_field_name) .gt. 0) then
+            call neko_error("Unsteady problems with checkpointing do " // &
+                 "not support alphat.nut_dependency, as the recompute " // &
+                 "does not guarantee the LES state of the forward run")
+         end if
+       end associate
+    end do
+
+  end subroutine checkpoint_check_case
 
   !> Free checkpointing resources.
   !! @param[inout] this Checkpointing implementation.

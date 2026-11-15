@@ -1,0 +1,283 @@
+!> @file test_checkpoint_recompute_output.pf
+!! pFUnit test asserting that the checkpoint recompute writes no output.
+!!
+!! A state held neither in RAM nor on disk is restored by restarting the case
+!! from the checkpoint file before it and stepping the primal forward from
+!! there, through time steps whose output the forward run has written
+!! already. Neko's restart sets the output back to the time of the
+!! checkpoint, and a statistics component initialises its output anew, under
+!! a name numbered by the writes scheduled up to the checkpoint. A recompute
+!! that ran the output of Neko's time step therefore wrote a new series of
+!! statistics files after every restart it passed a write from, and the
+!! restart from the first checkpoints wrote over the first statistics file
+!! of the forward run.
+!!
+!! The test runs the case forward with a `fluid_stats` component, written
+!! every four time steps, at steps 4 to 20, and keeps the bytes of the files
+!! the forward run wrote. It then restores the states in the order of the
+!! adjoint, which recomputes steps 3 to 4, 6 to 9, 11 to 14 and 16 to 19
+!! from the checkpoint files of steps 2, 5, 10 and 15, and so passes steps
+!! 4, 8, 12 and 16. The files of the forward run must be unchanged, and the
+!! series a restart names after them must not exist.
+module test_checkpoint_recompute_output
+  use pfunit
+  use num_types, only: dp
+  use json_module, only: json_file
+  use json_utils, only: json_get
+  use json_utils_ext, only: json_read_file
+  use mpi
+  use comm, only: NEKO_COMM, pe_rank
+  use simulation_m, only: simulation_t
+  use state_recover_checkpoint, only: state_recover_checkpoint_t
+  use simulation, only: simulation_init, simulation_step, simulation_finalize
+  use time_step_controller, only: time_step_controller_t
+  use design, only: design_t, design_factory
+  use problem, only: problem_t
+  use checkpointing_test_utils, only: initialize_runtime_once, &
+       finalize_case_objects, cleanup_runtime_state
+  implicit none
+
+  integer, parameter :: checkpoint_saves_in_memory = 5
+  integer, parameter :: n_forward_steps = 20
+  !> The number of time steps between two writes of the statistics.
+  integer, parameter :: stats_output_steps = 4
+  !> The number of writes of the statistics in the forward run.
+  integer, parameter :: n_stats_writes = n_forward_steps / stats_output_steps
+  !> The name of the statistics output, numbered `0` by the forward run.
+  character(len=*), parameter :: stats_name = 'recompute_output_stats'
+
+  !> The bytes of a file.
+  type :: file_bytes_t
+     character(len=:), allocatable :: bytes
+  end type file_bytes_t
+
+  @TestCase
+  type, extends(MPITestCase) :: recompute_output_case
+   contains
+     procedure :: setUp
+     procedure :: tearDown
+  end type recompute_output_case
+
+  logical :: initialized_lock = .false.
+
+contains
+
+  subroutine setUp(this)
+    class(recompute_output_case), intent(inout) :: this
+
+    if (initialized_lock) return
+    initialized_lock = .true.
+
+    call initialize_runtime_once()
+  end subroutine setUp
+
+  !> Clear the registries, which the next case registers its fields in.
+  subroutine tearDown(this)
+    class(recompute_output_case), intent(inout) :: this
+
+    call cleanup_runtime_state()
+  end subroutine tearDown
+
+  !> Restoring the states of a run must leave the statistics files of the
+  !! forward run as it wrote them, and write no others.
+  @test(npes=[2])
+  subroutine stats_files_kept(this)
+    class(recompute_output_case), intent(inout) :: this
+
+    type(json_file) :: parameters, design_parameters
+    type(simulation_t), target :: sim
+    type(state_recover_checkpoint_t) :: chkp
+    class(design_t), allocatable :: des
+    type(problem_t) :: prob
+    type(time_step_controller_t) :: dt_controller
+    !> The files of the forward run, its data files and its metadata file.
+    character(len=1024) :: forward_files(n_stats_writes + 1)
+    type(file_bytes_t) :: forward_bytes(n_stats_writes + 1)
+    character(len=:), allocatable :: bytes
+    integer :: i, n_bytes, ierr
+    logical :: forward_ok, kept, stray
+    character(len=1024) :: forward_msg, kept_msg, stray_msg
+
+    do i = 1, n_stats_writes
+       forward_files(i) = stats_file(0, i - 1)
+    end do
+    forward_files(n_stats_writes + 1) = stats_metadata_file(0)
+
+    ! Start from no statistics files of an earlier run
+    if (pe_rank .eq. 0) then
+       do i = 0, n_stats_writes
+          call delete_series(i)
+       end do
+    end if
+    call MPI_Barrier(NEKO_COMM%mpi_val, ierr)
+
+    call read_case(parameters)
+    call json_get(parameters, 'optimization.design', design_parameters)
+    call sim%init(parameters)
+    call design_factory(des, design_parameters, sim)
+    call prob%init(parameters, des, sim)
+
+    call chkp%init_from_components(sim%neko_case, 'linear', &
+         n_saves_memory = checkpoint_saves_in_memory, &
+         path = 'recompute_output/', &
+         filename = 'checkpoint', &
+         fmt = 'chkp', &
+         keep_checkpoints = .false.)
+
+    call dt_controller%init(sim%neko_case%params)
+    call simulation_init(sim%neko_case, dt_controller)
+    do i = 1, n_forward_steps
+       call simulation_step(sim%neko_case, dt_controller)
+       call chkp%save()
+    end do
+    call simulation_finalize(sim%neko_case)
+    call MPI_Barrier(NEKO_COMM%mpi_val, ierr)
+
+    ! The forward run must have written the statistics, or the recompute has
+    ! nothing to write over
+    forward_ok = .true.
+    forward_msg = ''
+    n_bytes = 0
+    do i = 1, size(forward_files)
+       inquire(file = trim(forward_files(i)), size = n_bytes)
+       if (n_bytes .le. 0) then
+          forward_ok = .false.
+          forward_msg = 'The forward run wrote no ' // trim(forward_files(i))
+          exit
+       end if
+    end do
+
+    if (forward_ok) then
+       do i = 1, size(forward_files)
+          call read_bytes(forward_files(i), forward_bytes(i)%bytes)
+       end do
+    end if
+
+    do i = n_forward_steps, 1, -1
+       call chkp%restore(i)
+    end do
+    call MPI_Barrier(NEKO_COMM%mpi_val, ierr)
+
+    kept = .true.
+    kept_msg = ''
+    if (forward_ok) then
+       do i = 1, size(forward_files)
+          call read_bytes(forward_files(i), bytes)
+          if (len(bytes) .ne. len(forward_bytes(i)%bytes)) then
+             kept = .false.
+          else if (bytes .ne. forward_bytes(i)%bytes) then
+             kept = .false.
+          end if
+          if (.not. kept) then
+             kept_msg = 'The restores wrote over ' // trim(forward_files(i))
+             exit
+          end if
+       end do
+    end if
+
+    stray = .false.
+    stray_msg = ''
+    do i = 1, n_stats_writes
+       inquire(file = trim(stats_metadata_file(i)), exist = stray)
+       if (stray) then
+          stray_msg = 'The restores wrote ' // trim(stats_metadata_file(i))
+          exit
+       end if
+    end do
+
+    call finalize_case_objects(sim, des, prob, chkp)
+
+    @assertTrue(forward_ok, trim(forward_msg))
+    @assertTrue(kept, trim(kept_msg))
+    @assertFalse(stray, trim(stray_msg))
+  end subroutine stats_files_kept
+
+  !> Read the case, end it after `n_forward_steps` steps, and replace its
+  !! simulation component with a `fluid_stats` component computing at every
+  !! step and written every `stats_output_steps` steps, on a schedule in
+  !! simulation time.
+  !! @param parameters The case.
+  subroutine read_case(parameters)
+    type(json_file), intent(inout) :: parameters
+    character(len=*), parameter :: simcomp = 'case.simulation_components(1)'
+    real(kind=dp) :: dt
+    logical :: found
+
+    parameters = json_read_file('checkpoint.case')
+    call json_get(parameters, 'case.time.timestep', dt)
+    call parameters%update('case.time.end_time', &
+         real(n_forward_steps, dp) * dt, found)
+
+    call parameters%update(simcomp // '.type', 'fluid_stats', found)
+    call parameters%update(simcomp // '.compute_control', 'tsteps', found)
+    call parameters%update(simcomp // '.compute_value', 1, found)
+    call parameters%update(simcomp // '.output_control', 'simulationtime', &
+         found)
+    call parameters%update(simcomp // '.output_value', &
+         real(stats_output_steps, dp) * dt, found)
+    call parameters%update(simcomp // '.set_of_stats', 'basic', found)
+    call parameters%update(simcomp // '.output_filename', stats_name, found)
+  end subroutine read_case
+
+  !> The name of a data file of a series of statistics files. The forward
+  !! run writes series 0, and a restart names the series by the number of
+  !! writes scheduled up to it.
+  !! @param series The number of the series.
+  !! @param counter The number of the file in the series.
+  function stats_file(series, counter) result(fname)
+    integer, intent(in) :: series, counter
+    character(len=1024) :: fname
+
+    write(fname, '(A,I0,A,I5.5)') stats_name, series, '0.f', counter
+  end function stats_file
+
+  !> The name of the metadata file of a series of statistics files.
+  !! @param series The number of the series.
+  function stats_metadata_file(series) result(fname)
+    integer, intent(in) :: series
+    character(len=1024) :: fname
+
+    write(fname, '(A,I0,A)') stats_name, series, '0.nek5000'
+  end function stats_metadata_file
+
+  !> Delete the files of a series of statistics files, as far as they exist.
+  !! @param series The number of the series.
+  subroutine delete_series(series)
+    integer, intent(in) :: series
+    integer :: i
+
+    call delete_file(stats_metadata_file(series))
+    do i = 0, n_stats_writes
+       call delete_file(stats_file(series, i))
+    end do
+  end subroutine delete_series
+
+  !> Delete a file if it exists.
+  !! @param fname The name of the file.
+  subroutine delete_file(fname)
+    character(len=*), intent(in) :: fname
+    integer :: unit, stat
+
+    open(newunit = unit, file = trim(fname), status = 'old', iostat = stat)
+    if (stat .eq. 0) close(unit, status = 'delete')
+  end subroutine delete_file
+
+  !> Read the bytes of a file.
+  !! @param fname The name of the file.
+  !! @param bytes The bytes of the file.
+  subroutine read_bytes(fname, bytes)
+    character(len=*), intent(in) :: fname
+    character(len=:), allocatable, intent(out) :: bytes
+    integer :: unit, n
+
+    inquire(file = trim(fname), size = n)
+    allocate(character(len=max(n, 0)) :: bytes)
+    if (n .le. 0) return
+
+    open(newunit = unit, file = trim(fname), access = 'stream', &
+         form = 'unformatted', status = 'old', action = 'read')
+    read(unit) bytes
+    close(unit)
+  end subroutine read_bytes
+
+end module test_checkpoint_recompute_output

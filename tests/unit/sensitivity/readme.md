@@ -77,6 +77,14 @@ Currently, we have added tests for the following components:
   without the `timestep` that caps its first step
   (`variable_timestep_without_timestep.case`). They are not in `test_list`:
   each passes only if the run stops with its error.
+- The guard against a scalar whose diffusivity depends on the eddy viscosity
+  of an LES model, through `alphat.nut_dependency`, in an unsteady problem
+  with checkpointing (`unsteady_scalar_nut_dependency.case`, a Smagorinsky
+  model), registered with `add_rejected_case`. The checkpoint recompute does
+  not guarantee the LES state of the forward run. The guard is conservative,
+  it also rejects models whose eddy viscosity the recompute would give as in
+  the forward run. Without it, the case runs through the finite-difference
+  check.
 - `brinkman_dissipation_objective_t`, unsteady
   (`unsteady_brinkman_dissipation.case`) — 20 time steps at polynomial order
   3, with a PDE filter and the objective's default over-integration. It checks
@@ -98,6 +106,13 @@ Currently, we have added tests for the following components:
   `+1.05e-5`, and the whole finite-difference table is that of
   `unsteady_brinkman_dissipation.case`: neither the recompute nor the
   component changes the sensitivity. The tolerance is the same, `1e-4`.
+- `brinkman_dissipation_objective_t`, unsteady with Lagrangian particle
+  tracking (`unsteady_lagrangian_particles.case`) —
+  `unsteady_brinkman_dissipation.case` with six time steps, two states in
+  RAM, and a `lagrangian_particles` component with one particle. The
+  adjoint recomputes steps 3 and 5 from the checkpoints of steps 2 and 4,
+  which advances the particle again. The particles do not act on the flow,
+  so the sensitivity must pass the finite-difference check as without them.
 - `brinkman_dissipation_objective_t`, unsteady and masked
   (`unsteady_brinkman_dissipation_masked.case`) — the same case with the
   objective masked to the design domain. The PDE filter's transpose carries

@@ -213,3 +213,31 @@ if (HAVE_HDF5)
         )
     endif()
 endif()
+
+# ============================================================================ #
+# Define the test of the output of the checkpoint recompute
+
+add_pfunit_ctest(checkpoint_recompute_output
+    TEST_SOURCES test_checkpoint_recompute_output.pf
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    LINK_LIBRARIES checkpointing_test_utils Neko-TOP::neko-top
+    MAX_PES 2
+)
+set_tests_properties(checkpoint_recompute_output PROPERTIES
+    LABELS "unit;checkpointing"
+    ENVIRONMENT
+    "NEKO_LOG_FILE=checkpoint_recompute_output.log;OMP_NUM_THREADS=1"
+    TIMEOUT 300
+)
+add_dependencies(Unit checkpoint_recompute_output)
+add_dependencies(checkpoint_recompute_output checkpointing_case)
+if (TARGET checkpointing_prepare)
+    add_dependencies(checkpoint_recompute_output checkpointing_prepare)
+endif()
+
+# Disable treating unused-variable as error for pfunit tests
+if (CMAKE_Fortran_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(checkpoint_recompute_output PRIVATE
+        $<$<COMPILE_LANGUAGE:Fortran>:-Wno-unused-variable>
+    )
+endif()
