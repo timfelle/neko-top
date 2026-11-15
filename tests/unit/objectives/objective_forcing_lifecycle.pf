@@ -1,0 +1,294 @@
+!> @file objective_forcing_lifecycle.pf
+!! pFUnit test that an objective initialised a second time leaves one
+!! adjoint forcing, and that a freed objective leaves none.
+!!
+!! The `viscous_dissipation`, `brinkman_dissipation` and `scalar_mixing`
+!! objectives each add an adjoint forcing to the source terms of the adjoint
+!! equation they force, the adjoint fluid or the adjoint scalar. The forcing
+!! points at the forcing scale of its objective, which tells the forcings of
+!! two objectives apart. Two runs over the objectives of the case are made.
+!!
+!!   1. Each objective alone is set up, initialised a second time, which
+!!      frees it first, and freed. It must own one forcing until it is freed,
+!!      and leave none.
+!!   2. All objectives are set up together, so that two share each set of
+!!      source terms, initialised a second time, and freed one by one in the
+!!      order they were set up. Each live objective must own exactly one
+!!      forcing, and no other forcing may be left.
+!!
+!! Before the fix, `free` left the forcing in place, so a second
+!! initialisation added a second forcing, and a freed objective left one
+!! pointing at its deallocated forcing scale.
+module objective_forcing_lifecycle
+
+  use mpi
+  use pfunit
+  use num_types, only: rp
+  use json_module, only: json_file
+  use json_utils, only: json_get, json_extract_item
+  use json_utils_ext, only: json_read_file
+  use simulation_m, only: simulation_t
+  use brinkman_design, only: brinkman_design_t
+  use objective, only: objective_wrapper_t, objective_factory
+  use source_term_handler, only: source_term_handler_t
+  use adjoint_fluid_pnpn, only: adjoint_fluid_pnpn_t
+  use adjoint_brinkman_dissipation_source_term, only: &
+       adjoint_brinkman_dissipation_source_term_t
+  use adjoint_viscous_dissipation_source_term, only: &
+       adjoint_viscous_dissipation_source_term_t
+  use adjoint_mixing_scalar_source_term, only: &
+       adjoint_mixing_scalar_source_term_t
+  use continuation_scheduler, only: nekotop_continuation
+  use neko, only: neko_init
+  use neko_top, only: neko_top_register_types
+  use logger, only: neko_log
+  use objectives_user, only: objectives_user_setup
+
+  implicit none
+
+  character(len=*), parameter :: case_file = 'objective_lifecycle.case'
+
+  !> Path of the objectives in the case file.
+  character(len=*), parameter :: objectives_path = 'optimization.objectives'
+
+  @TestCase
+  type, extends(MPITestCase) :: test_forcing_lifecycle
+   contains
+     procedure :: setUp
+     procedure :: tearDown
+  end type test_forcing_lifecycle
+
+  logical :: initialized = .false.
+
+contains
+
+  subroutine setUp(this)
+    class(test_forcing_lifecycle), intent(inout) :: this
+
+    if (initialized) return
+    initialized = .true.
+
+    call neko_init()
+    call neko_top_register_types()
+  end subroutine setUp
+
+  subroutine tearDown(this)
+    class(test_forcing_lifecycle), intent(inout) :: this
+  end subroutine tearDown
+
+  !> Count the adjoint forcings that a set of source terms holds, and those
+  !! of them that point at a given forcing scale.
+  !! @param handler The source terms.
+  !! @param scale The forcing scale, or null to count none as pointing at it.
+  !! @param n_forcings Incremented by the number of forcings.
+  !! @param n_owned Incremented by the number pointing at `scale`.
+  subroutine count_in(handler, scale, n_forcings, n_owned)
+    class(source_term_handler_t), intent(in) :: handler
+    real(kind=rp), pointer, intent(in) :: scale
+    integer, intent(inout) :: n_forcings
+    integer, intent(inout) :: n_owned
+    logical :: owned
+    integer :: i
+
+    if (.not. allocated(handler%source_terms)) return
+
+    do i = 1, size(handler%source_terms)
+       owned = .false.
+       select type (st => handler%source_terms(i)%source_term)
+       type is (adjoint_viscous_dissipation_source_term_t)
+          owned = associated(st%scale, scale)
+       type is (adjoint_brinkman_dissipation_source_term_t)
+          owned = associated(st%scale, scale)
+       type is (adjoint_mixing_scalar_source_term_t)
+          owned = associated(st%scale, scale)
+       class default
+          cycle
+       end select
+       n_forcings = n_forcings + 1
+       if (owned) n_owned = n_owned + 1
+    end do
+  end subroutine count_in
+
+  !> Count the adjoint forcings held by the source terms of every adjoint
+  !! equation, and those of them that point at a given forcing scale.
+  !! @param sim The simulation.
+  !! @param scale The forcing scale, or null to count none as pointing at it.
+  !! @param n_forcings The number of forcings.
+  !! @param n_owned The number pointing at `scale`.
+  subroutine count_forcings(sim, scale, n_forcings, n_owned)
+    type(simulation_t), intent(in) :: sim
+    real(kind=rp), pointer, intent(in) :: scale
+    integer, intent(out) :: n_forcings
+    integer, intent(out) :: n_owned
+    integer :: i
+
+    n_forcings = 0
+    n_owned = 0
+
+    select type (f => sim%adjoint_fluid)
+    type is (adjoint_fluid_pnpn_t)
+       call count_in(f%source_term, scale, n_forcings, n_owned)
+    end select
+
+    do i = 1, size(sim%adjoint_scalars%adjoint_scalar_fields)
+       call count_in(sim%adjoint_scalars%adjoint_scalar_fields(i)% &
+            source_term, scale, n_forcings, n_owned)
+    end do
+  end subroutine count_forcings
+
+  !> The number of live objectives that do not own exactly one forcing.
+  !! @param sim The simulation.
+  !! @param objectives The objectives, the freed ones deallocated.
+  !! @return The number of live objectives owning no or several forcings.
+  function n_misowned(sim, objectives) result(n)
+    type(simulation_t), intent(in) :: sim
+    type(objective_wrapper_t), intent(in) :: objectives(:)
+    integer :: n
+    integer :: k, n_forcings, n_owned
+
+    n = 0
+    do k = 1, size(objectives)
+       if (.not. allocated(objectives(k)%objective)) cycle
+       call count_forcings(sim, objectives(k)%objective%forcing_scale, &
+            n_forcings, n_owned)
+       if (n_owned .ne. 1) n = n + 1
+    end do
+  end function n_misowned
+
+  !> The number of forcings held by the source terms of every adjoint
+  !! equation.
+  !! @param sim The simulation.
+  !! @return The number of forcings.
+  function n_held(sim) result(n)
+    type(simulation_t), intent(in) :: sim
+    integer :: n
+    real(kind=rp), pointer :: none => null()
+    integer :: n_owned
+
+    call count_forcings(sim, none, n, n_owned)
+  end function n_held
+
+  !> Re-initialising an objective must not add a second adjoint forcing, and
+  !! freeing it must remove its forcing, alone or among others.
+  @test(npes=[1])
+  subroutine forcing_lifecycle(this)
+    class(test_forcing_lifecycle), intent(inout) :: this
+
+    type(json_file) :: parameters, design_parameters, objective_json
+    type(simulation_t), target :: sim
+    type(brinkman_design_t) :: des
+    type(objective_wrapper_t), allocatable :: objectives(:)
+    character(len=:), allocatable :: objective_type
+    character(len=256) :: log_buf
+    character(len=32), allocatable :: types(:)
+    integer, allocatable :: n_set_up(:), n_reinit(:), n_freed(:)
+    integer, allocatable :: n_live(:), n_left(:), n_wrong(:)
+    integer :: n_objectives, k, n_before
+
+    parameters = json_read_file(case_file)
+    call json_get(parameters, 'optimization.design', design_parameters)
+    call parameters%info(objectives_path, n_children = n_objectives)
+
+    ! Register the user-defined inflow before the case is built.
+    call objectives_user_setup(sim%neko_case%user)
+
+    call nekotop_continuation%init(parameters)
+    call sim%init(parameters)
+    call des%init(design_parameters, sim)
+
+    allocate(objectives(n_objectives), types(n_objectives))
+    allocate(n_set_up(n_objectives), n_reinit(n_objectives), &
+         n_freed(n_objectives))
+    allocate(n_live(0:n_objectives + 1), n_left(0:n_objectives + 1), &
+         n_wrong(0:n_objectives + 1))
+
+    ! 1. Each objective alone, counted against the forcings held before it.
+    do k = 1, n_objectives
+       call json_extract_item(parameters, objectives_path, k, objective_json)
+       call json_get(objective_json, 'type', objective_type)
+       types(k) = objective_type
+       n_before = n_held(sim)
+
+       call objective_factory(objectives(k)%objective, objective_json, des, &
+            sim)
+       n_set_up(k) = n_held(sim) - n_before
+
+       call objectives(k)%objective%init(objective_json, des, sim)
+       n_reinit(k) = n_held(sim) - n_before
+
+       call objectives(k)%free()
+       n_freed(k) = n_held(sim) - n_before
+    end do
+
+    ! 2. All objectives together, then freed one by one. Stage 0 is set up,
+    ! stage 1 initialised a second time, stage 1 + k with k freed.
+    n_before = n_held(sim)
+    do k = 1, n_objectives
+       call json_extract_item(parameters, objectives_path, k, objective_json)
+       call objective_factory(objectives(k)%objective, objective_json, des, &
+            sim)
+    end do
+    call record_stage(0)
+
+    do k = 1, n_objectives
+       call json_extract_item(parameters, objectives_path, k, objective_json)
+       call objectives(k)%objective%init(objective_json, des, sim)
+    end do
+    call record_stage(1)
+
+    do k = 1, n_objectives
+       call objectives(k)%free()
+       call record_stage(1 + k)
+    end do
+
+    do k = 1, n_objectives
+       write(log_buf, '(A,A,A,I0,A,I0,A,I0)') 'Forcings of ', &
+            trim(types(k)), ': set up ', n_set_up(k), ', initialised again ', &
+            n_reinit(k), ', freed ', n_freed(k)
+       call neko_log%message(trim(log_buf))
+    end do
+    do k = 0, n_objectives + 1
+       write(log_buf, '(A,I0,A,I0,A,I0,A,I0)') 'Stage ', k, ': live ', &
+            n_live(k), ', forcings ', n_left(k), ', misowned ', n_wrong(k)
+       call neko_log%message(trim(log_buf))
+    end do
+
+    ! The objectives are freed, so the simulation can go.
+    deallocate(objectives)
+    call des%free()
+    call sim%free()
+    call nekotop_continuation%free()
+
+    do k = 1, n_objectives
+       @assertEqual(1, n_set_up(k), trim(types(k)) // ': set up')
+       @assertEqual(1, n_reinit(k), trim(types(k)) // ': initialised again')
+       @assertEqual(0, n_freed(k), trim(types(k)) // ': freed')
+    end do
+    do k = 0, n_objectives + 1
+       write(log_buf, '(A,I0)') 'Together, stage ', k
+       @assertEqual(n_live(k), n_left(k), trim(log_buf) // ': forcings')
+       @assertEqual(0, n_wrong(k), trim(log_buf) // ': misowned')
+    end do
+
+  contains
+
+    !> Record the live objectives, the forcings held beyond those held
+    !! before, and the live objectives not owning exactly one of them.
+    !! @param stage The stage to record.
+    subroutine record_stage(stage)
+      integer, intent(in) :: stage
+      integer :: i
+
+      n_live(stage) = 0
+      do i = 1, n_objectives
+         if (allocated(objectives(i)%objective)) then
+            n_live(stage) = n_live(stage) + 1
+         end if
+      end do
+      n_left(stage) = n_held(sim) - n_before
+      n_wrong(stage) = n_misowned(sim, objectives)
+    end subroutine record_stage
+
+  end subroutine forcing_lifecycle
+
+end module objective_forcing_lifecycle

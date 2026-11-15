@@ -91,9 +91,9 @@ if (CMAKE_Fortran_COMPILER_ID STREQUAL "GNU")
 endif()
 
 # ============================================================================ #
-# Lifecycle of the objectives that continue their weight. An objective
-# initialised a second time must leave one registration of its weight, and a
-# freed one must leave none.
+# Lifecycle of the objectives that add an adjoint forcing and continue their
+# weight. An objective initialised a second time must leave one forcing and
+# one registration of its weight, and a freed one must leave neither.
 add_custom_target(
     objective_lifecycle_case_file
     COMMENT "Copying case file objective_lifecycle.case to the test directory"
@@ -107,7 +107,8 @@ add_custom_target(
 )
 add_dependencies(objectives_test_prepare objective_lifecycle_case_file)
 
-foreach(lifecycle_test objective_weight_continuation)
+foreach(lifecycle_test
+        objective_weight_continuation objective_forcing_lifecycle)
     add_pfunit_ctest(${lifecycle_test}
         TEST_SOURCES ${lifecycle_test}.pf
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}

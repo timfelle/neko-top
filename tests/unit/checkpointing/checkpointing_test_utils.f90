@@ -148,13 +148,15 @@ contains
     type(problem_t), intent(inout) :: prob
     type(state_recover_checkpoint_t), optional, intent(inout) :: chkp
 
+    ! In the order of the drivers. The problem goes before the simulation,
+    ! as its objectives remove their adjoint forcings from it when freed.
     if (present(chkp)) call chkp%free()
-    call sim%free()
+    call prob%free()
     if (allocated(des)) then
        call des%free()
        deallocate(des)
     end if
-    call prob%free()
+    call sim%free()
   end subroutine finalize_case_objects
 
 end module checkpointing_test_utils

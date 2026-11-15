@@ -265,7 +265,7 @@ contains
     ! append adjoint forcing term based on objective function
     select type (f => simulation%adjoint_fluid)
     type is (adjoint_fluid_pnpn_t)
-       call f%source_term%add_source_term(brinkman_dissipation)
+       call this%add_forcing(f%source_term, brinkman_dissipation)
     end select
 
   end subroutine brinkman_dissipation_init_attributes

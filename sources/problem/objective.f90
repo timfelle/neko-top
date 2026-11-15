@@ -41,6 +41,9 @@ module objective
   use point_zone_registry, only: neko_point_zone_registry
   use json_module, only: json_file
   use time_state, only: time_state_t
+  use source_term, only: source_term_t
+  use source_term_handler, only: source_term_handler_t
+  use source_term_handler_ext, only: remove_source_term
   use continuation_scheduler, only: nekotop_continuation
   implicit none
   private
@@ -60,6 +63,11 @@ module objective
      !! pointer. It is one outside an unsteady adjoint run, during which
      !! `update_forcing_scale` sets it before every adjoint step.
      real(kind=rp), pointer :: forcing_scale => null()
+     !> The source terms of the adjoint equation the adjoint forcing was
+     !! added to, see `add_forcing`.
+     class(source_term_handler_t), pointer :: forcing_handler => null()
+     !> The adjoint forcing, as held by `forcing_handler`.
+     class(source_term_t), pointer :: forcing_term => null()
 
    contains
 
@@ -78,6 +86,8 @@ module objective
      !> Reset the adjoint forcing scale to one
      procedure, pass(this) :: reset_forcing_scale => &
           objective_reset_forcing_scale
+     !> Add the adjoint forcing to the adjoint equation it forces
+     procedure, pass(this) :: add_forcing => objective_add_forcing
      !> Get number of log entries for this objective
      procedure, pass(this) :: get_log_size => objective_get_log_size
      !> Get header labels for this objective's log entries
@@ -170,9 +180,15 @@ contains
   subroutine objective_free_base(this)
     class(objective_t), target, intent(inout) :: this
 
-    ! The continuation scheduler must keep no pointer to the weight of a
-    ! freed objective.
+    ! Nothing may keep a pointer into a freed objective: neither the
+    ! continuation scheduler to the weight, nor the adjoint to the weight and
+    ! the forcing scale, through the adjoint forcing.
     call nekotop_continuation%deregister(this%weight)
+    if (associated(this%forcing_handler)) then
+       call remove_source_term(this%forcing_handler, this%forcing_term)
+    end if
+    nullify(this%forcing_handler)
+    nullify(this%forcing_term)
 
     if (allocated(this%name)) deallocate(this%name)
     this%weight = 1.0_rp
@@ -307,6 +323,28 @@ contains
 
     this%forcing_scale = 1.0_rp
   end subroutine objective_reset_forcing_scale
+
+  !> Add the adjoint forcing of the objective to the source terms of the
+  !! adjoint equation it forces. These hold a copy of the forcing, which
+  !! `free_base` removes again, so that re-initialising the objective leaves
+  !! one forcing rather than adding a second. An objective adds one forcing.
+  !! @param this The objective.
+  !! @param handler The source terms of the adjoint equation. Must stay
+  !! valid until the objective is freed.
+  !! @param forcing The adjoint forcing.
+  subroutine objective_add_forcing(this, handler, forcing)
+    class(objective_t), intent(inout) :: this
+    class(source_term_handler_t), target, intent(inout) :: handler
+    class(source_term_t), intent(in) :: forcing
+    integer :: n
+
+    call handler%add_source_term(forcing)
+
+    ! The handler appends the copy.
+    n = size(handler%source_terms)
+    this%forcing_handler => handler
+    this%forcing_term => handler%source_terms(n)%source_term
+  end subroutine objective_add_forcing
 
 end module objective
 

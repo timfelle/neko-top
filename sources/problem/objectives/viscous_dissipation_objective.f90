@@ -229,7 +229,7 @@ contains
     ! append adjoint forcing term based on objective function
     select type (f => simulation%adjoint_fluid)
     type is (adjoint_fluid_pnpn_t)
-       call f%source_term%add_source_term(adjoint_forcing)
+       call this%add_forcing(f%source_term, adjoint_forcing)
     end select
 
   end subroutine viscous_dissipation_init_attributes

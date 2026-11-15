@@ -218,8 +218,8 @@ contains
     end associate
 
     ! append adjoint source term to the adjoint passive scalar equation
-    call simulation%adjoint_scalars%adjoint_scalar_fields(i_adjoint_scalar) &
-         %source_term%add_source_term(adjoint_forcing)
+    call this%add_forcing(simulation%adjoint_scalars% &
+         adjoint_scalar_fields(i_adjoint_scalar)%source_term, adjoint_forcing)
 
     !--------------------------------------------------------------------------
     ! THIS SHOULD BE REPLACED WHEN THE DESIGN UPDATE OCCURS

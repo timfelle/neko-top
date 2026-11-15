@@ -421,3 +421,8 @@ them first, and freed.
   freed objective left the scheduler pointing into it. Deregistering it in
   `free` without moving the registration after the construction, which frees
   the objective, leaves no weight registered at all.
+- `objective_forcing_lifecycle`: each objective adds one adjoint forcing to
+  the source terms of the adjoint fluid or scalar. A live objective must own
+  exactly one, told apart by the forcing scale it points at, and a freed one
+  none. Before the fix a second initialisation left two, and a freed
+  objective left one pointing at its deallocated forcing scale.
