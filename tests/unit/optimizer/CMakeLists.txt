@@ -28,6 +28,28 @@ if (CMAKE_Fortran_COMPILER_ID STREQUAL "GNU")
 endif()
 
 # ============================================================================ #
+# mma_optimizer_feasibility: the constraint check on the final design of the
+# MMA optimizer accepts a constraint value up to the tolerance of the
+# optimizer, and rejects a larger one. A pure function, so no mesh, no case
+# file and no HDF5.
+
+add_pfunit_ctest(mma_optimizer_feasibility
+    TEST_SOURCES mma_optimizer_feasibility.pf
+    LINK_LIBRARIES Neko-TOP::neko-top
+    MAX_PES 1
+)
+add_dependencies(Unit mma_optimizer_feasibility)
+set_tests_properties(mma_optimizer_feasibility PROPERTIES
+    LABELS "unit;optimizer"
+    TIMEOUT 120
+)
+if (CMAKE_Fortran_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(mma_optimizer_feasibility PRIVATE
+        $<$<COMPILE_LANGUAGE:Fortran>:-Wno-unused-variable>
+    )
+endif()
+
+# ============================================================================ #
 # steepest_descent_convergence: trajectory, pinning, zero-gradient and CSV
 # continuation-column checks, via the real optimizer (optimizer_factory).
 # No HDF5. Two ranks with an uneven split, since neko_init()'s setUp does a

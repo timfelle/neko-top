@@ -50,13 +50,15 @@ the same way by every optimizer; see
 ### The Method of Moving Asymptotes (MMA) {#configuration-solver-mma}
 
 In a case file, MMA is configured in `optimization.solver`, with MMA-specific
-settings under `optimization.solver.mma`.
+settings under `optimization.solver.mma`. The exception is `tolerance`, which
+MMA reads from `optimization.solver` itself.
 
 ```json
 {
   "optimization": {
     "solver": {
       "type": "mma",
+      "tolerance": 1.0e-3,
       "mma": {
         // MMA options go here
       }
@@ -67,6 +69,7 @@ settings under `optimization.solver.mma`.
 
 | Json entry   | Description                                             | Admissible Values     | Default value                                      |
 | ------------ | ------------------------------------------------------- | --------------------- | -------------------------------------------------- |
+| `tolerance`  | Set in `optimization.solver`, not in `optimization.solver.mma`. Tolerance on the KKT residual at which the run stops, and feasibility tolerance of the final constraint check. | Real                  | `1.0e-3`                                           |
 | `max_iter`   | Maximum number of iterations in the MMA subsolver.      | Integer, `> 0`        | `100`                                              |
 | `epsimin`    | Minimum barrier parameter used by MMA.                  | Real, `> 0`           | `1.0e-9 * sqrt(m + n_global)`                      |
 | `asyinit`    | Initial asymptote distance factor.                      | Real, `> 0`           | `0.2`                                              |
@@ -85,6 +88,11 @@ settings under `optimization.solver.mma`.
 | `auto_scale` | Enable adaptive scaling of constraints each iteration.  | `.true.` or `.false.` | `.false.`                                          |
 
 #### MMA configuration options
+- `tolerance` has two roles. The run stops once the max-norm of the KKT
+  residual is below it; see \ref MMA. Whatever stops the run, every constraint
+  value of the final design must then be at most `tolerance`: a larger value,
+  or a NaN, stops the run with an error, and an accepted value above zero is
+  reported in the log.
 - `subsolver` selects the interior-point variant used inside MMA (`dip`/`pdip`).
 - `backend` selects whether MMA update/KKT operations run on CPU or device
   routines.

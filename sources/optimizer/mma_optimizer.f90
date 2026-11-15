@@ -59,11 +59,12 @@ module mma_optimizer
   use scratch_registry, only: neko_scratch_registry
   use comm, only: pe_rank, NEKO_COMM
   use mpi_f08, only: MPI_Barrier
+  use, intrinsic :: ieee_arithmetic, only: ieee_is_nan
 
   implicit none
   private
 
-  public :: mma_optimizer_t
+  public :: mma_optimizer_t, mma_optimizer_feasible
 
   ! Concrete type for MMA optimizer
   type, extends(optimizer_t) :: mma_optimizer_t
@@ -394,6 +395,14 @@ contains
   end function mma_optimizer_step
 
   !> Validate the solution for the MMA optimizer
+  !! @details Every constraint value of the final design must be at most the
+  !! tolerance of the optimizer, `optimization.solver.tolerance`, which is
+  !! also the tolerance on the KKT residual; see `mma_optimizer_feasible`. A
+  !! larger value, or a NaN, stops the run with an error. An accepted value
+  !! above zero is reported in the log.
+  !! @param this The MMA optimizer.
+  !! @param problem The problem.
+  !! @param design The design.
   subroutine mma_optimizer_validate(this, problem, design)
     class(mma_optimizer_t), intent(inout) :: this
     class(problem_t), intent(in) :: problem
@@ -401,6 +410,8 @@ contains
 
     type(vector_t), pointer :: constraint_values
     integer :: ind
+    real(kind=rp) :: largest
+    character(len=256) :: msg
 
     call neko_scratch_registry%request(constraint_values, ind, &
          problem%get_n_constraints(), .false.)
@@ -408,15 +419,52 @@ contains
     call problem%get_constraint_values(constraint_values)
     call constraint_values%copy_from(DEVICE_TO_HOST, sync = .true.)
 
-    if (any(constraint_values%x .gt. 0.0_rp)) then
+    ! MAXVAL drops a NaN, and comparing one raises IEEE_INVALID, so a NaN is
+    ! caught before either
+    if (any(ieee_is_nan(constraint_values%x))) then
        call neko_error('MMA optimizer validation failed: ' // &
-            'Constraints are not satisfied.')
+            'Constraints are not satisfied. A constraint value is NaN.')
+    else
+       largest = maxval(constraint_values%x)
+       if (.not. mma_optimizer_feasible(constraint_values%x, &
+            this%tolerance)) then
+          write(msg, '(A,ES13.6,A,ES13.6)') 'MMA optimizer validation ' // &
+               'failed: Constraints are not satisfied. Largest ' // &
+               'constraint value:', largest, ', tolerance:', this%tolerance
+          call neko_error(trim(msg))
+       else if (largest .gt. 0.0_rp) then
+          write(msg, '(A,ES13.6,A,ES13.6)') 'MMA optimizer validation: ' // &
+               'Constraints accepted within the feasibility tolerance. ' // &
+               'Largest constraint value:', largest, ', tolerance:', &
+               this%tolerance
+          call neko_log%message(trim(msg))
+       end if
     end if
 
     ! Free local resources
     call neko_scratch_registry%relinquish(ind)
 
   end subroutine mma_optimizer_validate
+
+  !> Check whether constraint values are feasible to within a tolerance.
+  !! @details A constraint \f$ g_i \le 0 \f$ holds when its value is not
+  !! positive. The optimization loop can stop before the KKT residual drops
+  !! below the optimizer's tolerance, for example at `max_iterations`, and a
+  !! constraint that is active at the optimum may then end slightly above
+  !! zero. A value up to the tolerance is therefore accepted. The comparison
+  !! is absolute, so it assumes normalised constraints.
+  !! @param values The constraint values.
+  !! @param tolerance The largest constraint value that is accepted.
+  !! @return `.true.` if every value is at most the tolerance; a NaN value is
+  !! not.
+  pure function mma_optimizer_feasible(values, tolerance) result(feasible)
+    real(kind=rp), intent(in) :: values(:)
+    real(kind=rp), intent(in) :: tolerance
+    logical :: feasible
+
+    feasible = all(values .le. tolerance)
+
+  end function mma_optimizer_feasible
 
   ! -------------------------------------------------------------------------- !
   ! Logging and IO methods for the MMA optimizer

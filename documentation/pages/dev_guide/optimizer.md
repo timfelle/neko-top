@@ -108,6 +108,15 @@ Method of Moving Asymptotes, and handles both constrained and unconstrained
 problems. See \subpage MMA for the algorithm and
 \ref configuration-solver-mma "MMA Options" for its case-file settings.
 
+Its `validate` checks the constraint values of the final design against
+`optimization.solver.tolerance`, the tolerance on the KKT residual. A value
+up to the tolerance is accepted, since a run that stops at `max_iterations`
+can leave an active constraint slightly above zero; an accepted value above
+zero is reported in the log. A larger value stops the run with an error that
+gives the largest constraint value and the tolerance, and a NaN value stops it
+with an error of its own. The decision itself is the pure function
+`mma_optimizer_feasible`.
+
 ### Steepest descent with move limits {#optimizer-concrete-steepest-descent}
 
 `steepest_descent_optimizer_t`

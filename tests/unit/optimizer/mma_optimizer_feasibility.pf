@@ -1,0 +1,99 @@
+!> Unit tests for the constraint check on the final design of the MMA
+!! optimizer.
+!!
+!! The optimization loop can end before the KKT residual drops below the
+!! tolerance of the optimizer, for example at max_iterations. A constraint
+!! that is active at the optimum can then end slightly above zero, as the tip
+!! deflection of the 1d_beam example once did. A value up to the tolerance
+!! must therefore be accepted, and a larger one, or a NaN, rejected.
+module mma_optimizer_feasibility
+  use pfunit
+  use, intrinsic :: ieee_arithmetic, only: ieee_value, ieee_quiet_nan
+  use, intrinsic :: ieee_exceptions, only: ieee_invalid, ieee_status_type, &
+       ieee_get_status, ieee_set_status, ieee_support_halting, &
+       ieee_set_halting_mode
+  use num_types, only: rp
+  use mma_optimizer, only: mma_optimizer_feasible
+
+  implicit none
+
+  !> The tolerance of the 1d_beam example.
+  real(kind=rp), parameter :: tol = 1.0e-6_rp
+
+contains
+
+  !> Constraint values that are not positive are accepted.
+  @test
+  subroutine satisfied_is_accepted()
+    real(kind=rp) :: values(2)
+
+    values = [-1.0_rp, -0.04_rp]
+    @assertTrue(mma_optimizer_feasible(values, tol), 'negative values')
+
+    values = [-1.0_rp, 0.0_rp]
+    @assertTrue(mma_optimizer_feasible(values, tol), 'a zero value')
+
+  end subroutine satisfied_is_accepted
+
+  !> A constraint value above zero, but below the tolerance, is accepted.
+  @test
+  subroutine within_tolerance_is_accepted()
+    real(kind=rp) :: values(2)
+
+    ! The final tip deflection with which the 1d_beam example used to fail,
+    ! next to a stress constraint that holds
+    values = [2.224e-7_rp, -0.04_rp]
+    @assertTrue(mma_optimizer_feasible(values, tol), 'just above zero')
+
+  end subroutine within_tolerance_is_accepted
+
+  !> A constraint value equal to the tolerance is accepted.
+  @test
+  subroutine at_tolerance_is_accepted()
+    real(kind=rp) :: values(2)
+
+    values = [-0.04_rp, tol]
+    @assertTrue(mma_optimizer_feasible(values, tol), 'at the tolerance')
+
+  end subroutine at_tolerance_is_accepted
+
+  !> A constraint value above the tolerance is rejected, in any constraint.
+  @test
+  subroutine above_tolerance_is_rejected()
+    real(kind=rp) :: values(3)
+
+    values = [-0.04_rp, nearest(tol, 1.0_rp), -0.04_rp]
+    @assertFalse(mma_optimizer_feasible(values, tol), 'just above tol')
+
+    values = [1.0e-5_rp, 0.5_rp * tol, -0.04_rp]
+    @assertFalse(mma_optimizer_feasible(values, tol), 'first constraint')
+
+    values = [-0.04_rp, 0.5_rp * tol, 0.25_rp]
+    @assertFalse(mma_optimizer_feasible(values, tol), 'last constraint')
+
+  end subroutine above_tolerance_is_rejected
+
+  !> A NaN constraint value is rejected. It exceeds nothing, so a check for
+  !! values above the tolerance alone would accept it.
+  @test
+  subroutine nan_is_rejected()
+    real(kind=rp) :: values(2)
+    type(ieee_status_type) :: fp_status
+    logical :: feasible
+
+    values = [-0.04_rp, ieee_value(1.0_rp, ieee_quiet_nan)]
+
+    ! Comparisons with the NaN raise IEEE_INVALID, which halts a build with
+    ! -ffpe-trap=invalid, so halting is off for this call only
+    call ieee_get_status(fp_status)
+    if (ieee_support_halting(ieee_invalid)) then
+       call ieee_set_halting_mode(ieee_invalid, .false.)
+    end if
+    feasible = mma_optimizer_feasible(values, tol)
+    call ieee_set_status(fp_status)
+
+    @assertFalse(feasible, 'a NaN value')
+
+  end subroutine nan_is_rejected
+
+end module mma_optimizer_feasibility

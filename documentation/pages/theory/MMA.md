@@ -251,12 +251,6 @@ of
 
 The true bounds \f$ x^{\min}, x^{\max} \f$ are used, not the move limited ones.
 
-For the `dip` subsolver, the device backend also sets `residumax` to
-`residunorm` whenever the latter is NaN: the maximum reductions can
-drop a NaN, while the 2-norm keeps it, so a NaN in the design, the
-sensitivities or the constraint values never reads as convergence. The
-CPU backend does not have this guard.
-
 Since each subproblem is only solved down to the barrier parameter `epsimin`,
 the constraint term does not drop much below \f$ m \f$ times the last barrier
 level, which is the smallest power of ten above `epsimin` (between `epsimin`
@@ -264,6 +258,21 @@ and \f$ 10 \f$ `epsimin`). The tolerance should be set above that.
 
 For the `pdip` subsolver the residual is the full KKT system of the primal-dual
 method (Svanberg).
+
+On both backends and for both subsolvers, `residumax` is set to `residunorm`
+whenever the latter is NaN: the maximum reductions can drop a NaN, while the
+2-norm keeps it, so a NaN in the design, the sensitivities or the constraint
+values never reads as convergence.
+
+Whatever stops the run, the constraint values of the final design are then
+checked against the same tolerance. A value up to the tolerance is accepted,
+since a run that stops at `max_iterations` can leave an active constraint
+slightly above zero, and an accepted value above zero is reported in the log.
+A larger value, or a NaN, stops the run with an error. The check compares the
+constraint values as the constraints define them, before `scale` or
+`auto_scale` is applied, and the comparison is absolute. It therefore assumes
+normalised constraints, such as a volume fraction, or a bound written as
+\f$ g / g_{\max} - 1 \f$.
 
 ---
 
