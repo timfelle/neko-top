@@ -194,9 +194,11 @@ contains
   !! called. A component's schedule in time steps is restarted from the
   !! checkpoint file's time step, so it is that of the forward run with a
   !! value of 1 or one that divides that time step, and is shifted against
-  !! it otherwise. Neko's LPT component advances its particles in its
-  !! `preprocess`, so they are advanced once more. They do not act on the
-  !! flow, but their state means nothing after the backward sweep.
+  !! it otherwise. Neko's LPT component moves its particles in its
+  !! `preprocess`, by the time since it last ran. The restart sets the time
+  !! back, so it first integrates them back in time, in the restarted flow,
+  !! and then advances them again. They do not act on the flow, but their
+  !! state means nothing after the backward sweep.
   !!
   !! Newer versions of Neko also fit the time step to the next output time in
   !! `simulation_step` (`land`), with `exact_output_time`, which requires a

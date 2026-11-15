@@ -108,10 +108,13 @@ Lagrangian particle tracking, the `lagrangian_particles` component, is
 passive: the particles do not act on the flow, so they do not change the
 objectives or their sensitivities. Their state and their output are not part
 of the adjoint, and they are not reset between design iterations. The
-component advances the particles in its `preprocess`, so the recompute
-advances them as well, while only the forward simulation writes their
-output. The state of the particles after an adjoint simulation is therefore
-not meaningful.
+component moves the particles in its `preprocess`, which the recompute runs,
+by the time since it last ran. Each restart sets the time back, so the
+component first integrates the particles back in time, in the restarted flow,
+and then advances them again over the recomputed time steps. The forward
+simulation of every later design iteration sets the time back in the same
+way. Only the forward simulation writes their output. The state of the
+particles after an adjoint simulation is therefore not meaningful.
 
 The time-step controllers of the forward, the adjoint and the recomputed
 simulations of an unsteady problem are initialised from the root of the case

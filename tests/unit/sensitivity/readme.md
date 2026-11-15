@@ -117,8 +117,9 @@ Currently, we have added tests for the following components:
   `unsteady_brinkman_dissipation.case` with six time steps, two states in
   RAM, and a `lagrangian_particles` component with one particle. The
   adjoint recomputes steps 3 and 5 from the checkpoints of steps 2 and 4,
-  which advances the particle again. The particles do not act on the flow,
-  so the sensitivity must pass the finite-difference check as without them.
+  which integrates the particle back in time and then advances it again. The
+  particles do not act on the flow, so the sensitivity must pass the
+  finite-difference check as without them.
 - `brinkman_dissipation_objective_t`, unsteady and masked
   (`unsteady_brinkman_dissipation_masked.case`) — the same case with the
   objective masked to the design domain. The PDE filter's transpose carries
