@@ -41,6 +41,7 @@ their own options in a nested object named after the type.
 | `max_iterations`      | Maximum number of outer optimization iterations.                       | Integer, `> 0`                     | `100`               |
 | `enable_output`       | Write the convergence log (`optimization_data.csv`) and the simulation output at every iteration. | `.true.` or `.false.` | `.true.`            |
 | `stop_design_change`  | Stop once the maximum design change drops strictly below this value.   | Real, `> 0`                        | machine epsilon     |
+| `tolerance`           | Stop once the KKT infinity-norm residual (`residumax`) drops strictly below this value. Only consulted by the `mma` optimizer (see \ref configuration-solver-steepest-descent-convergence). | Real, `> 0` | `1.0e-3` |
 | `max_runtime`         | Maximum wall-clock runtime, as a duration string (e.g. `1-12:00:00` for one day and twelve hours). Empty disables the limit. | String                | `""` (disabled)     |
 
 Restart and checkpoint keys (`restart_file`, `checkpoint.*`) are likewise read
@@ -107,6 +108,18 @@ settings under `optimization.solver.mma`.
 - `scale` sets the constraint scaling magnitude.
 - `auto_scale` enables adaptive scaling from the current constraint value at
   each iteration.
+
+\note **`tolerance` is not mesh- or scale-invariant.** MMA's regularization
+terms, its interior-point barrier floor, and `epsimin` are absolute
+constants (see \ref MMA-kkt-convergence "KKT Convergence" for the exact
+terms), so `residumax` for the same physical optimum changes with mesh
+resolution and with how the sensitivities reaching MMA are scaled. For
+example, `project_sensitivity` on a Brinkman design multiplies the
+sensitivity by `avg_B` (`design_brinkman.f90`), the mean nodal volume, which
+shrinks under mesh refinement. A `tolerance` tuned on one mesh or scaling is
+not guaranteed to remain appropriate after either changes; this is accepted
+behaviour, aligned with `topopt_in_petsc`'s own absolute constants, not a
+bug to work around.
 
 ### Steepest descent with move limits {#configuration-solver-steepest-descent}
 

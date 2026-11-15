@@ -225,7 +225,7 @@ below for their verification status.
 
 ---
 
-## KKT Convergence
+## KKT Convergence {#MMA-kkt-convergence}
 
 Convergence is evaluated using Karush-Kuhn-Tucker (KKT) conditions:
 
@@ -264,6 +264,18 @@ and \f$ 10 \f$ `epsimin`). The tolerance should be set above that.
 
 For the `pdip` subsolver the residual is the full KKT system of the primal-dual
 method (Svanberg).
+
+\note The regularization terms in \f$ p_{0j} \f$/\f$ q_{0j} \f$ (see Convex
+Approximation above), the interior-point barrier floor, and `epsimin` are
+all absolute constants: none of them scale with the mesh or with the
+magnitude of the sensitivities handed to MMA. `residumax`/`residunorm`, and
+so the meaning of `optimization.solver.tolerance`, are therefore not
+invariant under mesh refinement or sensitivity scaling — the same physical
+optimum can report a different residual on a different mesh, or after the
+sensitivities reaching MMA are rescaled. This is a direct consequence of
+matching `topopt_in_petsc`'s absolute constants (see Relation to the
+topopt_in_petsc implementation below); a tolerance tuned for one mesh or
+scaling is not guaranteed to still be appropriate after either changes.
 
 ---
 
