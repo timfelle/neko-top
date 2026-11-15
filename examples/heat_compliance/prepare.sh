@@ -50,6 +50,15 @@ if [ -f "box.nmsh" ]; then
     exit 0
 fi
 
+# Without the meshing tools the example cannot run. Exit status 77 makes run.sh
+# report it as skipped rather than as an error.
+for tool in gmsh gmsh2nek rea2nbin; do
+    if ! command -v $tool >/dev/null; then
+        echo "$tool not found" >&2
+        exit 77
+    fi
+done
+
 echo "Generating mesh with N = $N (bottom has (3N)x(3N) cells)..."
 gmsh -0 "${GEO_FILE}" -setnumber N "${N}"
 

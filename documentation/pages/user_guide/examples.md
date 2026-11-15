@@ -135,6 +135,28 @@ This folder can include anything needed by the examples to run. In general it is
 used for local copies of meshes which can be accessed by all examples to avoid
 redundancy and copying massive folders around.
 
+An example is skipped rather than run in two situations:
+
+- A `mesh_file` in its case file points into `data_local` and the file is not
+  there. Only paths that start with `data_local/`, relative to the example, are
+  detected; any other missing mesh is reported as an error.
+- Its preparation script, `prepare.sh`, exits with status 77, for example
+  because a meshing tool it needs is not installed or because Neko was built
+  for a backend the example cannot use. The last line the script writes to
+  standard error is taken as the reason.
+
+The reason is written to `skipped.log` in the log folder of the example, and
+`status.sh` lists the example as skipped together with the reason, without
+counting it as a failure. Every other error is reported as an error, whatever
+its message says.
+
+The CI job that runs all the examples caps each optimization at two
+iterations. A case whose final design needs more iterations to satisfy its
+constraints can set its own number in a top-level `ci` object, as in
+`"ci": {"iterations": 20}`. The object is read by the case shortener of the
+job, `.github/workflows/extra/shorten_cases.py`, which needs to support it; an
+older shortener ignores it, as does Neko.
+
 Additionally, we avoid copying meshes contained in the examples by creating a
 link to any `.nmsh` files contained in the example folder. This is done to avoid
 copying large meshes around and to allow for easy access to the meshes.

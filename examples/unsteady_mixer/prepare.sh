@@ -59,6 +59,18 @@ if [[ -z $(which genmeshbox) ]]; then
 fi
 
 # ============================================================================ #
+# The cases use the fused_cg velocity solver, which Neko provides only for the
+# CUDA and HIP backends. On other builds the example cannot run. Exit status 77
+# makes run.sh report it as skipped rather than as an error.
+
+backend=$(pkg-config --variable=backend neko)
+if [[ $backend != CUDA && $backend != HIP ]] &&
+    grep -qs '"fused_cg"' ./*.case; then
+    echo "fused_cg needs a CUDA or HIP build of Neko, not $backend" >&2
+    exit 77
+fi
+
+# ============================================================================ #
 # Generate mesh and run case
 
 # echo "Generating mesh with dimensions: $Nx $Ny $Nz"

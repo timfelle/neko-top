@@ -188,5 +188,8 @@
                 "is_max": false
             }
         ]
+    },
+    "ci": {
+        "iterations": 10
     }
 }

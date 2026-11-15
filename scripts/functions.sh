@@ -52,14 +52,40 @@ function run {
     export NEKO_LOG_FILE=$logfile
 
     # ------------------------------------------------------------------------ #
-    # Set up the environment and find neko
-    prepare 2>error.log || return 1
-    if [ -s ./error.log ]; then
+    # Set up the environment and find neko. A preparation script asks for the
+    # example to be skipped by exiting with status 77, after writing the reason
+    # as its last line on standard error.
+    rm -f skipped.log
+    prepare 2>error.log
+    prep_status=$?
+    if [ $prep_status -eq 77 ]; then
+        reason=$(tail -n 1 error.log)
+        mark_skipped "${reason:-requested by prepare.sh}"
+        return 0
+    elif [ $prep_status -ne 0 ]; then
+        printf "ERROR: Preparation failed with exit status %d.\n" \
+            $prep_status | tee -a error.log
+        return 1
+    elif [ -s ./error.log ]; then
         printf "ERROR: An error occured during preparation.\n"
         printf "See error.log for details.\n"
         return 1
     fi
     rm -fr error.log && touch error.log
+
+    # ------------------------------------------------------------------------ #
+    # Skip the example if a mesh it reads from data_local is missing. That
+    # folder holds local data which is not part of the repository, so this is
+    # reported as a skip rather than an error.
+
+    for file in "${casefile[@]}"; do
+        while IFS= read -r mesh; do
+            if [[ $mesh == data_local/* && ! -f $mesh ]]; then
+                mark_skipped "missing data: $mesh"
+                return 0
+            fi
+        done < <(grep -oP '"mesh_file"\s*:\s*"\K[^"]*' "$file")
+    done
 
     # ------------------------------------------------------------------------ #
     # Execute the example
@@ -134,6 +160,16 @@ function run {
 }
 
 # ============================================================================ #
+# Define the function marking an example as skipped. The reason is kept in
+# skipped.log, which only this function writes and status.sh reads to tell a
+# skip from an error, and in error.log, so the example is queued again later.
+
+function mark_skipped {
+    printf '%s\n' "$1" >skipped.log
+    printf 'Skipped: %s\n' "$1" | tee -a error.log
+}
+
+# ============================================================================ #
 # Define the prepare function
 
 function prepare {
@@ -197,11 +233,17 @@ function prepare {
 
         if [[ -n "$SLURM_JOB_NAME" && -n "$CPU_BIND" ]]; then
             srun --nodes=1 --ntasks=1 $prep_sh
+            prep_sh_status=$?
             sleep 1 # Make sure SLURM have time to clean up.
         else
             $prep_sh
+            prep_sh_status=$?
         fi
 
+        # Exit status 77 asks for the example to be skipped, see run.
+        if [ $prep_sh_status -eq 77 ]; then
+            return 77
+        fi
     fi
 
     # ------------------------------------------------------------------------ #

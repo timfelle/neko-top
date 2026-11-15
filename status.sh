@@ -69,8 +69,12 @@ fi
 printf "\n\e[4mTest status.\e[m\n"
 
 for test in ${tests[@]}; do
-    # Check if there were errors. Print them if there were.
-    if [ -s $LPATH/$test/error.log ]; then
+    # Check if the example was skipped, which only run marks in skipped.log.
+    # Otherwise check if there were errors. Print them if there were.
+    if [ -s "$LPATH/$test/skipped.log" ]; then
+        printf '\t\e[1;33m%-12s\e[m %-s (%s)\n' "Skipped:" "$test" \
+            "$(head -n 1 "$LPATH/$test/skipped.log")"
+    elif [ -s $LPATH/$test/error.log ]; then
 
         if [ "$(head -n 1 $LPATH/$test/error.log)" = "Interrupted" ]; then
             printf '\t\e[1;31m%-12s\e[m %-s\n' "Interrupted:" "$test"
@@ -134,7 +138,7 @@ done
 
 for test in ${tests[@]}; do
     # Check if there were errors. Print them if there were.
-    if [ -s $LPATH/$test/error.log ]; then
+    if [[ -s $LPATH/$test/error.log && ! -s $LPATH/$test/skipped.log ]]; then
 
         if [ "$(head -n 1 $LPATH/$test/error.log)" = "Interrupted" ]; then
             continue
