@@ -143,8 +143,6 @@ contains
     logical :: dealias_sensitivity, dealias_forcing, dealias_fallback
     real(kind=rp) :: start_time, end_time
 
-    call nekotop_continuation%json_get_or_register(json, 'weight', &
-         this%weight, weight, 1.0_rp)
     call json_get_or_default(json, "mask_name", mask_name, "")
     call json_get_or_default(json, "name", name, "Brinkman dissipation")
     call json_get(simulation%neko_case%params, 'case.numerics.dealias', &
@@ -163,8 +161,14 @@ contains
             "dealias_forcing must be equal")
     end if
 
-    call this%init_from_attributes(design, simulation, weight, name, &
+    ! Built before the weight is read, as building frees the objective,
+    ! which deregisters the weight from continuation. The forcing reads the
+    ! weight through a pointer, so it sees the value set here.
+    call this%init_from_attributes(design, simulation, 1.0_rp, name, &
          mask_name, dealias_forcing, start_time, end_time)
+    call nekotop_continuation%json_get_or_register(json, 'weight', &
+         this%weight, weight, 1.0_rp)
+    this%weight = weight
   end subroutine brinkman_dissipation_init_json_sim
 
   !> The actual constructor.

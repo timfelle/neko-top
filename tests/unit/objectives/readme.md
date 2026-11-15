@@ -404,3 +404,20 @@ see `end_time_step_count` above.
 To select the final step alone, set `start_time` to the simulation's
 `end_time` and leave the objective's `end_time` unset. The run always overshoots
 a non-boundary `end_time` by exactly one step, so that window holds one sample.
+
+## Objective lifecycle
+
+The pFUnit tests below share `objective_lifecycle.case`, the scalar setup
+above with a `viscous_dissipation`, a `brinkman_dissipation` and two
+`scalar_mixing` objectives, each with its weight given as an array. Nothing
+is solved: the objectives are set up, initialised a second time, which frees
+them first, and freed.
+
+- `objective_weight_continuation`: each objective registers its weight with
+  the continuation scheduler. A live objective must have it registered once,
+  and a continuation step must reach it, also after the objective is set up
+  anew through the factory. A freed one must have it registered no more.
+  Before the fix a second initialisation registered the weight twice, and a
+  freed objective left the scheduler pointing into it. Deregistering it in
+  `free` without moving the registration after the construction, which frees
+  the objective, leaves no weight registered at all.

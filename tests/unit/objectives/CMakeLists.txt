@@ -90,6 +90,49 @@ if (CMAKE_Fortran_COMPILER_ID STREQUAL "GNU")
     )
 endif()
 
+# ============================================================================ #
+# Lifecycle of the objectives that continue their weight. An objective
+# initialised a second time must leave one registration of its weight, and a
+# freed one must leave none.
+add_custom_target(
+    objective_lifecycle_case_file
+    COMMENT "Copying case file objective_lifecycle.case to the test directory"
+    SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/objective_lifecycle.case
+    BYPRODUCTS ${CMAKE_CURRENT_BINARY_DIR}/objective_lifecycle.case
+    COMMAND
+        ${CMAKE_COMMAND} -E copy_if_different
+        ${CMAKE_CURRENT_SOURCE_DIR}/objective_lifecycle.case
+        ${CMAKE_CURRENT_BINARY_DIR}/objective_lifecycle.case
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+)
+add_dependencies(objectives_test_prepare objective_lifecycle_case_file)
+
+foreach(lifecycle_test objective_weight_continuation)
+    add_pfunit_ctest(${lifecycle_test}
+        TEST_SOURCES ${lifecycle_test}.pf
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+        LINK_LIBRARIES objectives_user_obj Neko-TOP::neko-top
+        MAX_PES 1
+    )
+    target_include_directories(${lifecycle_test} PRIVATE ${LOCAL_MOD_DIR})
+    add_dependencies(Unit ${lifecycle_test})
+    add_dependencies(${lifecycle_test} objectives_test_prepare)
+
+    # Disable treating pFUnit's generated variables as unused.
+    if (CMAKE_Fortran_COMPILER_ID STREQUAL "GNU")
+        target_compile_options(${lifecycle_test} PRIVATE
+            $<$<COMPILE_LANGUAGE:Fortran>:-Wno-unused-variable>
+        )
+    endif()
+
+    set_tests_properties(${lifecycle_test}
+        PROPERTIES
+            LABELS "objectives;unit"
+            ENVIRONMENT "NEKO_LOG_FILE=${lifecycle_test}.log"
+            TIMEOUT 120
+    )
+endforeach()
+
 set(CMAKE_Fortran_MODULE_DIRECTORY ${CMAKE_BINARY_DIR}/modules CACHE PATH
     "Fortran module directory" FORCE)
 

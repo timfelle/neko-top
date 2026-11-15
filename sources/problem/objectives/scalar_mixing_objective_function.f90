@@ -123,8 +123,6 @@ contains
     character(len=:), allocatable :: mask_name
     character(len=:), allocatable :: scalar_name
 
-    call nekotop_continuation%json_get_or_register(json, 'weight', &
-         this%weight, weight, 1.0_rp)
     call json_get_or_default(json, "mask_name", mask_name, "")
     call json_get_or_default(json, "target_concentration", phi_ref, 0.5_rp)
     call json_get_or_default(json, "name", name, "Scalar Mixing")
@@ -132,9 +130,14 @@ contains
     call json_get_or_default(json, "start_time", start_time, 0.0_rp)
     call json_get_or_default(json, "end_time", end_time, huge(0.0_rp))
 
-    ! initialize
-    call this%init_from_attributes(design, simulation, weight, name, &
+    ! Built before the weight is read, as building frees the objective,
+    ! which deregisters the weight from continuation. The forcing reads the
+    ! weight through a pointer, so it sees the value set here.
+    call this%init_from_attributes(design, simulation, 1.0_rp, name, &
          mask_name, phi_ref, scalar_name, start_time, end_time)
+    call nekotop_continuation%json_get_or_register(json, 'weight', &
+         this%weight, weight, 1.0_rp)
+    this%weight = weight
   end subroutine scalar_mixing_init_json_sim
 
   !> The actual constructor.

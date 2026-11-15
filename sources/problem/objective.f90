@@ -41,6 +41,7 @@ module objective
   use point_zone_registry, only: neko_point_zone_registry
   use json_module, only: json_file
   use time_state, only: time_state_t
+  use continuation_scheduler, only: nekotop_continuation
   implicit none
   private
 
@@ -168,6 +169,10 @@ contains
   !> Free the base class
   subroutine objective_free_base(this)
     class(objective_t), target, intent(inout) :: this
+
+    ! The continuation scheduler must keep no pointer to the weight of a
+    ! freed objective.
+    call nekotop_continuation%deregister(this%weight)
 
     if (allocated(this%name)) deallocate(this%name)
     this%weight = 1.0_rp

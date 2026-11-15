@@ -67,6 +67,7 @@ module continuation_scheduler
      procedure :: free => free_scheduler
      procedure :: json_get_or_register
      procedure :: register_parameter
+     procedure :: deregister
      procedure :: update
      procedure :: get_param_name
      procedure :: get_n_params
@@ -117,7 +118,8 @@ contains
   !! @param this The continuation scheduler instance.
   !! @param json The json_file object.
   !! @param name The parameter name.
-  !! @param target Variable that may be registered for continuation.
+  !! @param target Variable that may be registered for continuation. Its
+  !! owner deregisters it, see `deregister`, before it is deallocated.
   !! @param value Returned value of the parameter.
   !! @param default_value Optional default value if the parameter is not found.
   subroutine json_get_or_register(this, json, name, target, value, &
@@ -163,6 +165,13 @@ contains
   end subroutine json_get_or_register
 
   !> Register a continuation parameter
+  !! @param this The continuation scheduler instance.
+  !! @param name The parameter name.
+  !! @param target Variable to update. Its owner deregisters it, see
+  !! `deregister`, before it is deallocated.
+  !! @param values Values to step through.
+  !! @param iterations Iterations per value, by default those of the
+  !! scheduler.
   subroutine register_parameter(this, name, target, values, iterations)
     class(continuation_scheduler_t), intent(inout) :: this
     character(len=*), intent(in) :: name
@@ -202,6 +211,40 @@ contains
     this%params(n)%values = values
     this%params(n)%iterations_per_value = iter_val
   end subroutine register_parameter
+
+  !> Deregister every parameter that updates `target`, so that the scheduler
+  !! keeps no pointer to it. The owner of a registered variable calls this
+  !! before the variable is deallocated, typically in its destructor.
+  !! Parameters that update other variables are kept, in their order.
+  !! @param this The continuation scheduler instance.
+  !! @param target Variable to stop updating.
+  subroutine deregister(this, target)
+    class(continuation_scheduler_t), intent(inout) :: this
+    real(kind=rp), target, intent(in) :: target
+    type(continuation_parameter_t), allocatable :: kept(:)
+    integer :: i, n
+
+    if (.not. allocated(this%params)) return
+
+    n = 0
+    do i = 1, size(this%params)
+       if (.not. associated(this%params(i)%target, target)) n = n + 1
+    end do
+    if (n .eq. size(this%params)) return
+
+    allocate(kept(n))
+    n = 0
+    do i = 1, size(this%params)
+       if (associated(this%params(i)%target, target)) then
+          call this%params(i)%free()
+       else
+          n = n + 1
+          kept(n) = this%params(i)
+       end if
+    end do
+    call move_alloc(kept, this%params)
+
+  end subroutine deregister
 
   !> Update all registered parameters for the current iteration
   subroutine update(this, iter)

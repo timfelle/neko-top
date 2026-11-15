@@ -1,0 +1,191 @@
+!> @file objective_weight_continuation.pf
+!! pFUnit test that a freed objective deregisters its weight from
+!! continuation, and that continuation still reaches the weight of an
+!! objective initialised a second time.
+!!
+!! Every objective of the case, `viscous_dissipation`, `brinkman_dissipation`
+!! and two `scalar_mixing`, has its weight given as an array, and so
+!! registers the weight with the continuation scheduler, which keeps a
+!! pointer to it. The objectives are set up, initialised a second time,
+!! which frees them first, stepped, freed, set up anew through the factory,
+!! as a problem does, and stepped again. While an objective lives, its
+!! weight must be registered once and each step must reach it. Once it is
+!! freed, its weight must not be registered.
+!!
+!! Before the fix, nothing deregistered the weight, so a second
+!! initialisation registered it twice, and a freed objective left the
+!! scheduler pointing into it. Deregistering the weight in `free` alone
+!! breaks continuation instead: the constructor registered the weight before
+!! building the objective, and building frees it, which deregisters the
+!! weight just registered.
+module objective_weight_continuation
+
+  use mpi
+  use pfunit
+  use num_types, only: rp
+  use json_module, only: json_file
+  use json_utils, only: json_get, json_extract_item
+  use json_utils_ext, only: json_read_file
+  use simulation_m, only: simulation_t
+  use brinkman_design, only: brinkman_design_t
+  use objective, only: objective_wrapper_t, objective_factory
+  use continuation_scheduler, only: nekotop_continuation
+  use neko, only: neko_init
+  use neko_top, only: neko_top_register_types
+  use logger, only: neko_log
+  use objectives_user, only: objectives_user_setup
+
+  implicit none
+
+  character(len=*), parameter :: case_file = 'objective_lifecycle.case'
+
+  !> Path of the objectives in the case file.
+  character(len=*), parameter :: objectives_path = 'optimization.objectives'
+
+  !> The iteration the steps go to, the second value of every weight with
+  !! one iteration per value.
+  integer, parameter :: step_iteration = 2
+
+  @TestCase
+  type, extends(MPITestCase) :: test_weight_continuation
+   contains
+     procedure :: setUp
+     procedure :: tearDown
+  end type test_weight_continuation
+
+  logical :: initialized = .false.
+
+contains
+
+  subroutine setUp(this)
+    class(test_weight_continuation), intent(inout) :: this
+
+    if (initialized) return
+    initialized = .true.
+
+    call neko_init()
+    call neko_top_register_types()
+  end subroutine setUp
+
+  subroutine tearDown(this)
+    class(test_weight_continuation), intent(inout) :: this
+  end subroutine tearDown
+
+  !> A live objective has its weight registered once, and continued. A
+  !! freed one has it registered no more.
+  @test(npes=[1])
+  subroutine weight_continuation(this)
+    class(test_weight_continuation), intent(inout) :: this
+
+    type(json_file) :: parameters, design_parameters, objective_json
+    type(simulation_t), target :: sim
+    type(brinkman_design_t) :: des
+    type(objective_wrapper_t), allocatable :: objectives(:)
+    character(len=:), allocatable :: objective_type
+    character(len=32), allocatable :: types(:)
+    character(len=256) :: log_buf
+    real(kind=rp), allocatable :: weights(:), first(:), second(:)
+    real(kind=rp), allocatable :: w_set_up(:), w_stepped(:), w_anew(:)
+    integer :: n_objectives, k, n_before
+    integer :: n_set_up, n_reinit, n_freed, n_anew
+
+    parameters = json_read_file(case_file)
+    call json_get(parameters, 'optimization.design', design_parameters)
+    call parameters%info(objectives_path, n_children = n_objectives)
+
+    ! Register the user-defined inflow before the case is built.
+    call objectives_user_setup(sim%neko_case%user)
+
+    call nekotop_continuation%init(parameters)
+    call sim%init(parameters)
+    call des%init(design_parameters, sim)
+    n_before = nekotop_continuation%get_n_params()
+
+    allocate(objectives(n_objectives), types(n_objectives))
+    allocate(first(n_objectives), second(n_objectives))
+    allocate(w_set_up(n_objectives), w_stepped(n_objectives), &
+         w_anew(n_objectives))
+
+    do k = 1, n_objectives
+       call json_extract_item(parameters, objectives_path, k, objective_json)
+       call json_get(objective_json, 'type', objective_type)
+       call json_get(objective_json, 'weight', weights)
+       types(k) = objective_type
+       first(k) = weights(1)
+       second(k) = weights(2)
+
+       call objective_factory(objectives(k)%objective, objective_json, des, &
+            sim)
+       w_set_up(k) = objectives(k)%objective%get_weight()
+    end do
+    n_set_up = nekotop_continuation%get_n_params() - n_before
+
+    do k = 1, n_objectives
+       call json_extract_item(parameters, objectives_path, k, objective_json)
+       call objectives(k)%objective%init(objective_json, des, sim)
+    end do
+    n_reinit = nekotop_continuation%get_n_params() - n_before
+
+    call nekotop_continuation%update(step_iteration)
+    do k = 1, n_objectives
+       w_stepped(k) = objectives(k)%objective%get_weight()
+    end do
+
+    do k = 1, n_objectives
+       call objectives(k)%free()
+    end do
+    n_freed = nekotop_continuation%get_n_params() - n_before
+
+    do k = 1, n_objectives
+       call json_extract_item(parameters, objectives_path, k, objective_json)
+       call objective_factory(objectives(k)%objective, objective_json, des, &
+            sim)
+    end do
+    n_anew = nekotop_continuation%get_n_params() - n_before
+
+    ! A step taken while the scheduler points into a freed objective would
+    ! write into freed memory, so it is taken only if none is registered.
+    if (n_freed .eq. 0) call nekotop_continuation%update(step_iteration)
+    do k = 1, n_objectives
+       w_anew(k) = objectives(k)%objective%get_weight()
+    end do
+
+    write(log_buf, '(A,I0,A,I0,A,I0,A,I0)') 'Weights registered: set up ', &
+         n_set_up, ', initialised again ', n_reinit, ', freed ', n_freed, &
+         ', set up anew ', n_anew
+    call neko_log%message(trim(log_buf))
+    do k = 1, n_objectives
+       write(log_buf, '(A,A,A,3(F5.2,A),F5.2)') 'Weight of ', &
+            trim(types(k)), ': set up ', w_set_up(k), ', stepped ', &
+            w_stepped(k), ', set up anew and stepped ', w_anew(k), &
+            ', expected after a step ', second(k)
+       call neko_log%message(trim(log_buf))
+    end do
+
+    ! The objectives are freed, so the simulation can go.
+    do k = 1, n_objectives
+       call objectives(k)%free()
+    end do
+    deallocate(objectives)
+    call des%free()
+    call sim%free()
+    call nekotop_continuation%free()
+
+    @assertEqual(n_objectives, n_set_up, 'Weights registered once set up')
+    do k = 1, n_objectives
+       @assertEqual(first(k), w_set_up(k), trim(types(k)) // ': set up')
+    end do
+    @assertEqual(n_objectives, n_reinit, &
+         'Weights registered once initialised again')
+    do k = 1, n_objectives
+       @assertEqual(second(k), w_stepped(k), trim(types(k)) // ': stepped')
+    end do
+    @assertEqual(0, n_freed, 'Weights registered once freed')
+    @assertEqual(n_objectives, n_anew, 'Weights registered once set up anew')
+    do k = 1, n_objectives
+       @assertEqual(second(k), w_anew(k), trim(types(k)) // ': set up anew')
+    end do
+
+  end subroutine weight_continuation
+
+end module objective_weight_continuation
