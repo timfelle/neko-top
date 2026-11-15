@@ -51,22 +51,28 @@ contains
   subroutine remove_source_term(handler, source_term)
     class(source_term_handler_t), target, intent(inout) :: handler
     class(source_term_t), pointer, intent(in) :: source_term
-    class(source_term_wrapper_t), allocatable :: kept(:)
-    integer :: i, n
+    class(source_term_wrapper_t), allocatable, target :: kept(:)
+    integer :: i, i_term, n
 
     if (.not. allocated(handler%source_terms)) return
 
-    n = 0
-    do i = 1, size(handler%source_terms)
-       if (.not. associated(source_term, &
-            handler%source_terms(i)%source_term)) n = n + 1
-    end do
-    if (n .eq. size(handler%source_terms)) return
-
-    allocate(kept(n))
-    n = 0
+    ! Found before anything is freed, as the pointer to the term may not be
+    ! compared once the term is freed.
+    i_term = 0
     do i = 1, size(handler%source_terms)
        if (associated(source_term, handler%source_terms(i)%source_term)) then
+          i_term = i
+          exit
+       end if
+    end do
+    if (i_term .eq. 0) return
+
+    ! The kept terms are moved into a target, so that pointers to them stay
+    ! associated with them.
+    allocate(kept(size(handler%source_terms) - 1))
+    n = 0
+    do i = 1, size(handler%source_terms)
+       if (i .eq. i_term) then
           call handler%source_terms(i)%free()
        else
           n = n + 1

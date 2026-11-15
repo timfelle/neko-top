@@ -68,6 +68,7 @@ type continuation_scheduler_t
      procedure :: free => free_scheduler
      procedure :: json_get_or_register
      procedure :: register_parameter
+     procedure :: deregister
      procedure :: update
      procedure :: get_param_name
      procedure :: get_n_params
@@ -109,6 +110,17 @@ scalar is given in the json, then this function will work as a single call of
 ```fortran
 call nekotop_continuation%json_get_or_register(json, name, target, default_value)
 ```
+
+The scheduler keeps a pointer to `target` and writes to it on every update, so
+the owner of a registered variable deregisters it before the variable is
+deallocated, typically in its destructor:
+```fortran
+call nekotop_continuation%deregister(target)
+```
+This removes every parameter that updates `target`, and keeps the others in
+their order. A constructor that frees its object first must register the
+parameters after the free, or the free removes the registration it has just
+made.
 
 ## 6. Update Mechanism
 ```fortran

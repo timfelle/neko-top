@@ -292,7 +292,11 @@ contains
 
   end subroutine simulation_initialize
 
-  !> Free the simulation
+  !> Free the simulation.
+  !! A problem initialised with the simulation must be freed first, as its
+  !! objectives then remove their adjoint forcings from the source terms
+  !! freed here.
+  !! @param this The simulation.
   subroutine simulation_free(this)
     class(simulation_t), intent(inout) :: this
 

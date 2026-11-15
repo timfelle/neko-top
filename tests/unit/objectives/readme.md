@@ -424,5 +424,8 @@ them first, and freed.
 - `objective_forcing_lifecycle`: each objective adds one adjoint forcing to
   the source terms of the adjoint fluid or scalar. A live objective must own
   exactly one, told apart by the forcing scale it points at, and a freed one
-  none. Before the fix a second initialisation left two, and a freed
-  objective left one pointing at its deallocated forcing scale.
+  none. The forcing must point at the weight of the objective too: one that
+  copied it would miss the weight set once the objective is built, and every
+  continuation step. Before the fix a second initialisation left two
+  forcings, and a freed objective left one pointing at its deallocated
+  forcing scale.

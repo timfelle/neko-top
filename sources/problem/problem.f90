@@ -232,7 +232,11 @@ contains
 
   end subroutine problem_init
 
-  !> Destructor for the base class
+  !> Destructor for the base class.
+  !! The problem must be freed before the simulation it was initialised
+  !! with, as its objectives then remove their adjoint forcings from the
+  !! source terms of that simulation.
+  !! @param this The problem.
   subroutine problem_free(this)
     class(problem_t), intent(inout) :: this
     integer :: i

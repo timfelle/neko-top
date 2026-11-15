@@ -45,6 +45,7 @@ module objective
   use source_term_handler, only: source_term_handler_t
   use source_term_handler_ext, only: remove_source_term
   use continuation_scheduler, only: nekotop_continuation
+  use utils, only: neko_error
   implicit none
   private
 
@@ -327,7 +328,8 @@ contains
   !> Add the adjoint forcing of the objective to the source terms of the
   !! adjoint equation it forces. These hold a copy of the forcing, which
   !! `free_base` removes again, so that re-initialising the objective leaves
-  !! one forcing rather than adding a second. An objective adds one forcing.
+  !! one forcing rather than adding a second. An objective adds one forcing,
+  !! and adding a second is an error.
   !! @param this The objective.
   !! @param handler The source terms of the adjoint equation. Must stay
   !! valid until the objective is freed.
@@ -337,6 +339,11 @@ contains
     class(source_term_handler_t), target, intent(inout) :: handler
     class(source_term_t), intent(in) :: forcing
     integer :: n
+
+    if (associated(this%forcing_term)) then
+       call neko_error("Objective " // this%get_name() // &
+            " adds a second adjoint forcing")
+    end if
 
     call handler%add_source_term(forcing)
 

@@ -6,7 +6,9 @@
 !! objectives each add an adjoint forcing to the source terms of the adjoint
 !! equation they force, the adjoint fluid or the adjoint scalar. The forcing
 !! points at the forcing scale of its objective, which tells the forcings of
-!! two objectives apart. Two runs over the objectives of the case are made.
+!! two objectives apart, and at the weight of its objective, through which
+!! it sees every change to the weight. Two runs over the objectives of the
+!! case are made.
 !!
 !!   1. Each objective alone is set up, initialised a second time, which
 !!      frees it first, and freed. It must own one forcing until it is freed,
@@ -14,7 +16,7 @@
 !!   2. All objectives are set up together, so that two share each set of
 !!      source terms, initialised a second time, and freed one by one in the
 !!      order they were set up. Each live objective must own exactly one
-!!      forcing, and no other forcing may be left.
+!!      forcing, pointing at its weight, and no other forcing may be left.
 !!
 !! Before the fix, `free` left the forcing in place, so a second
 !! initialisation added a second forcing, and a freed objective left one
@@ -76,84 +78,111 @@ contains
     class(test_forcing_lifecycle), intent(inout) :: this
   end subroutine tearDown
 
-  !> Count the adjoint forcings that a set of source terms holds, and those
-  !! of them that point at a given forcing scale.
+  !> Count the adjoint forcings that a set of source terms holds, those of
+  !! them that point at a given forcing scale, and those of the latter that
+  !! also point at a given weight.
   !! @param handler The source terms.
   !! @param scale The forcing scale, or null to count none as pointing at it.
+  !! @param weight The weight.
   !! @param n_forcings Incremented by the number of forcings.
   !! @param n_owned Incremented by the number pointing at `scale`.
-  subroutine count_in(handler, scale, n_forcings, n_owned)
+  !! @param n_weighted Incremented by the number pointing at `scale` and at
+  !! `weight`.
+  subroutine count_in(handler, scale, weight, n_forcings, n_owned, n_weighted)
     class(source_term_handler_t), intent(in) :: handler
     real(kind=rp), pointer, intent(in) :: scale
+    real(kind=rp), target, intent(in) :: weight
     integer, intent(inout) :: n_forcings
     integer, intent(inout) :: n_owned
-    logical :: owned
+    integer, intent(inout) :: n_weighted
+    logical :: owned, weighted
     integer :: i
 
     if (.not. allocated(handler%source_terms)) return
 
     do i = 1, size(handler%source_terms)
        owned = .false.
+       weighted = .false.
        select type (st => handler%source_terms(i)%source_term)
        type is (adjoint_viscous_dissipation_source_term_t)
           owned = associated(st%scale, scale)
+          weighted = associated(st%weight, weight)
        type is (adjoint_brinkman_dissipation_source_term_t)
           owned = associated(st%scale, scale)
+          weighted = associated(st%K, weight)
        type is (adjoint_mixing_scalar_source_term_t)
           owned = associated(st%scale, scale)
+          weighted = associated(st%obj_scale, weight)
        class default
           cycle
        end select
        n_forcings = n_forcings + 1
        if (owned) n_owned = n_owned + 1
+       if (owned .and. weighted) n_weighted = n_weighted + 1
     end do
   end subroutine count_in
 
   !> Count the adjoint forcings held by the source terms of every adjoint
-  !! equation, and those of them that point at a given forcing scale.
+  !! equation, those of them that point at a given forcing scale, and those
+  !! of the latter that also point at a given weight.
   !! @param sim The simulation.
   !! @param scale The forcing scale, or null to count none as pointing at it.
+  !! @param weight The weight.
   !! @param n_forcings The number of forcings.
   !! @param n_owned The number pointing at `scale`.
-  subroutine count_forcings(sim, scale, n_forcings, n_owned)
+  !! @param n_weighted The number pointing at `scale` and at `weight`.
+  subroutine count_forcings(sim, scale, weight, n_forcings, n_owned, &
+       n_weighted)
     type(simulation_t), intent(in) :: sim
     real(kind=rp), pointer, intent(in) :: scale
+    real(kind=rp), target, intent(in) :: weight
     integer, intent(out) :: n_forcings
     integer, intent(out) :: n_owned
+    integer, intent(out) :: n_weighted
     integer :: i
 
     n_forcings = 0
     n_owned = 0
+    n_weighted = 0
 
     select type (f => sim%adjoint_fluid)
     type is (adjoint_fluid_pnpn_t)
-       call count_in(f%source_term, scale, n_forcings, n_owned)
+       call count_in(f%source_term, scale, weight, n_forcings, n_owned, &
+            n_weighted)
     end select
 
     do i = 1, size(sim%adjoint_scalars%adjoint_scalar_fields)
        call count_in(sim%adjoint_scalars%adjoint_scalar_fields(i)% &
-            source_term, scale, n_forcings, n_owned)
+            source_term, scale, weight, n_forcings, n_owned, n_weighted)
     end do
   end subroutine count_forcings
 
-  !> The number of live objectives that do not own exactly one forcing.
+  !> Count the live objectives that do not own exactly one forcing, and
+  !! those owning a forcing that does not point at their weight. Such a
+  !! forcing copied the weight, and misses every change to it, the value
+  !! set once the objective is built among them.
   !! @param sim The simulation.
   !! @param objectives The objectives, the freed ones deallocated.
-  !! @return The number of live objectives owning no or several forcings.
-  function n_misowned(sim, objectives) result(n)
+  !! @param n_misowned The number owning no or several forcings.
+  !! @param n_unweighted The number owning a forcing that does not point at
+  !! their weight.
+  subroutine count_wrong(sim, objectives, n_misowned, n_unweighted)
     type(simulation_t), intent(in) :: sim
-    type(objective_wrapper_t), intent(in) :: objectives(:)
-    integer :: n
-    integer :: k, n_forcings, n_owned
+    type(objective_wrapper_t), target, intent(in) :: objectives(:)
+    integer, intent(out) :: n_misowned
+    integer, intent(out) :: n_unweighted
+    integer :: k, n_forcings, n_owned, n_weighted
 
-    n = 0
+    n_misowned = 0
+    n_unweighted = 0
     do k = 1, size(objectives)
        if (.not. allocated(objectives(k)%objective)) cycle
        call count_forcings(sim, objectives(k)%objective%forcing_scale, &
-            n_forcings, n_owned)
-       if (n_owned .ne. 1) n = n + 1
+            objectives(k)%objective%weight, n_forcings, n_owned, n_weighted)
+       if (n_owned .ne. 1) n_misowned = n_misowned + 1
+       if (n_weighted .ne. n_owned) n_unweighted = n_unweighted + 1
     end do
-  end function n_misowned
+  end subroutine count_wrong
 
   !> The number of forcings held by the source terms of every adjoint
   !! equation.
@@ -163,9 +192,11 @@ contains
     type(simulation_t), intent(in) :: sim
     integer :: n
     real(kind=rp), pointer :: none => null()
-    integer :: n_owned
+    real(kind=rp), target :: no_weight
+    integer :: n_owned, n_weighted
 
-    call count_forcings(sim, none, n, n_owned)
+    no_weight = 0.0_rp
+    call count_forcings(sim, none, no_weight, n, n_owned, n_weighted)
   end function n_held
 
   !> Re-initialising an objective must not add a second adjoint forcing, and
@@ -177,12 +208,13 @@ contains
     type(json_file) :: parameters, design_parameters, objective_json
     type(simulation_t), target :: sim
     type(brinkman_design_t) :: des
-    type(objective_wrapper_t), allocatable :: objectives(:)
+    type(objective_wrapper_t), allocatable, target :: objectives(:)
     character(len=:), allocatable :: objective_type
     character(len=256) :: log_buf
     character(len=32), allocatable :: types(:)
     integer, allocatable :: n_set_up(:), n_reinit(:), n_freed(:)
     integer, allocatable :: n_live(:), n_left(:), n_wrong(:)
+    integer, allocatable :: n_unweighted(:)
     integer :: n_objectives, k, n_before
 
     parameters = json_read_file(case_file)
@@ -200,7 +232,7 @@ contains
     allocate(n_set_up(n_objectives), n_reinit(n_objectives), &
          n_freed(n_objectives))
     allocate(n_live(0:n_objectives + 1), n_left(0:n_objectives + 1), &
-         n_wrong(0:n_objectives + 1))
+         n_wrong(0:n_objectives + 1), n_unweighted(0:n_objectives + 1))
 
     ! 1. Each objective alone, counted against the forcings held before it.
     do k = 1, n_objectives
@@ -248,8 +280,9 @@ contains
        call neko_log%message(trim(log_buf))
     end do
     do k = 0, n_objectives + 1
-       write(log_buf, '(A,I0,A,I0,A,I0,A,I0)') 'Stage ', k, ': live ', &
-            n_live(k), ', forcings ', n_left(k), ', misowned ', n_wrong(k)
+       write(log_buf, '(A,I0,A,I0,A,I0,A,I0,A,I0)') 'Stage ', k, &
+            ': live ', n_live(k), ', forcings ', n_left(k), ', misowned ', &
+            n_wrong(k), ', not pointing at the weight ', n_unweighted(k)
        call neko_log%message(trim(log_buf))
     end do
 
@@ -268,12 +301,15 @@ contains
        write(log_buf, '(A,I0)') 'Together, stage ', k
        @assertEqual(n_live(k), n_left(k), trim(log_buf) // ': forcings')
        @assertEqual(0, n_wrong(k), trim(log_buf) // ': misowned')
+       @assertEqual(0, n_unweighted(k), &
+            trim(log_buf) // ': forcing not pointing at the weight')
     end do
 
   contains
 
     !> Record the live objectives, the forcings held beyond those held
-    !! before, and the live objectives not owning exactly one of them.
+    !! before, the live objectives not owning exactly one of them, and those
+    !! owning one that does not point at their weight.
     !! @param stage The stage to record.
     subroutine record_stage(stage)
       integer, intent(in) :: stage
@@ -286,7 +322,7 @@ contains
          end if
       end do
       n_left(stage) = n_held(sim) - n_before
-      n_wrong(stage) = n_misowned(sim, objectives)
+      call count_wrong(sim, objectives, n_wrong(stage), n_unweighted(stage))
     end subroutine record_stage
 
   end subroutine forcing_lifecycle
