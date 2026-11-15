@@ -210,8 +210,9 @@ high level case structure reads
         "adjoint_scalar": {}
     },
     "optimization": {
-        "domain": {},
-        "design": {},
+        "design": {
+            "domain": {}
+        },
         "solver": {},
         "objectives": [],
         "constraints": []
@@ -593,13 +594,15 @@ In this tutorial we must define \f$\Omega_\text{opt}\f$ and
 ```
 
 Assigning \f$\Omega_\text{opt}\f$ to the optimization domain is performed in
-the `optimization` section of the case file
+the `optimization.design` section of the case file
 
 ```.json
 "optimization": {
-    "domain": {
-        "type": "point_zone",
-        "zone_name": "optimization_domain"
+    "design": {
+        "domain": {
+            "type": "point_zone",
+            "zone_name": "optimization_domain"
+        }
     }
 }
 ```
