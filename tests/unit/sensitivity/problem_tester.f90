@@ -120,6 +120,8 @@ program problem_tester
   call des%convert_to_directional_derivative(sensitivities)
 
   call des%write(1)
+  ! Write the adjoint fields before the reset below zeroes them
+  call sim%write_adjoint(0)
   ! --------------------------------------
   ! Reset the simulation
   call sim%reset()

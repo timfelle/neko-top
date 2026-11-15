@@ -161,7 +161,9 @@ contains
           call problem%get_constraint_values(constraint_vec)
           perturbed_constraint = constraint_vec%x(1)
        end if
-       call sim%write(ip)
+       ! The compute solved the forward problem only, after a reset that
+       ! zeroed the adjoint fields, so only the forward fields are written
+       call sim%write_forward(ip)
        call sim%reset()
 
        fd_estimate = perturbed_constraint - constraint
