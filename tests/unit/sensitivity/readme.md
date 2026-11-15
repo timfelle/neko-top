@@ -72,11 +72,38 @@ Currently, we have added tests for the following components:
   `chi * dt` below 20/21, and `chi` reaches 100 here. The driver also
   checks that the adjoint's clock did stop short, so that the check cannot
   pass vacuously.
-- The guards against a variable timestep in an unsteady problem
-  (`unsteady_variable_timestep.case`) and against a variable timestep
-  without the `timestep` that caps its first step
-  (`variable_timestep_without_timestep.case`). They are not in `test_list`:
-  each passes only if the run stops with its error.
+- `variable_timestep_without_timestep.case` —
+  `viscous_dissipation_variable_dt.case` with no `timestep` key, steady.
+  Neko's time-step controller treats
+  `timestep` as an optional cap on a variable-dt run's first step: give it
+  and the first step is the smaller of that value and the CFL-based
+  estimate; omit it and the cap defaults to unbounded, so the first step is
+  the CFL-based estimate on its own, still clamped by `max_timestep`. With
+  `max_timestep` given and a nonzero initial velocity (both true here),
+  that is not a hazard, so the run completes rather than erroring — this
+  case used to belong to the pair below, back when Neko itself raised an
+  error for a variable timestep with no `timestep` at all; it no longer
+  does; its finite-difference check passes in its own right, at an error of
+  `4.1e-4` at the smallest perturbation against the case's `1e-2`
+  tolerance. It does not need `viscous_dissipation_variable_dt.case`'s
+  fixed first step to keep that error small: `Re = 0.1` drives the forward
+  run to a genuine steady state (the `steady` component's `tol = 1e-8`)
+  well inside `end_time = 0.1`, so there is no unconverged, design-dependent
+  tail for the missing cap to leave exposed.
+- The guard against a variable timestep in an unsteady problem
+  (`unsteady_variable_timestep.case`), and the same guard with `timestep`
+  also missing (`unsteady_variable_timestep_without_timestep.case`), to
+  confirm it fires on `case.time.variable_timestep` alone and does not
+  depend on anything else being wrong with the case first. Unlike the case
+  above, this one is not about Neko's own validation: the unsteady adjoint's
+  checkpoint-based state recovery replays the forward run's states one step
+  at a time and assumes every step had the same `dt`, so `simulation.f90`
+  rejects `case.time.variable_timestep` for any unsteady problem outright,
+  regardless of what Neko itself would allow. Both cases run through `ctest`
+  — a separate loop from `test_list`, since a passing run here is a failing
+  test — with `PASS_REGULAR_EXPRESSION` set to the exact error message, so
+  the test is specifically that error and not any crash that happens to
+  return a non-zero exit code.
 - `brinkman_dissipation_objective_t`, unsteady
   (`unsteady_brinkman_dissipation.case`) — 20 time steps at polynomial order
   3, with a PDE filter and the objective's default over-integration. It checks

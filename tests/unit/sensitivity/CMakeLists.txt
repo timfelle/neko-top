@@ -9,6 +9,7 @@ set(test_list
     "brinkman_dissipation.case"
     "viscous_dissipation_variable_dt.case"
     "viscous_dissipation_variable_dt_weighted.case"
+    "variable_timestep_without_timestep.case"
     "unsteady_brinkman_dissipation.case"
     "unsteady_brinkman_dissipation_masked.case"
     "viscous_dissipation_masked.case"
@@ -101,6 +102,51 @@ foreach(case_file ${test_list})
         PROPERTIES
             LABELS "sensitivity;unit"
             ENVIRONMENT "NEKO_LOG_FILE=neko.log"
+            TIMEOUT 300
+    )
+endforeach()
+
+# ============================================================================ #
+# Guards against case.time.variable_timestep on an unsteady problem: the
+# unsteady adjoint's checkpoint-based state recovery replays the forward
+# states one step at a time and assumes every step had the same dt (see
+# simulation.f90), which a variable timestep breaks. Two case files exercise
+# this, with and without an explicit "timestep" (the latter confirms the
+# check fires on `case.time.variable_timestep` alone, before anything about
+# a missing "timestep" could matter). Both are expected to fail the run with
+# a specific error; PASS_REGULAR_EXPRESSION makes that the test's actual
+# pass condition instead of the process exit code, so an unrelated crash is
+# not mistaken for the guard firing.
+set(variable_dt_unsteady_guards
+    "unsteady_variable_timestep.case"
+    "unsteady_variable_timestep_without_timestep.case"
+)
+foreach(case_file ${variable_dt_unsteady_guards})
+    get_filename_component(case_name ${case_file} NAME_WE)
+
+    add_custom_target(
+        ${case_name}_case_file
+        COMMENT "Copying case file ${case_file} to the test directory"
+        SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/${case_file}
+        BYPRODUCTS ${CMAKE_CURRENT_BINARY_DIR}/${case_file}
+        COMMAND
+            ${CMAKE_COMMAND} -E copy_if_different
+            ${CMAKE_CURRENT_SOURCE_DIR}/${case_file}
+            ${CMAKE_CURRENT_BINARY_DIR}/${case_file}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    )
+    add_dependencies(sensitivity_test_prepare ${case_name}_case_file)
+
+    add_test(NAME ${case_name}_sensitivity
+        COMMAND $<TARGET_FILE:problem_tester_sensitivity_bin> ${case_file}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    )
+    set_tests_properties(${case_name}_sensitivity
+        PROPERTIES
+            LABELS "sensitivity;unit"
+            ENVIRONMENT "NEKO_LOG_FILE=${case_name}.log"
+            PASS_REGULAR_EXPRESSION
+                "case\\.time\\.variable_timestep is not supported for unsteady problems"
             TIMEOUT 300
     )
 endforeach()
