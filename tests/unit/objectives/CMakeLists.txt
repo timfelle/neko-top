@@ -50,7 +50,7 @@ add_custom_target(
         ${CMAKE_CURRENT_BINARY_DIR}/prepare.sh
     COMMAND ${CMAKE_COMMAND} -E env
         LD_LIBRARY_PATH="${neko_LD_LIBRARY_PATH}" PATH="${neko_PATH}"
-        ./prepare.sh -N4 > ${CMAKE_CURRENT_BINARY_DIR}/prepare.log
+        ./prepare.sh -N6 > ${CMAKE_CURRENT_BINARY_DIR}/prepare.log
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
 )
 add_dependencies(objectives_test_prepare objectives_prepare_script)
@@ -115,11 +115,22 @@ foreach(case_file ${test_list})
         COMMAND $<TARGET_FILE:time_window_tester_bin> ${case_file}
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     )
+
+    # steady_unsteady_converged runs to t = 50 instead of a handful of steps,
+    # twice (steady path then unsteady), to reach a genuine steady state at
+    # Pe = 1000: measured at 169 s wall-clock through ctest (see readme.md).
+    # The generic 300 s below does not have enough headroom for that.
+    if(${case_name} STREQUAL "steady_unsteady_converged")
+        set(case_timeout 600)
+    else()
+        set(case_timeout 300)
+    endif()
+
     set_tests_properties(${case_name}
         PROPERTIES
             LABELS "objectives;unit"
             ENVIRONMENT "NEKO_LOG_FILE=${case_name}.log"
-            TIMEOUT 300
+            TIMEOUT ${case_timeout}
     )
 endforeach()
 
@@ -153,7 +164,7 @@ endfunction()
 # `tsteps` control, and under `simulationtime` the last scheduled time before
 # the end: 2.4, as 2.5 lies past `end_time = 2.495`.
 add_steady_log_check(steady_scalar_unconverged 2 2 0 1.50000E+00)
-add_steady_log_check(steady_unsteady_converged 2 0 2 2.00000E+01)
+add_steady_log_check(steady_unsteady_converged 2 0 2 5.00000E+01)
 add_steady_log_check(steady_scalar_unconverged_simtime 2 2 0 2.40000E+00)
 
 # ============================================================================ #

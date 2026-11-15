@@ -35,10 +35,12 @@ module objectives_user
   !> Steepness of the split.
   !!
   !! The example used 200 on a 32x8x8 mesh at polynomial order 5. These tests
-  !! run 8x4x4 at order 3, which puts thirteen points across the split
-  !! direction, so 200 would be a step function in all but name and would ring.
-  !! 20 spreads the transition over roughly a fifth of the height, which this
-  !! mesh resolves.
+  !! run 12x6x6 at order 3, which puts nineteen points across the split
+  !! direction, so 200 would still be close to a step function and would
+  !! ring. 20 spreads the transition over roughly a fifth of the height,
+  !! which this mesh resolves comfortably — more so than the 8x4x4/thirteen
+  !! points it was originally tuned for, before the mesh was raised for the
+  !! sharper Pe = 1000 front (see readme.md).
   real(kind=rp), parameter :: split_steepness = 20.0_rp
   !> Height at which the two species meet.
   real(kind=rp), parameter :: split_height = 0.5_rp

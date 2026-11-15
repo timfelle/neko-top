@@ -16,7 +16,7 @@
         },
         "fluid": {
             "scheme": "pnpn",
-            "Re": 50.0,
+            "Re": 200.0,
             "output_control": "never",
             "initial_condition": {
                 "type": "uniform",
@@ -68,7 +68,7 @@
         },
         "scalar": {
             "enabled": true,
-            "Pe": 100.0,
+            "Pe": 1000.0,
             "output_control": "never",
             "solver": {
                 "type": "cg",

@@ -3,9 +3,13 @@
 # ============================================================================ #
 # Generate the box mesh used by the objective time-window tests.
 #
-# A short channel, deliberately coarse: these tests check that an objective's
-# reported value does not depend on the time window it is accumulated over,
-# which is a property of the accumulation rather than of the resolution.
+# A short channel: these tests check that an objective's reported value does
+# not depend on the time window it is accumulated over, which is a property
+# of the accumulation rather than of the resolution. N was raised from 4 to 6
+# when the scalar physics moved to Pe = 1000 (see readme.md): less diffusion
+# sharpens the advected split interface, and 6 keeps the split-resolving
+# point count (see objectives_user.f90's split_steepness) comfortably ahead
+# of the margin the former Pe = 100 setup had.
 # ============================================================================ #
 
 function help() {
@@ -14,11 +18,11 @@ function help() {
     echo -e ""
     echo -e " Options:"
     echo -e "  -h, --help  Show this help message and exit."
-    echo -e "  -N#         Number of cells across the channel. Default 4."
+    echo -e "  -N#         Number of cells across the channel. Default 6."
     exit 0
 }
 
-N=4
+N=6
 for arg in "$@"; do
     if [ "${arg:0:2}" == "--" ]; then
         case ${arg:2} in

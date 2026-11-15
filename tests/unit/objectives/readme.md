@@ -7,8 +7,9 @@ They replace the former `examples/time_test`, which covered the same matrix but
 could only be inspected by hand.
 
 The tests are tagged as `unit`, so they are mandatory for CI to pass. Together
-they take about 85 s, the largest share in `steady_unsteady_converged`, which
-has to run a flow to a genuine steady state.
+they take about 216 s, the largest share in `steady_unsteady_converged`,
+which has to run a flow to a genuine steady state at a representative `Pe`
+(see below).
 
 ## Common files
 
@@ -72,14 +73,17 @@ defaults for pointers still null. No `makeneko` is involved.
 
 The split uses a logistic profile in `z`, as the example did, but with a
 steepness of 20 rather than 200. The example ran 32x8x8 at polynomial order 5;
-these tests run 8x4x4 at order 3, thirteen points across the split, where 200
-would be a step function in all but name and would ring.
+these tests run 12x6x6 at order 3, nineteen points across the split, where 200
+would still be close to a step function and would ring. (The mesh was raised
+from 8x4x4/thirteen points along with the regime change below, for the
+sharper advected front `Pe = 1000` produces — a reasoned margin, not a swept
+minimum.)
 
 For that profile a completely unmixed scalar gives a `scalar_mixing` objective
 of `0.1000`, and a uniformly mixed one gives `0`. The three short cases all
 report about `0.099` at the outlet — the split fully intact, since the flow
 has barely developed — and `steady_unsteady_converged`, which runs to a steady
-state, reports `0.0648`, or 65% of the split still there.
+state, reports `0.0886`, or 89% of the split still there.
 
 ## `time_window_run_length`
 
@@ -138,68 +142,78 @@ two were free to disagree about which field they evaluate, or when.
 
 ### The split has to survive to the outlet
 
-This is the property that decides `Pe`, and it is worth stating as a number
-rather than an intention. For the `k = 20` profile, a scalar that reached the
-outlet completely unmixed would give a `scalar_mixing` objective of `0.1000`;
-one mixed to uniformity would give `0`. Measured over the whole domain:
+This is a sanity check on `Pe`, not what decided it: a scalar that reached
+the outlet completely unmixed would give a `scalar_mixing` objective of
+`0.1000`; one mixed to uniformity would give `0`. Measured over the whole
+domain, on a fully converged run:
 
-| `Pe`  | objective | fraction of the split preserved |
-| ----- | --------- | ------------------------------- |
-| `1`   | `0.00869` | 9%                              |
-| `100` | `0.07725` | 77%                             |
+| `Pe`   | objective | fraction of the split preserved |
+| ------ | --------- | -------------------------------- |
+| `1`    | `0.00869` | 9%                               |
+| `100`  | `0.07725` | 77%                              |
+| `1000` | `0.08993` | 90%                              |
 
-At `Pe = 1` the split is gone by the outlet, which is the opposite of the
-first-iteration state the case is supposed to represent. `Pe = 100`, the value
-the sibling cases already use, keeps it. Restricted to the outlet fifth of the
-domain the figure is 65%, so the two streams are still clearly separated where
-it matters. (The `Pe = 1` figure was measured against the plug inflow, before
-the paraboloid was restored; the paraboloid shears a little harder, so every
-number here is slightly lower than it was.)
+`Pe = 100` already preserved most of the split by this measure, which is why
+it survived four earlier rounds of review unquestioned — it is still the
+wrong regime: at `Pe = 100` the scalar reads close to uniform everywhere away
+from the source, so the objective measures diffusive relaxation rather than
+the advection of a split interface, a distinction this whole-domain survival
+fraction does not by itself show. `Pe = 1000` is where advection dominates,
+and it is what `examples/unsteady_mixer` — the reference for this class of
+problem — runs at, so the case now matches that reference rather than being
+re-derived from this table. (The `Pe = 1` figure was measured against the
+plug inflow, before the paraboloid was restored; the paraboloid shears a
+little harder, so every number here is slightly lower than it would be
+against the plug.)
 
 This is the only case here carrying `scalar_mixing` twice, once unmasked and
 once masked to `outlet_region`. The unmasked one is what the `Pe` table above
-is measured on; the masked one is what the example actually optimized.
+is measured on; the masked one is what the example actually optimized — see
+"The scalar setup" above for its value.
 
 ### Why the rest of the case looks the way it does
 
-The boundary conditions and `Pe` are the example's. The rest is this test's,
-each number measured rather than inherited.
+`Re`, `Pe`, `timestep` and `f_max` are now shared with the other three cases
+in this directory (`Re = 200`, `Pe = 1000`, `dt = 0.005`, `f_max = 100`,
+keeping `chi * dt = 0.5` the same way they do) — see "The scalar setup" above
+for why, and the sibling cases for confirmation that `dt = 0.005` stays
+numerically stable for the scalar at `Pe = 1000` (unlike a larger step,
+which diverged it at the old `Pe = 100`). What is still this case's own
+tuning:
 
-| setting                     | value    | why                                                                                                                                                                                                                                                                                                                                                           |
-| --------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Re`                        | `5.0`    | At the sibling cases' `Re = 50` the fluid residual is still `9e-6` at `t = 3.0`, 39 s of run time short of the `1e-6` it needs. At `Re = 5` it reaches that by `t = 1.29`.                                                                                                                                                                                    |
-| `timestep`                  | `0.01`   | Not free. At `Pe = 100` there is no diffusion to damp grid-scale advection, and `dt = 0.02` — a perfectly comfortable CFL of 0.58 for the fluid — makes the *scalar* diverge, reaching a residual of `6e36`. It also saves less than it looks, since larger steps need more solver iterations: 600 steps at `0.02` cost 28 s against 33 s for 1000 at `0.01`. |
-| `f_max`                     | `50.0`   | Halved alongside the timestep, so the Brinkman penalty keeps the `chi * dt` of `0.5` the other cases run at.                                                                                                                                                                                                                                                  |
-| `end_time`                  | `19.995` | 2000 steps, ending at `t = 20.0`, half a step off a boundary. See below — this is set by how long the scalar takes to stop drifting, not by the fluid.                                                                                                                                                                                                        |
-| scalar `absolute_tolerance` | `1e-12`  | The solver's own noise, not the physics, was the floor. See below.                                                                                                                                                                                                                                                                                            |
-| `scalar_coupled`            | `false`  | So the fluid freezes as soon as *it* has converged, at `t = 1.29`, rather than waiting until `t = 10.64` for the scalar. See below.                                                                                                                                                                                                                           |
+| setting                     | value     | why                                                                                                                                                                              |
+| --------------------------- | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `end_time`                  | `49.9975` | 10000 steps, ending at `t = 50.0`, half a step off a boundary. Set by how long the scalar takes to stop drifting, not by the fluid — see below.                                  |
+| scalar `absolute_tolerance` | `1e-12`   | Carried over unchanged from the `Re = 5`/`Pe = 100` case this replaced (see below for why it was tightened there); re-checked, not re-derived, and still comfortably adequate.    |
+| `scalar_coupled`            | `false`   | So the fluid freezes as soon as *it* has converged, at `t = 7.895`, rather than waiting for the scalar. See below.                                                                |
 
 `require_steady_state` makes the driver assert that each run really did
 converge, by checking that `steady_simcomp` froze the fluid.
 
-### Why the run is 20 time units long, and why that is still cheap
+### Why the run is 50 time units long, and why that is still cheap
 
-The fluid settles almost immediately. The scalar does not: at `Pe = 100` its
-approach to steady state is advective flushing past the no-slip walls, which
-e-folds about every 0.74 time units, and it starts five decades away. Measured
-directly, as the disagreement between the two paths for the same objective
-windowed at three places in one run:
+The fluid settles quickly: it freezes (`steady`'s `tol = 1e-6`) at
+`t = 7.895`. The scalar does not — at `Pe = 1000` its approach to steady
+state is advective flushing past the no-slip walls, and in the tail it
+e-folds roughly every 2.7 time units (measured from a scratch run with the
+steady/unsteady comparison disabled: the component's own scalar residual
+drops from `8.3e-4` at `t = 6.1` to `2.4e-5` at `t = 15.6`, clean exponential
+decay — about 3.6x slower than the old `Re = 5`/`Pe = 100` case's `0.74`,
+consistent with an order of magnitude less diffusion to damp the last of the
+drift).
 
-| window     | relative difference |
-| ---------- | ------------------- |
-| `[8, 9]`   | `1.7e-5`            |
-| `[11, 12]` | `4.2e-7`            |
-| `[14, 15]` | `4.8e-9`            |
+The window sits at `[49, 50]`, confirmed directly rather than picked by
+extrapolation: the measured relative difference there between the steady
+and the unsteady path is `3.9e-11` (whole domain) and `2.3e-11` (outlet),
+both comfortably inside the `1e-9` tolerance — see "What it measures" below.
 
-Clean exponential decay, which is why the window sits at `[19, 20]`.
-
-The length is affordable because `scalar_coupled` is off. The fluid is
-genuinely converged at `t = 1.29`, `steady_simcomp` freezes it there, and the
-remaining 1871 steps skip the fluid solve entirely — around 10 ms a step
-against 33 ms unfrozen. Two runs of 2000 steps cost 35 s. Leaving
-`scalar_coupled` on would keep re-solving an already-converged fluid for
-another 9.35 time units, to `t = 10.64`, at four times the cost, for the same
-answer.
+The length is affordable for the same reason as before: `scalar_coupled` is
+off, so once `steady_simcomp` freezes the fluid at `t = 7.895` the remaining
+steps skip the fluid solve. Measured: `83.8` s of Neko's own wall-clock for
+one 10000-step pass to `t = 50`; the test as `ctest` actually runs it, both
+passes (steady path then unsteady) end to end, costs `169` s. The generic
+`TIMEOUT 300` in `CMakeLists.txt` does not have enough headroom for that, so
+this case gets its own `TIMEOUT 600` there.
 
 That is the one place this case departs from the usual advice not to trust a
 `steady` freeze for a scalar objective (the fluid can freeze while the scalar
@@ -214,26 +228,30 @@ exactly that; see `steady_scalar_unconverged` below.
 
 ### The scalar solver tolerance was a floor, not the physics
 
-Worth its own note, because it looked like a convergence problem and was not.
-With the scalar solver at the `1e-9` this case inherited, the two paths would
-not agree better than about `7.5e-10` however long the run went — lengthening
+This was worth its own note when the case ran at the old `Re = 5`/`Pe = 100`,
+because it looked like a convergence problem and was not: with the scalar
+solver at the `1e-9` the case inherited back then, the two paths would not
+agree better than about `7.5e-10` however long the run went — lengthening
 the window moved it far less than the residual had dropped over the same
-stretch. That plateau is per-step solver noise. The steady path reads one
-field; the unsteady path averages a hundred of them, so the noise partly
-averages out of one side and not the other, and no amount of extra convergence
-closes the gap. Tightening the scalar solver to `1e-12` removed it.
+stretch. That plateau was per-step solver noise, not the physics, and
+tightening the scalar solver to `1e-12` removed it.
+
+That value carried over unchanged into the `Re = 200`/`Pe = 1000` regime. It
+was not re-derived there, only re-checked: the measured agreement below
+(`3.9e-11`/`2.3e-11`) sits well inside both it and the test's own `1e-9`
+tolerance, so it is not the new regime's limiting factor either.
 
 ### What it measures
 
-The fluid converges and freezes at `t = 1.29`; the window is `[19, 20]`, 101
-samples.
+The fluid converges and freezes at `t = 7.895`; the window is `[49, 50]`,
+201 samples.
 
-| objective                   | steady               | unsteady average     | relative difference |
-| --------------------------- | -------------------- | -------------------- | ------------------- |
-| viscous dissipation         | `3.29060805369292`   | `3.29060805369292`   | `0`                 |
-| Brinkman dissipation        | `0.575829630750006`  | `0.575829630750006`  | `0`                 |
-| scalar mixing, whole domain | `0.0772496512776399` | `0.0772496512779822` | `4.4e-12`           |
-| scalar mixing, outlet       | `0.0647557680999154` | `0.0647557681012532` | `2.1e-11`           |
+| objective                   | steady                | unsteady average      | relative difference |
+| ---------------------------- | --------------------- | ---------------------- | -------------------- |
+| viscous dissipation          | `0.201731637776340`   | `0.201731637776340`   | `0`                  |
+| Brinkman dissipation         | `0.0636660987620895`  | `0.0636660987620895`  | `0`                  |
+| scalar mixing, whole domain  | `0.0899306999963366`  | `0.0899306999998038`  | `3.9e-11`            |
+| scalar mixing, outlet        | `0.0885578210023680`  | `0.0885578210044367`  | `2.3e-11`            |
 
 The two velocity-based objectives are bit-identical because
 `steady_simcomp` freezes the fluid on convergence, so the velocity field is
@@ -244,11 +262,11 @@ inside the window, these two would stop agreeing.
 The scalar is converged but never frozen (freezing it is an open `@todo` in
 `steady_simcomp`), so it keeps relaxing through the window. The two scalar
 figures are what is left of that, against a `1e-9` tolerance, the same one the
-other tests here use — 226x and 48x of margin.
+other tests here use — 26x and 43x of margin.
 
-The test costs 35 s, by far the most expensive in this directory, which is the
-price of a scalar that both reaches a steady state and still looks like the
-problem it is meant to represent.
+The test costs 169 s (two 10000-step passes), by far the most expensive in
+this directory, which is the price of a scalar that both reaches a steady
+state and still looks like the problem it is meant to represent.
 
 ## `steady_unsteady_final_step`
 

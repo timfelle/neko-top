@@ -6,8 +6,8 @@
         "output_at_end": false,
         "output_boundary": false,
         "time": {
-            "end_time": 19.995,
-            "timestep": 0.01
+            "end_time": 49.9975,
+            "timestep": 0.005
         },
         "numerics": {
             "time_order": 3,
@@ -16,7 +16,7 @@
         },
         "fluid": {
             "scheme": "pnpn",
-            "Re": 5.0,
+            "Re": 200.0,
             "output_control": "never",
             "initial_condition": {
                 "type": "uniform",
@@ -68,7 +68,7 @@
         },
         "scalar": {
             "enabled": true,
-            "Pe": 100.0,
+            "Pe": 1000.0,
             "output_control": "never",
             "solver": {
                 "type": "cg",
@@ -240,7 +240,7 @@
             "mapping": [
                 {
                     "type": "RAMP",
-                    "f_max": 50.0
+                    "f_max": 100.0
                 }
             ],
             "initial_distribution": {
@@ -267,27 +267,27 @@
         "objectives": [
             {
                 "type": "viscous_dissipation",
-                "name": "viscous [19, 20]",
+                "name": "viscous [49, 50]",
                 "weight": 1.0,
-                "start_time": 18.995
+                "start_time": 48.9975
             },
             {
                 "type": "brinkman_dissipation",
-                "name": "brinkman [19, 20]",
+                "name": "brinkman [49, 50]",
                 "weight": 1.0,
-                "start_time": 18.995
+                "start_time": 48.9975
             },
             {
                 "type": "scalar_mixing",
-                "name": "mixing [19, 20]",
+                "name": "mixing [49, 50]",
                 "weight": 1.0,
-                "start_time": 18.995
+                "start_time": 48.9975
             },
             {
                 "type": "scalar_mixing",
-                "name": "mixing outlet [19, 20]",
+                "name": "mixing outlet [49, 50]",
                 "weight": 1.0,
-                "start_time": 18.995,
+                "start_time": 48.9975,
                 "mask_name": "outlet_region"
             }
         ]
