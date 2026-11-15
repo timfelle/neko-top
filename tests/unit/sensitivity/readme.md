@@ -73,10 +73,16 @@ Currently, we have added tests for the following components:
   checks that the adjoint's clock did stop short, so that the check cannot
   pass vacuously.
 - The guards against a variable timestep in an unsteady problem
-  (`unsteady_variable_timestep.case`) and against a variable timestep
-  without the `timestep` that caps its first step
-  (`variable_timestep_without_timestep.case`). They are not in `test_list`:
-  each passes only if the run stops with its error.
+  (`unsteady_variable_timestep.case`, and
+  `unsteady_variable_timestep_without_timestep.case`, which gives no
+  `timestep`) and against a variable timestep without the `timestep` that
+  caps its first step (`variable_timestep_without_timestep.case`). They are
+  not in `test_list`: each passes only if the run stops with its error. The
+  first two are registered with `add_rejected_case`, as tests
+  `<case>_rejected`, whose regular expression matches the error. The third is
+  not registered, as the run does not stop: the Neko versions Neko-TOP builds
+  against take a variable timestep without `timestep`, and the run passes the
+  finite-difference check.
 - The guard against a scalar whose diffusivity depends on the eddy viscosity
   of an LES model, through `alphat.nut_dependency`, in an unsteady problem
   with checkpointing (`unsteady_scalar_nut_dependency.case`, a Smagorinsky

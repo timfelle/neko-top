@@ -138,6 +138,13 @@ function(add_rejected_case case_name message)
     )
 endfunction()
 
+# Unsteady problems need a fixed time step, whether or not the case gives the
+# `timestep` a variable one starts from.
+add_rejected_case(unsteady_variable_timestep
+    "case.time.variable_timestep is not supported for unsteady problems")
+add_rejected_case(unsteady_variable_timestep_without_timestep
+    "case.time.variable_timestep is not supported for unsteady problems")
+
 # The checkpoint recompute of an unsteady problem does not guarantee the LES
 # state of the forward run, which a scalar can depend on.
 add_rejected_case(unsteady_scalar_nut_dependency
