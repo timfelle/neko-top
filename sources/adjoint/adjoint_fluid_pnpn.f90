@@ -73,6 +73,7 @@ module adjoint_fluid_pnpn
   use user_intf, only: user_t
   use time_step_controller, only: time_step_controller_t
   use gs_ops, only: GS_OP_ADD
+  use gather_scatter, only: gs_t
   use neko_config, only: NEKO_BCKND_DEVICE
   use mathops, only: opadd2cm
   use scalar_bc_projector, only: scalar_bc_projector_t
@@ -777,6 +778,37 @@ contains
       ! Update material properties if necessary
       call this%update_material_properties(time)
 
+      ! Start the velocity solve from the previous predictor. The velocity
+      ! residual has no pressure term, and the previous step subtracted the
+      ! whole pressure correction from its predictor, so once the adjoint
+      ! has settled, starting from the corrected velocity makes every step
+      ! solve for that same correction again. Adding the correction back,
+      ! except at the strong velocity boundaries, moves only the start of
+      ! the increment: in exact arithmetic the predictor and its boundary
+      ! values are unchanged. The explicit terms above have already used the
+      ! corrected velocity.
+      call neko_scratch_registry%request_field(dx_p_adj, temp_indices(1), &
+           .false.)
+      call neko_scratch_registry%request_field(dy_p_adj, temp_indices(2), &
+           .false.)
+      call neko_scratch_registry%request_field(dz_p_adj, temp_indices(3), &
+           .false.)
+
+      call pressure_correction(dx_p_adj, dy_p_adj, dz_p_adj, p, c_Xh, &
+           gs_Xh, event)
+      call this%bcs_vel_projector%apply(dx_p_adj%x, dy_p_adj%x, &
+           dz_p_adj%x, n)
+
+      if (NEKO_BCKND_DEVICE .eq. 1) then
+         call device_opadd2cm(u%x_d, v%x_d, w%x_d, dx_p_adj%x_d, &
+              dy_p_adj%x_d, dz_p_adj%x_d, 1.0_rp, n, msh%gdim)
+      else
+         call opadd2cm(u%x, v%x, w%x, dx_p_adj%x, dy_p_adj%x, dz_p_adj%x, &
+              1.0_rp, n, msh%gdim)
+      end if
+
+      call neko_scratch_registry%relinquish_field(temp_indices)
+
       ! Compute intermediate velocity residual.
 
       call profiler_start_region('Adjoint_velocity_residual')
@@ -904,29 +936,8 @@ contains
       call neko_scratch_registry%request_field(dz_p_adj, temp_indices(3), &
            .false.)
 
-      ! gradient of adjoint pressure (explicit)
-      call opgrad(dx_p_adj%x, dy_p_adj%x, dz_p_adj%x, this%p_adj%x, c_Xh)
-
-      ! they gsop the residual (which has the pressure gradient)
-      call gs_Xh%op(dx_p_adj, GS_OP_ADD, event)
-      call device_event_sync(event)
-      call gs_Xh%op(dy_p_adj, GS_OP_ADD, event)
-      call device_event_sync(event)
-      call gs_Xh%op(dz_p_adj, GS_OP_ADD, event)
-      call device_event_sync(event)
-
-      ! divide by mass matrix
-      if (NEKO_BCKND_DEVICE .eq. 1) then
-         call device_col2(dx_p_adj%x_d, c_Xh%Binv_d, dx_p_adj%size())
-         call device_col2(dy_p_adj%x_d, c_Xh%Binv_d, dx_p_adj%size())
-         call device_col2(dz_p_adj%x_d, c_Xh%Binv_d, dx_p_adj%size())
-      else
-         ! NOTE. This term comes from the handling of the pressure RHS, which
-         ! DOES include the multiplicity in the op.
-         call col2(dx_p_adj%x, c_Xh%Binv, dx_p_adj%size())
-         call col2(dy_p_adj%x, c_Xh%Binv, dx_p_adj%size())
-         call col2(dz_p_adj%x, c_Xh%Binv, dx_p_adj%size())
-      end if
+      call pressure_correction(dx_p_adj, dy_p_adj, dz_p_adj, p, c_Xh, &
+           gs_Xh, event)
 
       if (NEKO_BCKND_DEVICE .eq. 1) then
          call device_opadd2cm(u%x_d, v%x_d, w%x_d, dx_p_adj%x_d, &
@@ -946,6 +957,54 @@ contains
     call profiler_end_region('Adjoint')
 
   end subroutine adjoint_fluid_pnpn_step
+
+  !> Compute the velocity correction of the adjoint pressure,
+  !! \f$ \mathbf{g} = B^{-1} \Sigma G p^\dagger \f$.
+  !! @details The step subtracts it from the velocity predictor. The next step
+  !! adds it back, except at the strong velocity boundaries, so that its
+  !! velocity solve starts from that predictor.
+  !! @param g_x x component of the correction.
+  !! @param g_y y component of the correction.
+  !! @param g_z z component of the correction.
+  !! @param p The adjoint pressure.
+  !! @param coef The SEM coefficients.
+  !! @param gs The gather-scatter operator of the velocity space.
+  !! @param event Backend event for the gather-scatter synchronisation.
+  subroutine pressure_correction(g_x, g_y, g_z, p, coef, gs, event)
+    type(field_t), intent(inout) :: g_x, g_y, g_z
+    type(field_t), intent(in) :: p
+    type(coef_t), intent(in) :: coef
+    type(gs_t), intent(inout) :: gs
+    type(c_ptr), intent(inout) :: event
+    integer :: n
+
+    n = g_x%size()
+
+    ! gradient of adjoint pressure (explicit)
+    call opgrad(g_x%x, g_y%x, g_z%x, p%x, coef)
+
+    ! they gsop the residual (which has the pressure gradient)
+    call gs%op(g_x, GS_OP_ADD, event)
+    call device_event_sync(event)
+    call gs%op(g_y, GS_OP_ADD, event)
+    call device_event_sync(event)
+    call gs%op(g_z, GS_OP_ADD, event)
+    call device_event_sync(event)
+
+    ! divide by mass matrix
+    if (NEKO_BCKND_DEVICE .eq. 1) then
+       call device_col2(g_x%x_d, coef%Binv_d, n)
+       call device_col2(g_y%x_d, coef%Binv_d, n)
+       call device_col2(g_z%x_d, coef%Binv_d, n)
+    else
+       ! NOTE. This term comes from the handling of the pressure RHS, which
+       ! DOES include the multiplicity in the op.
+       call col2(g_x%x, coef%Binv, n)
+       call col2(g_y%x, coef%Binv, n)
+       call col2(g_z%x, coef%Binv, n)
+    end if
+
+  end subroutine pressure_correction
 
   !> Sets up the boundary condition for the scheme.
   !! @param this The fluid simulation object.
