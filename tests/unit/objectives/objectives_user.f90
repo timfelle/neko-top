@@ -23,6 +23,7 @@ module objectives_user
   use field_dirichlet, only: field_dirichlet_t
   use time_state, only: time_state_t
   use user_intf, only: user_t
+  use utils, only: nonlinear_index
   use neko_config, only: NEKO_BCKND_DEVICE
   use device, only: HOST_TO_DEVICE, DEVICE_TO_HOST, device_memcpy
   implicit none
@@ -103,7 +104,7 @@ contains
     type(time_state_t), intent(in) :: time
     type(field_t), pointer :: u, v, w, s
     real(kind=rp) :: y, z
-    integer :: i, idx
+    integer :: i, idx(4)
 
     if (fields%items(1)%ptr%name .eq. 'u') then
        u => fields%get("u")
@@ -115,12 +116,12 @@ contains
        call w%copy_from(DEVICE_TO_HOST, sync = .true.)
 
        do i = 1, bc%msk(0)
-          idx = bc%msk(i)
-          y = u%dof%y%x(idx, 1, 1, 1)
-          z = u%dof%z%x(idx, 1, 1, 1)
-          u%x(idx, 1, 1, 1) = velocity_profile(y, z)
-          v%x(idx, 1, 1, 1) = 0.0_rp
-          w%x(idx, 1, 1, 1) = 0.0_rp
+          idx = nonlinear_index(bc%msk(i), u%Xh%lx, u%Xh%ly, u%Xh%lz)
+          y = u%dof%y%x(idx(1), idx(2), idx(3), idx(4))
+          z = u%dof%z%x(idx(1), idx(2), idx(3), idx(4))
+          u%x(idx(1), idx(2), idx(3), idx(4)) = velocity_profile(y, z)
+          v%x(idx(1), idx(2), idx(3), idx(4)) = 0.0_rp
+          w%x(idx(1), idx(2), idx(3), idx(4)) = 0.0_rp
        end do
 
        call u%copy_from(HOST_TO_DEVICE, sync = .false.)
@@ -133,9 +134,9 @@ contains
        call s%copy_from(DEVICE_TO_HOST, sync = .true.)
 
        do i = 1, bc%msk(0)
-          idx = bc%msk(i)
-          z = s%dof%z%x(idx, 1, 1, 1)
-          s%x(idx, 1, 1, 1) = split_profile(z)
+          idx = nonlinear_index(bc%msk(i), s%Xh%lx, s%Xh%ly, s%Xh%lz)
+          z = s%dof%z%x(idx(1), idx(2), idx(3), idx(4))
+          s%x(idx(1), idx(2), idx(3), idx(4)) = split_profile(z)
        end do
 
        call s%copy_from(HOST_TO_DEVICE, sync = .true.)

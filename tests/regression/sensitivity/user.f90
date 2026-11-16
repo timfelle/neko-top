@@ -9,6 +9,7 @@ module user
   use field_list, only : field_list_t
   use field_dirichlet, only : field_dirichlet_t
   use time_state, only : time_state_t
+  use utils, only : nonlinear_index
   use registry, only : neko_registry
   use math, only : rzero, copy, chsign
   use device_math, only: device_copy, device_cmult
@@ -51,7 +52,7 @@ contains
     type(time_state_t), intent(in) :: time
     type(field_t), pointer :: u, v, w, s
     real(kind=rp) :: x, y, z
-    integer :: i, idx
+    integer :: i, idx(4)
     logical :: is_fluid
 
     is_fluid = (fields%items(1)%ptr%name .eq. 'u')
@@ -62,15 +63,15 @@ contains
        w => fields%get("w")
 
        do i = 1, bc%msk(0)
-          idx = bc%msk(i)
-          x = u%dof%x%x(idx, 1, 1, 1)
-          y = u%dof%y%x(idx, 1, 1, 1)
-          z = u%dof%z%x(idx, 1, 1, 1)
+          idx = nonlinear_index(bc%msk(i), u%Xh%lx, u%Xh%ly, u%Xh%lz)
+          x = u%dof%x%x(idx(1), idx(2), idx(3), idx(4))
+          y = u%dof%y%x(idx(1), idx(2), idx(3), idx(4))
+          z = u%dof%z%x(idx(1), idx(2), idx(3), idx(4))
 
           ! Inflow velocity is uniform
-          u%x(idx, 1, 1, 1) = 1.0_rp
-          v%x(idx, 1, 1, 1) = 0.0_rp
-          w%x(idx, 1, 1, 1) = 0.0_rp
+          u%x(idx(1), idx(2), idx(3), idx(4)) = 1.0_rp
+          v%x(idx(1), idx(2), idx(3), idx(4)) = 0.0_rp
+          w%x(idx(1), idx(2), idx(3), idx(4)) = 0.0_rp
        end do
 
        if (NEKO_BCKND_DEVICE .eq. 1) then
@@ -83,10 +84,11 @@ contains
        s => fields%get("s")
 
        do i = 1, bc%msk(0)
-          idx = bc%msk(i)
-          y = s%dof%y%x(idx, 1, 1, 1)
+          idx = nonlinear_index(bc%msk(i), s%Xh%lx, s%Xh%ly, s%Xh%lz)
+          y = s%dof%y%x(idx(1), idx(2), idx(3), idx(4))
           ! Inflow scalar profile is a bump
-          s%x(idx, 1, 1, 1) = 0.5_rp * (1.0_rp - cos(2.0_rp*pi*y))
+          s%x(idx(1), idx(2), idx(3), idx(4)) = &
+               0.5_rp * (1.0_rp - cos(2.0_rp*pi*y))
        end do
        if (NEKO_BCKND_DEVICE .eq. 1) then
           call device_memcpy(s%x, s%x_d, s%size(), HOST_TO_DEVICE, sync=.true.)
@@ -99,17 +101,12 @@ contains
     character(len=*), intent(in) :: scheme_name
     type(field_list_t), intent(inout) :: fields
     type(field_t), pointer :: s
-    integer :: i
-    real(kind=rp) :: y
 
     if (scheme_name .eq. 'fluid') return
 
     ! Initial scalar profile is a bump
     s => fields%get("s")
-    do i = 1, s%dof%size()
-       y = s%dof%y%x(i, 1, 1, 1)
-       s%x(i, 1, 1, 1) = 0.5_rp * (1.0_rp - cos(2.0_rp*pi*y))
-    end do
+    s%x = 0.5_rp * (1.0_rp - cos(2.0_rp*pi*s%dof%y%x))
 
     if (NEKO_BCKND_DEVICE .eq. 1) then
        call device_memcpy(s%x, s%x_d, s%size(), HOST_TO_DEVICE, sync=.true.)
