@@ -101,10 +101,9 @@ contains
   !! Finally, we copy the requested time step from our cache.
   !! @details The steps forward repeat those of the forward run, without the
   !! simulation components' `compute`, the user's `compute` and the output,
-  !! see `checkpoint_recompute_step`. The fluid is frozen in them as it was in
-  !! the forward run. The case is restarted from the checkpoint file at the
-  !! time step of the file, so that the schedules in time steps of the
-  !! simulation components restart from it.
+  !! see `checkpoint_recompute_step`. The case is restarted from the
+  !! checkpoint file at the time step of the file, so that the schedules in
+  !! time steps of the simulation components restart from it.
   !! @param this The checkpoint object.
   !! @param tstep The time step to restore.
   module subroutine checkpoint_restore_linear(this, tstep)
@@ -156,9 +155,6 @@ contains
              call checkpoint_recompute_step(this%neko_case, dt_controller)
           end if
 
-          ! Freeze the fluid, or not, as after this step of the forward run
-          this%neko_case%fluid%freeze = this%fluid_frozen(k)
-
           ! Save the restored state in memory
           local_idx = modulo(k, this%n_saves_memory) + 1
           call this%save_data(local_idx)
@@ -176,12 +172,11 @@ contains
   !! of the fluid and scalar steps. What follows them there, the simulation
   !! components' `compute`, the user's `compute` and the output, ran on the
   !! step in the forward run, and must not run on it again: the output would
-  !! be written twice and statistics would count the step twice, and the
-  !! `steady` component, which compares the state with the one it last
-  !! computed on, would freeze the fluid on finding a state it has seen
-  !! already. The freezes of the forward run are set by the caller instead.
-  !! Any other result of a `compute` that the next step reads is stale in
-  !! the recompute.
+  !! be written twice and statistics would count the step twice. Any result
+  !! of a `compute` that the next step reads is stale in the recompute.
+  !! The fluid's `freeze` is left as it is: an unsteady problem sets it from
+  !! the case before the forward run. The `steady` component, which freezes
+  !! the fluid during a run, is for steady problems only.
   !!
   !! What prepares the step, the user's and the simulation components'
   !! `preprocess`, runs again. An LES model, for one, computes there the eddy
