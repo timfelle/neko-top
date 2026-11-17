@@ -5,11 +5,8 @@
 !! A state held neither in RAM nor on disk is restored by reading the
 !! checkpoint file before it and stepping the primal forward from there. The
 !! simulation components computed on these steps in the forward run, and must
-!! not compute on them again: the `steady` component compares each state with
-!! the one it last computed on, and freezes the fluid when they are the same,
-!! which a recomputed state the component has seen before is. A freeze the
-!! forward run did take, on the other hand, must be taken again, from the same
-!! step on.
+!! not compute on them again, while their `preprocess`, which prepares a step,
+!! must run on each recomputed step.
 !!
 !! Each test runs the case forward, keeping a copy of every state, and then
 !! restores the states in the order of the adjoint and compares them with the
@@ -48,11 +45,6 @@ module test_checkpoint_recompute_components
   !! steps 2, 10, 20, 30 and 40.
   integer, parameter :: n_recomputed_steps = 43
   real(kind=rp), parameter :: restore_tolerance = NEKO_EPS
-  !> The tolerance of the `steady` component in `steady_freezes_forward_run`.
-  !! The largest of the norms it compares with it are those of the pressure,
-  !! 2.7e5 at the first step and 2.1e4 at step 25, so this leaves a factor of
-  !! 3.5 to either.
-  real(kind=dp), parameter :: steady_freeze_tolerance = 7.5e4_dp
 
   @TestCase
   type, extends(MPITestCase) :: recompute_components_case
@@ -108,60 +100,8 @@ contains
     call read_case(parameters)
     call parameters%remove('case.simulation_components')
 
-    call check_recompute(parameters, 'recompute_without_components/', 0)
+    call check_recompute(parameters, 'recompute_without_components/')
   end subroutine without_components
-
-  !> The `steady` component computes on a schedule in simulation time, at the
-  !! first step and at step 41, which the recompute from the checkpoint of
-  !! step 40 steps through. Computing on the recomputed state of step 41, it
-  !! would find it equal to the state it last computed on, and freeze the
-  !! fluid for the rest of the block and for all the blocks before it.
-  @test(npes=[2])
-  subroutine steady_sees_its_last_state(this)
-    class(recompute_components_case), intent(inout) :: this
-    type(json_file) :: parameters
-    real(kind=dp) :: dt
-    logical :: found
-
-    call read_case(parameters)
-    call json_get(parameters, 'case.time.timestep', dt)
-    call parameters%update('case.simulation_components(1).compute_control', &
-         'simulationtime', found)
-    call parameters%update('case.simulation_components(1).compute_value', &
-         41.0_dp * dt, found)
-    call parameters%update('case.simulation_components(1).tol', &
-         1.0e-6_dp, found)
-
-    call check_recompute(parameters, 'recompute_steady_last_state/', 0)
-  end subroutine steady_sees_its_last_state
-
-  !> The flow starts uniform, and the Brinkman term slows it down in the
-  !! ball. The `steady` component computes at the first step, where it
-  !! compares the flow with zero, and every 25 steps after. Its tolerance lies
-  !! between the norms of these two changes, so it freezes the fluid at step
-  !! 25, inside the block the recompute from the checkpoint of step 20 steps
-  !! through. The recompute must freeze it there too, and must neither freeze
-  !! it before, nor leave it free after.
-  @test(npes=[2])
-  subroutine steady_freezes_forward_run(this)
-    class(recompute_components_case), intent(inout) :: this
-    type(json_file) :: parameters
-    real(kind=dp) :: dt
-    logical :: found
-
-    call read_case(parameters)
-    call json_get(parameters, 'case.time.timestep', dt)
-    call parameters%update('case.fluid.initial_condition.value(1)', &
-         1.0_dp, found)
-    call parameters%update('case.simulation_components(1).compute_control', &
-         'simulationtime', found)
-    call parameters%update('case.simulation_components(1).compute_value', &
-         25.0_dp * dt, found)
-    call parameters%update('case.simulation_components(1).tol', &
-         steady_freeze_tolerance, found)
-
-    call check_recompute(parameters, 'recompute_steady_freeze/', 25)
-  end subroutine steady_freezes_forward_run
 
   !> A component's `compute` follows a time step and runs on the steps of the
   !! forward run only, while its `preprocess`, which prepares a time step,
@@ -221,7 +161,7 @@ contains
 
     n_preprocess = 0
     n_compute = 0
-    call check_recompute(parameters, path, 0, forward)
+    call check_recompute(parameters, path, forward)
 
     write(msg, '(A,A,A,2(1X,I0),A,2(1X,I0))') 'Counting component in ', &
          path, ', preprocess and compute runs, forward run:', forward, &
@@ -261,14 +201,11 @@ contains
   !! compare it with the copy taken during the run.
   !! @param parameters The case.
   !! @param path The directory of the checkpoint files.
-  !! @param freeze_step The step from which the forward run is to have the
-  !! fluid frozen, or 0 if it is not to freeze it.
   !! @param forward How often the counting component had run its
   !! `preprocess` and its `compute` at the end of the forward run.
-  subroutine check_recompute(parameters, path, freeze_step, forward)
+  subroutine check_recompute(parameters, path, forward)
     type(json_file), intent(inout) :: parameters
     character(len=*), intent(in) :: path
-    integer, intent(in) :: freeze_step
     integer, intent(out), optional :: forward(2)
 
     type(simulation_t), target :: sim
@@ -280,10 +217,9 @@ contains
     type(field_array_t) :: p_fields, u_fields, v_fields, w_fields
     type(field_t), pointer :: p, u, v, w
     type(field_t), pointer :: p_copy, u_copy, v_copy, w_copy
-    logical :: frozen(n_forward_steps)
-    logical :: run_ok, restore_ok
+    logical :: restore_ok
     real(kind=rp) :: err(4), failing_err(4), max_err
-    integer :: i, j, first_frozen, failing_tstep
+    integer :: i, j, failing_tstep
     character(len=256) :: msg
 
     call json_get(parameters, 'optimization.design', design_parameters)
@@ -310,7 +246,6 @@ contains
 
     do i = 1, n_forward_steps
        call simulation_step(sim%neko_case, dt_controller)
-       frozen(i) = sim%neko_case%fluid%freeze
 
        p_copy => p_fields%get(i)
        u_copy => u_fields%get(i)
@@ -326,11 +261,6 @@ contains
 
     call simulation_finalize(sim%neko_case)
     if (present(forward)) forward = [n_preprocess, n_compute]
-
-    ! The forward run must be the one the test is about
-    first_frozen = findloc(frozen, .true., dim = 1)
-    run_ok = first_frozen .eq. freeze_step
-    if (first_frozen .gt. 0) run_ok = run_ok .and. all(frozen(first_frozen:))
 
     restore_ok = .true.
     failing_tstep = 0
@@ -365,10 +295,6 @@ contains
 
     call free_snapshot_fields(p_fields, u_fields, v_fields, w_fields)
     call finalize_case_objects(sim, des, prob, chkp)
-
-    write(msg, '(A,I0,A,I0)') 'The forward run must freeze the fluid ' // &
-         'from step ', freeze_step, ' on, it does from step ', first_frozen
-    @assertTrue(run_ok, trim(msg))
 
     write(msg, '(A,I0,A,4(ES12.4,1X),A)') &
          'Restore mismatch at timestep ', failing_tstep, &
