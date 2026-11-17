@@ -76,9 +76,7 @@ run what prepares a time step, the `preprocess` of the user and of the
 simulation components, and the fluid and the scalars. They do not run the
 `compute` of the simulation components and of the user, nor the output,
 which ran on these time steps in the forward simulation, so the recompute
-writes no output and adds nothing to statistics. A `steady` component
-freezes the fluid in the recompute at the time step it did so in the forward
-simulation.
+writes no output and adds nothing to statistics.
 
 The recompute does not guarantee the forward simulation in the following:
 
