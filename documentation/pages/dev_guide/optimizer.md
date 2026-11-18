@@ -30,7 +30,9 @@ procedures:
 - `free()` — releases the optimizer's own state, then calls
   `this%free_base()`.
 - `initialize(problem, design, simulation)` — evaluates the problem (and its
-  sensitivity) at the starting design, before the first iteration.
+  sensitivity) at the starting design, before the first iteration. It writes
+  the simulation output of the starting design only on a fresh start
+  (`get_iteration() == 0`).
 - `step(iter, problem, design, simulation)` — performs one optimization
   iteration: computes an update from the current sensitivity, applies it to
   `design` (`design%update_design`), and re-evaluates the problem at the new
@@ -75,16 +77,22 @@ shared by every optimizer:
    `this%current_iteration` to the checkpointed iteration.
 2. **Continuation restore.** If restarting (`current_iteration > 0`), the
    design's and simulation's output counters are set to
-   `current_iteration - 1`, and the \ref continuation "continuation"
-   scheduler is updated to `current_iteration`, so the problem below is
-   re-evaluated with the same continuation parameter values as the
-   checkpointed iteration. A fresh start skips this (`update(0)` would index
-   the scheduler's value array out of range).
+   `current_iteration`, so that the output continues with the next sample,
+   of iteration `current_iteration + 1`; and the
+   \ref continuation "continuation" scheduler is updated to
+   `current_iteration`, so the problem below is re-evaluated with the same
+   continuation parameter values as the checkpointed iteration. A fresh
+   start skips this (`update(0)` would index the scheduler's value array out
+   of range).
 3. **Initialize.** `simulation%set_design_iteration` (if a simulation is
    present) and then `this%initialize(problem, design, simulation)` evaluate
    the problem and its sensitivity at the starting design.
-4. **Initial log entry.** On a fresh start only, `this%write(0, problem)` logs
-   the starting point; `design%write(current_iteration)` always runs.
+4. **Initial output.** On a fresh start only, `this%write(0, problem)` logs
+   the starting point and `design%write(0)` saves the starting design. On a
+   restart, the log entry and the optimizer's output (design, sensitivity,
+   `forward_fields` and `adjoint_fields`) of the checkpointed iteration are
+   not written again: the run that produced the checkpoint already wrote
+   them.
 5. **Per-iteration loop**, while `current_iteration < max_iterations`:
    increment `current_iteration`; update the continuation scheduler and
    `simulation%set_design_iteration` for the new iteration; call

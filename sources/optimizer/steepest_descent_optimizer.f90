@@ -282,6 +282,9 @@ contains
   ! Implementation of the deferred methods
 
   !> Evaluate the problem and its sensitivity at the starting design.
+  !! @details The simulation output of the starting design is written only on
+  !! a fresh start. On a restart, it was written by the run that produced
+  !! the checkpoint.
   !! @param this The steepest descent optimizer.
   !! @param problem The problem to optimise.
   !! @param design The design.
@@ -293,11 +296,13 @@ contains
     type(simulation_t), optional, intent(inout) :: simulation
 
     call problem%compute(design, simulation)
-    if (present(simulation) .and. this%enable_output) then
+    if (present(simulation) .and. this%enable_output .and. &
+         this%get_iteration() .eq. 0) then
        call simulation%write_forward(0)
     end if
     call problem%compute_sensitivity(design, simulation)
-    if (present(simulation) .and. this%enable_output) then
+    if (present(simulation) .and. this%enable_output .and. &
+         this%get_iteration() .eq. 0) then
        call simulation%write_adjoint(0)
     end if
 

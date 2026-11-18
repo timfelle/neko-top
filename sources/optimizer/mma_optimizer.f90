@@ -223,6 +223,9 @@ contains
   ! Implementation of the deferred methods for the MMA optimizer
 
   !> Prepare the MMA optimizer before starting the optimization loop
+  !! @details The simulation output of the starting design is written only on
+  !! a fresh start. On a restart, it was written by the run that produced
+  !! the checkpoint.
   subroutine mma_optimizer_initialize(this, problem, design, simulation)
     class(mma_optimizer_t), intent(inout) :: this
     class(problem_t), intent(inout) :: problem
@@ -249,11 +252,13 @@ contains
 
     ! Evaluate the problem based on the updated design
     call problem%compute(design, simulation)
-    if (present(simulation) .and. this%enable_output) then
+    if (present(simulation) .and. this%enable_output .and. &
+         this%get_iteration() .eq. 0) then
        call simulation%write_forward(0)
     end if
     call problem%compute_sensitivity(design, simulation)
-    if (present(simulation) .and. this%enable_output) then
+    if (present(simulation) .and. this%enable_output .and. &
+         this%get_iteration() .eq. 0) then
        call simulation%write_adjoint(0)
     end if
 

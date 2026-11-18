@@ -55,9 +55,16 @@ module steepest_descent_checkpoint
   ! test targets races in parallel builds).
 
   !> Stub design that just stores its values; `update_design` has no mask
-  !! here (the checkpoint test does not need one).
+  !! here (the checkpoint test does not need one). It also records the
+  !! output-counter and write calls it receives, in call order.
   type, extends(design_t) :: stub_design_t
      type(vector_t) :: values
+     !> Number of set_output_counter calls and the last index passed
+     integer :: n_counter_calls = 0
+     integer :: counter_idx = -1
+     !> Indices of the write calls, in order
+     integer :: n_writes = 0
+     integer :: written(64) = -1
    contains
      procedure, pass(this) :: init => stub_design_init
      procedure, pass(this) :: free => stub_design_free
@@ -66,6 +73,8 @@ module steepest_descent_checkpoint
      procedure, pass(this) :: map_forward => stub_design_map_forward
      procedure, pass(this) :: map_backward => stub_design_map_backward
      procedure, pass(this) :: write => stub_design_write
+     procedure, pass(this) :: set_output_counter => &
+          stub_design_set_output_counter
   end type stub_design_t
 
   !> f = sum w (x - d - shift)^2, globally reduced, with its exact gradient.
@@ -123,6 +132,10 @@ contains
 
     call this%init_base('sd_checkpoint_stub', size(x0))
     this%values = x0
+    this%n_counter_calls = 0
+    this%counter_idx = -1
+    this%n_writes = 0
+    this%written = -1
   end subroutine stub_design_init
 
   subroutine stub_design_free(this)
@@ -168,7 +181,20 @@ contains
   subroutine stub_design_write(this, idx)
     class(stub_design_t), intent(inout) :: this
     integer, intent(in) :: idx
+
+    ! Keep counting past the end, so the length assertion still fails
+    this%n_writes = this%n_writes + 1
+    if (this%n_writes .le. size(this%written)) &
+         this%written(this%n_writes) = idx
   end subroutine stub_design_write
+
+  subroutine stub_design_set_output_counter(this, idx)
+    class(stub_design_t), intent(inout) :: this
+    integer, intent(in) :: idx
+
+    this%n_counter_calls = this%n_counter_calls + 1
+    this%counter_idx = idx
+  end subroutine stub_design_set_output_counter
 
   ! ========================================================================== !
   ! quad_obj_t
@@ -489,5 +515,143 @@ contains
     call x_b%free()
 
   end subroutine restart_matches_original_run
+
+  ! ========================================================================== !
+  ! Output of the checkpointed iteration is not written again on a restart.
+
+  !> Build the quadratic problem and the optimizer for `json_str` on the
+  !! given design, as the test above does. `shift_var` must outlive the run.
+  !! @param json_str Case JSON holding the `optimization` object.
+  !! @param n Number of local design entries.
+  !! @param w Local weights of the quadratic objective.
+  !! @param d Local offsets of the quadratic objective.
+  !! @param des The design, already initialised.
+  !! @param prob The problem to initialise.
+  !! @param opt The optimizer to allocate from the factory.
+  !! @param shift_var Continuation parameter the objective points at.
+  subroutine setup_quadratic_run(json_str, n, w, d, des, prob, opt, shift_var)
+    character(len=*), intent(in) :: json_str
+    integer, intent(in) :: n
+    real(kind=rp), intent(in) :: w(:), d(:)
+    type(stub_design_t), intent(inout) :: des
+    type(problem_t), intent(inout) :: prob
+    class(optimizer_t), allocatable, intent(inout) :: opt
+    real(kind=rp), target, intent(inout) :: shift_var
+    type(json_file) :: parameters
+    class(objective_t), allocatable :: obj
+    real(kind=rp) :: cont_initial
+
+    call parameters%initialize()
+    call parameters%load_from_string(json_str)
+
+    call nekotop_continuation%init(parameters)
+    call nekotop_continuation%json_get_or_register(parameters, &
+         'optimization.cont_param', shift_var, cont_initial)
+    shift_var = cont_initial
+
+    call prob%init(parameters, des)
+    allocate(quad_obj_t :: obj)
+    select type (q => obj)
+    type is (quad_obj_t)
+       call q%init_base('quadratic', n, 1.0_rp)
+       q%w = w
+       q%d = d
+       q%shift => shift_var
+    end select
+    call prob%add_objective(obj)
+
+    call optimizer_factory(opt, parameters, prob, des)
+    call parameters%destroy()
+  end subroutine setup_quadratic_run
+
+  !> A fresh start writes the starting design once (index 0) and then one
+  !! write per iteration. A restart from the iteration-3 checkpoint sets the
+  !! output counter to 3, never writes index 3 again, and its first write is
+  !! index 4, followed by 5 and 6. The write log of each run is checked in
+  !! full, so a missing, repeated or shifted index fails.
+  @test(npes=[2])
+  subroutine restart_does_not_rewrite_checkpointed_output(this)
+    class(test_sd_checkpoint), intent(inout) :: this
+    type(stub_design_t) :: des
+    type(problem_t) :: prob
+    class(optimizer_t), allocatable :: opt
+    real(kind=rp), allocatable :: w(:), d(:), x0(:)
+    real(kind=rp), target :: shift_var
+    integer, parameter :: k = 3
+    character(len=*), parameter :: ckpt_k = CKPT_PATH // CKPT_BASE // &
+         '_00003.h5'
+    character(len=*), parameter :: cont = '"cont_param": [0.0, 0.02, 0.04, ' &
+         // '0.06, 0.08, 0.10, 0.12, 0.14], '
+    character(len=*), parameter :: json_str = &
+         '{"optimization": {' // cont // '"solver": ' // &
+         '{"type": "steepest_descent", "enable_output": false, ' // &
+         '"max_iterations": 6, "checkpoint": {"path": "' // CKPT_PATH // &
+         '", "base": "' // CKPT_BASE // '", "interval": 3}}}}'
+    character(len=*), parameter :: json_str_restart = &
+         '{"optimization": {' // cont // '"solver": ' // &
+         '{"type": "steepest_descent", "enable_output": false, ' // &
+         '"max_iterations": 6, "restart_file": "' // ckpt_k // '"}}}'
+    integer :: n
+
+    if (pe_rank .eq. 0) then
+       n = 2
+       w = [5.0_rp, 1.0_rp]
+       d = [0.437_rp, 0.3_rp]
+       x0 = [0.9_rp, 0.5_rp]
+    else
+       n = 1
+       w = [0.8_rp]
+       d = [0.65_rp]
+       x0 = [0.1_rp]
+    end if
+
+    ! ------------------------------------------------------------------- !
+    ! Fresh start: write(0) once, then write(1) .. write(6); the output
+    ! counter is left alone.
+
+    call des%init(x0)
+    call setup_quadratic_run(json_str, n, w, d, des, prob, opt, shift_var)
+    call opt%run(prob, des)
+
+    @assertEqual(7, des%n_writes, 'fresh start: number of design writes')
+    @assertEqual([0, 1, 2, 3, 4, 5, 6], des%written(1:des%n_writes), &
+         'fresh start: write indices')
+    @assertEqual(0, des%n_counter_calls, &
+         'fresh start must not set the output counter')
+
+    call opt%free()
+    deallocate(opt)
+    call prob%free()
+    call des%free()
+    call nekotop_continuation%free()
+
+    call neko_registry%free()
+    call neko_scratch_registry%free()
+    call neko_registry%init()
+    call neko_scratch_registry%init()
+
+    ! ------------------------------------------------------------------- !
+    ! Restart from the iteration-3 checkpoint, and run on to 6.
+
+    call des%init(x0)
+    call setup_quadratic_run(json_str_restart, n, w, d, des, prob, opt, &
+         shift_var)
+    call opt%run(prob, des)
+
+    @assertEqual(1, des%n_counter_calls, &
+         'restart: set_output_counter must be called exactly once')
+    @assertEqual(k, des%counter_idx, &
+         'restart: output counter must be the checkpointed iteration')
+    @assertEqual(3, des%n_writes, 'restart: number of design writes')
+    @assertEqual([k + 1, k + 2, k + 3], des%written(1:des%n_writes), &
+         'restart: write indices must start after the checkpointed one')
+
+    call opt%free()
+    deallocate(opt)
+    call prob%free()
+    call des%free()
+    call nekotop_continuation%free()
+
+  end subroutine restart_does_not_rewrite_checkpointed_output
 
 end module steepest_descent_checkpoint

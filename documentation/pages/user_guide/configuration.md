@@ -291,7 +291,10 @@ checkpoint.
 On a restart, any \ref continuation "continuation" parameters are first
 restored to the values they held at the checkpointed iteration, before the
 problem is re-evaluated at the restored design — so the first post-restart
-gradient matches the one from the original run.
+gradient matches the one from the original run. The optimization log and the
+optimizer's design, sensitivity, forward and adjoint output of the
+checkpointed iteration are not written again, since the run that produced the
+checkpoint already wrote them: the output continues with the next iteration.
 
 Parameters related to checkpointing can be set under the `optimization.solver`
 section of the case file.

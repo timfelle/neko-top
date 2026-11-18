@@ -181,7 +181,9 @@ module optimizer
 
      !> Interface for running an optimization initialization
      !! This subroutine initializes the optimizer before starting the
-     !! optimization loop.
+     !! optimization loop. It writes the simulation output of the starting
+     !! design only on a fresh start (`get_iteration() == 0`); on a restart,
+     !! that output was written by the run that produced the checkpoint.
      subroutine optimizer_initialize(this, problem, design, simulation)
        import optimizer_t, simulation_t, problem_t, design_t
        class(optimizer_t), intent(inout) :: this
@@ -465,7 +467,10 @@ contains
   !!
   !! When restarting from a checkpoint, the continuation parameters are set to
   !! their values at the checkpointed iteration before the problem is
-  !! re-evaluated.
+  !! re-evaluated. The log entry and the field output of the checkpointed
+  !! iteration are not written again, as the run that produced the checkpoint
+  !! already wrote them; the first output after a restart is that of the
+  !! following iteration.
   !!
   !! @param this The optimizer object.
   !! @param problem The problem object.
@@ -488,11 +493,14 @@ contains
        call this%load_checkpoint(design, this%restart_file)
     end if
 
-    ! compute potential internals for for a potential restart
+    ! On a restart, the output of the checkpointed iteration was already
+    ! written by the earlier run and is not written again. Set the output
+    ! counters to the checkpointed iteration, so that the next sample, of
+    ! iteration current_iteration + 1, is appended as the step after it.
     if (this%current_iteration .ne. 0) then
-       call design%set_output_counter(this%current_iteration - 1)
+       call design%set_output_counter(this%current_iteration)
        if (present(simulation)) then
-          call simulation%set_output_counter(this%current_iteration - 1)
+          call simulation%set_output_counter(this%current_iteration)
        end if
     end if
 
@@ -510,13 +518,12 @@ contains
     end if
     call this%initialize(problem, design, simulation)
 
-    ! Log the initial state of the problem.
+    ! Log and save the initial state of the problem. On a restart, both were
+    ! written by the run that produced the checkpoint.
     if (this%current_iteration .eq. 0) then
        call this%write(this%current_iteration, problem)
+       call design%write(this%current_iteration)
     end if
-
-    ! Save the current design state.
-    call design%write(this%current_iteration)
 
     call neko_log%section('Optimization Loop')
 
