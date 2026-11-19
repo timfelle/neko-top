@@ -287,6 +287,7 @@ The implementation is encapsulated in the `mma_t` type and includes the followin
 | `mma.subsolver` | Subsolver type | `dip` |
 | `mma.scale` | Scaling factor applied to constraint functions \( f_i \) and their sensitivities. This does **not** affect the objective function \( f_0 \). It is used to improve numerical conditioning when constraint magnitudes and sensitivities differ significantly from those of the objective function. | `1.0` |
 | `mma.auto_scale` | If `true`, sensitivity and function values for the constraint \f$ f_i \f$ are scaled at each iteration with a different value such that we get \f$ f_1(x_k)= \f$`mma.scale`. This would be an adaptive scaling based on the value of the first constraint. | `false` |
+| `mma.gradient_scaling` | `none` or `adaptive`. With `adaptive`, the objective sensitivity is multiplied by \f$ 1 / \max_j |\partial f_0 / \partial x_j| \f$, and each constraint value and its sensitivities by \f$ 1 / \max_j |\partial f_i / \partial x_j| \f$, before every update and for the KKT residual; `mma.scale` and `mma.auto_scale` then have no effect. | `none` |
 
 ---
 
@@ -392,7 +393,13 @@ The topopt_in_petsc driver also normalizes the objective to
 unscaled, while constants such as the regularization \f$ 0.5 \cdot 10^{-6} \f$
 and the default \f$ c_i = 1000 \f$ are absolute. For objectives of a very
 different magnitude, the weight of the objective can be used to bring it to a
-similar scale.
+similar scale. Alternatively, `optimization.solver.mma.gradient_scaling =
+"adaptive"` normalises the objective and every constraint by its own largest
+sensitivity entry before every update, which makes the step independent of
+the magnitude of each function and of the nodal volume the sensitivities
+carry, while MMA keeps its absolute constants; see
+[Gradient scaling](@ref configuration-solver-mma-gradient-scaling) for its
+consequences.
 
 ---
 

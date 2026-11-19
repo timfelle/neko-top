@@ -83,6 +83,7 @@ settings under `optimization.solver.mma`.
 | `d`          | MMA vector coefficient \f$d_i\f$ (applied uniformly).   | Real                  | `0.0`                                              |
 | `scale`      | Constraint scaling target value.                        | Real, `> 0`           | `1.0`                                              |
 | `auto_scale` | Enable adaptive scaling of constraints each iteration.  | `.true.` or `.false.` | `.false.`                                          |
+| `gradient_scaling` | Normalise each function by its largest sensitivity. | `"none"`, `"adaptive"` | `"none"`                                    |
 
 #### MMA configuration options
 - `subsolver` selects the interior-point variant used inside MMA (`dip`/`pdip`).
@@ -107,6 +108,54 @@ settings under `optimization.solver.mma`.
 - `scale` sets the constraint scaling magnitude.
 - `auto_scale` enables adaptive scaling from the current constraint value at
   each iteration.
+- `gradient_scaling` set to `"adaptive"` normalises the objective and every
+  constraint by its own largest sensitivity entry before every MMA update, see
+  [Gradient scaling](@ref configuration-solver-mma-gradient-scaling). In that
+  mode `scale` and `auto_scale` have no effect.
+
+#### Gradient scaling {#configuration-solver-mma-gradient-scaling}
+
+MMA adds absolute regularisation constants to the gradient terms of the
+objective. When the entries of the objective sensitivity are small compared
+with these constants, the design step becomes proportional to the
+sensitivity. For the Brinkman design the sensitivity handed to MMA carries the
+mean nodal volume (domain volume divided by the number of unique GLL points),
+so with the default `"none"` the step size, and the meaning of
+`optimization.solver.tolerance`, depend on the mesh resolution and on the
+weights of the objectives: the same physical sensitivity moves the design much
+less on a finer mesh.
+
+With `"adaptive"` every function is normalised by its own largest
+sensitivity entry before every update: the objective sensitivity is multiplied
+by \f$ s_0 = 1 / \max_j |\partial f_0 / \partial x_j| \f$, and the value and
+the sensitivities of each constraint \f$ i \f$ by
+\f$ s_i = 1 / \max_j |\partial f_i / \partial x_j| \f$, the maxima being taken
+over the whole design on all ranks. Multiplying a constraint
+\f$ f_i \le 0 \f$ by a positive constant does not change the feasible set, so
+MMA is handed an equivalent problem in which the largest sensitivity entry of
+every function is 1. A function whose largest entry is zero or not finite,
+such as the dummy constraint of an unconstrained problem, keeps the factor 1.
+The KKT residual after the update is evaluated with the factors of the update.
+Consequences:
+- `scale` and `auto_scale` have no effect in this mode: their factor is
+  applied first and cancels in the normalisation,
+- the update is invariant to a rescaling of the objective or of any
+  constraint, and no longer depends on the mesh through the nodal volume,
+- `tolerance` is measured on the KKT residual of the normalised problem,
+- the step no longer shrinks just because the gradient becomes small, so a run
+  ends through `tolerance`, `stop_design_change` or `max_iterations`,
+- when no constraint is active, the step of a variable depends only on its own
+  normalised sensitivity entry, and reaches the move bound once that entry
+  exceeds about \f$ 3.5 \cdot 10^{-3} \f$ (with the default `asyinit` and
+  `move_limit`), so most variables with a favourable sign move by the full
+  bound regardless of the size of their sensitivity.
+
+The factors are recomputed from the current sensitivities in every iteration
+and are not stored in the checkpoint: they hold no state, so a restarted run
+behaves the same as an uninterrupted one. When enabled, the objective factor
+\f$ s_0 \f$ of each iteration is written to `optimization_data.csv` in the
+column `gradient scaling factor`; the column `scaling factor` is the factor of
+`scale`/`auto_scale`.
 
 ### Steepest descent with move limits {#configuration-solver-steepest-descent}
 

@@ -53,12 +53,13 @@ module mma_optimizer
   use profiler, only: profiler_start_region, profiler_end_region
   use logger, only: neko_log
   use vector_math, only: vector_cmult, vector_absval, vector_sub2, &
-       vector_glmax, vector_glsubnorm
+       vector_glmax, vector_glmin, vector_glsubnorm
   use matrix_math, only: matrix_cmult
-  use device, only: device_memcpy, DEVICE_TO_HOST
+  use device, only: device_memcpy, DEVICE_TO_HOST, HOST_TO_DEVICE
   use scratch_registry, only: neko_scratch_registry
-  use comm, only: pe_rank, NEKO_COMM
-  use mpi_f08, only: MPI_Barrier
+  use comm, only: pe_rank, NEKO_COMM, MPI_REAL_PRECISION
+  use mpi_f08, only: MPI_Barrier, MPI_Allreduce, MPI_MAX
+  use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
 
   implicit none
   private
@@ -81,6 +82,15 @@ module mma_optimizer
      logical, private :: auto_scale = .false.
      real(kind=rp) :: tolerance = 0.0_rp
 
+     !> Normalise every function by its largest sensitivity entry before
+     !! every MMA update (`mma.gradient_scaling = "adaptive"`)
+     logical, private :: adaptive_gradient_scaling = .false.
+     !> Factor applied to the objective sensitivity in the current iteration
+     real(kind=rp), private :: gradient_scaling_factor = 1.0_rp
+     !> Factors applied to each constraint value and its sensitivities in the
+     !! current iteration
+     real(kind=rp), allocatable, private :: constraint_gradient_scaling(:)
+
      ! Set to flags to remove logging for optimal performance
      logical, private :: unconstrained_problem = .false.
 
@@ -99,6 +109,11 @@ module mma_optimizer
      procedure, pass(this) :: validate => mma_optimizer_validate
      procedure, pass(this) :: write => mma_optimizer_write
      procedure, pass(this) :: free => mma_optimizer_free
+
+     procedure, pass(this), private :: compute_gradient_scaling => &
+          mma_optimizer_compute_gradient_scaling
+     procedure, pass(this), private :: apply_gradient_scaling => &
+          mma_optimizer_apply_gradient_scaling
 
      procedure, pass(this) :: save_checkpoint_components => &
           mma_optimizer_save_checkpoint_components
@@ -157,8 +172,9 @@ contains
 
     ! Local variables
     type(vector_t), pointer :: x
-    integer :: ind
-    character(len=32) :: extra_headers(3)
+    integer :: ind, n_extra
+    character(len=32) :: extra_headers(4)
+    character(len=:), allocatable :: gradient_scaling
     class(constraint_t), allocatable :: dummy_con
 
     call neko_log%section('Optimizer Initialization')
@@ -194,12 +210,41 @@ contains
     this%scaling_factor = this%scale
     this%tolerance = tolerance
 
+    ! Normalisation of every function by its largest sensitivity entry
+    gradient_scaling = 'none'
+    if (present(solver_parameters)) then
+       call json_get_or_default(solver_parameters, 'mma.gradient_scaling', &
+            gradient_scaling, 'none')
+    end if
+    select case (gradient_scaling)
+    case ('none')
+       this%adaptive_gradient_scaling = .false.
+    case ('adaptive')
+       this%adaptive_gradient_scaling = .true.
+    case default
+       call neko_error('mma_optimizer: unknown value "' // &
+            trim(gradient_scaling) // '" for ' // &
+            'optimization.solver.mma.gradient_scaling, ' // &
+            'valid values are "none" and "adaptive"')
+    end select
+    this%gradient_scaling_factor = 1.0_rp
+    if (allocated(this%constraint_gradient_scaling)) then
+       deallocate(this%constraint_gradient_scaling)
+    end if
+    allocate(this%constraint_gradient_scaling(problem%get_n_constraints()))
+    this%constraint_gradient_scaling = 1.0_rp
+
     ! Initialize the logger
     if (this%enable_output) then
        extra_headers(1) = 'KKTmax'
        extra_headers(2) = 'KKTnorm2'
        extra_headers(3) = 'scaling factor'
-       call this%init_log(problem, extra_headers = extra_headers, &
+       n_extra = 3
+       if (this%adaptive_gradient_scaling) then
+          extra_headers(4) = 'gradient scaling factor'
+          n_extra = 4
+       end if
+       call this%init_log(problem, extra_headers = extra_headers(1:n_extra), &
             include_constraints = .not. this%unconstrained_problem, &
             filename = 'optimization_data.csv')
     end if
@@ -217,6 +262,10 @@ contains
     ! Free MMA-specific data
     call this%free_base()
     call this%mma%free()
+
+    if (allocated(this%constraint_gradient_scaling)) then
+       deallocate(this%constraint_gradient_scaling)
+    end if
   end subroutine mma_optimizer_free
 
   ! -------------------------------------------------------------------------- !
@@ -271,6 +320,12 @@ contains
     class default
        call problem%get_objective_sensitivities(objective_sensitivities)
     end select
+
+    ! Normalise the problem with the sensitivities at the starting design
+    call this%compute_gradient_scaling(objective_sensitivities, &
+         constraint_sensitivities)
+    call this%apply_gradient_scaling(objective_sensitivities, &
+         constraint_value, constraint_sensitivities)
 
     ! Check the KKT conditions and check for convergence
     call this%mma%KKT(x, objective_sensitivities, &
@@ -335,6 +390,12 @@ contains
        call matrix_cmult(constraint_sensitivities, this%scaling_factor)
     end if
 
+    ! Normalise the problem with the sensitivities at the current design
+    call this%compute_gradient_scaling(objective_sensitivities, &
+         constraint_sensitivities)
+    call this%apply_gradient_scaling(objective_sensitivities, &
+         constraint_value, constraint_sensitivities)
+
     ! Update the design variable
     x_old = x
     call this%mma%update(iter, x, objective_sensitivities, &
@@ -371,6 +432,11 @@ contains
        call vector_cmult(constraint_value, this%scaling_factor)
        call matrix_cmult(constraint_sensitivities, this%scaling_factor)
     end if
+
+    ! Same for the gradient scaling: reuse the factors of the update, do not
+    ! recompute them from the new sensitivities
+    call this%apply_gradient_scaling(objective_sensitivities, &
+         constraint_value, constraint_sensitivities)
 
     ! Check the KKT conditions and check for convergence
     call this%mma%KKT(x, objective_sensitivities, &
@@ -419,6 +485,100 @@ contains
   end subroutine mma_optimizer_validate
 
   ! -------------------------------------------------------------------------- !
+  ! Normalisation of the problem by the sensitivities
+
+  !> Compute the gradient scaling factors of the current iteration
+  !! With `mma.gradient_scaling = "adaptive"` every function is normalised by
+  !! its own largest sensitivity entry: the objective factor is
+  !! \f$ s_0 = 1 / \max_j |\partial f_0 / \partial x_j| \f$ and the factor
+  !! of constraint \f$ i \f$ is
+  !! \f$ s_i = 1 / \max_j |\partial f_i / \partial x_j| \f$, the maxima being
+  !! global over all ranks. A maximum that is not finite or not larger than
+  !! `tiny` gives a factor of 1, as does the mode `"none"`.
+  !! @param this The MMA optimizer object.
+  !! @param objective_sensitivities Objective sensitivity as handed to MMA.
+  !! @param constraint_sensitivities Constraint sensitivities as handed to
+  !! MMA, one row per constraint.
+  subroutine mma_optimizer_compute_gradient_scaling(this, &
+       objective_sensitivities, constraint_sensitivities)
+    class(mma_optimizer_t), intent(inout) :: this
+    type(vector_t), intent(inout) :: objective_sensitivities
+    type(matrix_t), intent(inout) :: constraint_sensitivities
+    real(kind=rp) :: gmax
+    real(kind=rp) :: local_max(size(this%constraint_gradient_scaling))
+    real(kind=rp) :: global_max(size(this%constraint_gradient_scaling))
+    integer :: i, m, n, ierr
+
+    this%gradient_scaling_factor = 1.0_rp
+    this%constraint_gradient_scaling = 1.0_rp
+    if (.not. this%adaptive_gradient_scaling) return
+
+    gmax = max(vector_glmax(objective_sensitivities), &
+         -vector_glmin(objective_sensitivities))
+    if (ieee_is_finite(gmax) .and. gmax .gt. tiny(1.0_rp)) then
+       this%gradient_scaling_factor = 1.0_rp / gmax
+    end if
+
+    ! The row-wise maxima are taken on the host; a rank without design
+    ! variables contributes 0, the identity of the maximum of |.|
+    m = size(this%constraint_gradient_scaling)
+    n = constraint_sensitivities%get_ncols()
+    call constraint_sensitivities%copy_from(DEVICE_TO_HOST, sync = .true.)
+    do i = 1, m
+       local_max(i) = 0.0_rp
+       if (n .gt. 0) then
+          local_max(i) = maxval(abs(constraint_sensitivities%x(i, :)))
+       end if
+    end do
+    call MPI_Allreduce(local_max, global_max, m, MPI_REAL_PRECISION, &
+         MPI_MAX, NEKO_COMM, ierr)
+
+    do i = 1, m
+       if (ieee_is_finite(global_max(i)) .and. &
+            global_max(i) .gt. tiny(1.0_rp)) then
+          this%constraint_gradient_scaling(i) = 1.0_rp / global_max(i)
+       end if
+    end do
+
+  end subroutine mma_optimizer_compute_gradient_scaling
+
+  !> Multiply the objective sensitivity by its gradient scaling factor, and
+  !! each constraint value and its row of sensitivities by the factor of that
+  !! constraint
+  !! @param this The MMA optimizer object.
+  !! @param objective_sensitivities Objective sensitivity, scaled in place.
+  !! @param constraint_value Constraint values, scaled in place.
+  !! @param constraint_sensitivities Constraint sensitivities, scaled in place.
+  subroutine mma_optimizer_apply_gradient_scaling(this, &
+       objective_sensitivities, constraint_value, constraint_sensitivities)
+    class(mma_optimizer_t), intent(in) :: this
+    type(vector_t), intent(inout) :: objective_sensitivities
+    type(vector_t), intent(inout) :: constraint_value
+    type(matrix_t), intent(inout) :: constraint_sensitivities
+    integer :: i
+
+    if (.not. this%adaptive_gradient_scaling) return
+
+    if (.not. abscmp(this%gradient_scaling_factor, 1.0_rp)) then
+       call vector_cmult(objective_sensitivities, this%gradient_scaling_factor)
+    end if
+
+    ! The constraints are few, so they are scaled row by row on the host
+    call constraint_value%copy_from(DEVICE_TO_HOST, sync = .false.)
+    call constraint_sensitivities%copy_from(DEVICE_TO_HOST, sync = .true.)
+    do i = 1, size(this%constraint_gradient_scaling)
+       constraint_value%x(i) = this%constraint_gradient_scaling(i) * &
+            constraint_value%x(i)
+       constraint_sensitivities%x(i, :) = &
+            this%constraint_gradient_scaling(i) * &
+            constraint_sensitivities%x(i, :)
+    end do
+    call constraint_value%copy_from(HOST_TO_DEVICE, sync = .false.)
+    call constraint_sensitivities%copy_from(HOST_TO_DEVICE, sync = .true.)
+
+  end subroutine mma_optimizer_apply_gradient_scaling
+
+  ! -------------------------------------------------------------------------- !
   ! Logging and IO methods for the MMA optimizer
 
   !> Write the progress of the MMA optimizer to the log file
@@ -431,7 +591,8 @@ contains
     class(mma_optimizer_t), intent(inout) :: this
     integer, intent(in) :: iter
     class(problem_t), intent(inout) :: problem
-    real(kind=rp) :: extras(3)
+    real(kind=rp) :: extras(4)
+    integer :: n_extra
 
     if (.not. this%enable_output) return
     call profiler_start_region('Optimizer logging')
@@ -444,8 +605,13 @@ contains
        extras(2) = this%mma%get_residunorm()
     end if
     extras(3) = this%scaling_factor
+    n_extra = 3
+    if (this%adaptive_gradient_scaling) then
+       extras(4) = this%gradient_scaling_factor
+       n_extra = 4
+    end if
 
-    call this%write_log(iter, problem, extras)
+    call this%write_log(iter, problem, extras(1:n_extra))
 
     call profiler_end_region('Optimizer logging')
   end subroutine mma_optimizer_write
