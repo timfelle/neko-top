@@ -111,7 +111,8 @@ settings under `optimization.solver.mma`.
 - `gradient_scaling` set to `"adaptive"` normalises the objective and every
   constraint by its own largest sensitivity entry before every MMA update, see
   [Gradient scaling](@ref configuration-solver-mma-gradient-scaling). In that
-  mode `scale` and `auto_scale` have no effect.
+  mode `scale` and `auto_scale` have no effect as long as their factor is
+  finite and positive.
 
 #### Gradient scaling {#configuration-solver-mma-gradient-scaling}
 
@@ -135,20 +136,41 @@ over the whole design on all ranks. Multiplying a constraint
 MMA is handed an equivalent problem in which the largest sensitivity entry of
 every function is 1. A function whose largest entry is zero or not finite,
 such as the dummy constraint of an unconstrained problem, keeps the factor 1.
+This is not a NaN guard: a NaN entry among finite ones is ignored by the
+maximum and is not detected.
 The KKT residual after the update is evaluated with the factors of the update.
 Consequences:
-- `scale` and `auto_scale` have no effect in this mode: their factor is
-  applied first and cancels in the normalisation,
-- the update is invariant to a rescaling of the objective or of any
+- `scale` and `auto_scale` have no effect in this mode as long as their
+  factor is finite and positive: it is applied first and cancels in the
+  normalisation,
+- the update is invariant to a positive rescaling of the objective or of any
   constraint, and no longer depends on the mesh through the nodal volume,
-- `tolerance` is measured on the KKT residual of the normalised problem,
+- `tolerance` is measured on the KKT residual of the normalised problem. In
+  that problem each constraint value is divided by that constraint's largest
+  sensitivity entry, which for a volume-type constraint is of the order of one
+  over the number of design variables. The normalised constraint values, and
+  with them the KKT residual (`KKTmax`, `KKTnorm2` in `optimization_data.csv`),
+  are therefore much larger than in the unscaled problem and grow with mesh
+  refinement (measured: about 1.5 against 3.5e-3 after ten iterations of the
+  same optimisation path on a coarse mesh, and larger on a finer one). A
+  `tolerance` chosen for the unscaled problem will not trigger; in this mode
+  end a run through `stop_design_change` or `max_iterations`, or choose
+  `tolerance` from the residuals the log reports. Only the step is independent
+  of the mesh, not the residual,
 - the step no longer shrinks just because the gradient becomes small, so a run
   ends through `tolerance`, `stop_design_change` or `max_iterations`,
 - when no constraint is active, the step of a variable depends only on its own
-  normalised sensitivity entry, and reaches the move bound once that entry
-  exceeds about \f$ 3.5 \cdot 10^{-3} \f$ (with the default `asyinit` and
-  `move_limit`), so most variables with a favourable sign move by the full
-  bound regardless of the size of their sensitivity.
+  normalised sensitivity entry, and reaches the move bound once that entry is
+  of the order of \f$ 10^{-3} \f$ with the default `dip` settings (the exact
+  value depends on the subsolver, on `asyinit` and `move_limit`, and on how
+  close the variable is to its bounds), so most variables with a favourable
+  sign move by the full bound regardless of the size of their sensitivity.
+
+Where the unscaled sensitivities are already well above MMA's regularisation
+constants, both modes follow the same optimisation path (measured on a
+volume-constrained case: identical step sizes to four digits over ten
+iterations). The option matters when the entries are small, i.e. on fine
+meshes or with small objective weights.
 
 The factors are recomputed from the current sensitivities in every iteration
 and are not stored in the checkpoint: they hold no state, so a restarted run

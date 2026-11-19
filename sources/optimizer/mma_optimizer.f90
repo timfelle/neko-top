@@ -494,7 +494,9 @@ contains
   !! of constraint \f$ i \f$ is
   !! \f$ s_i = 1 / \max_j |\partial f_i / \partial x_j| \f$, the maxima being
   !! global over all ranks. A maximum that is not finite or not larger than
-  !! `tiny` gives a factor of 1, as does the mode `"none"`.
+  !! `tiny` gives a factor of 1, as does the mode `"none"`. This is not a NaN
+  !! guard: a NaN entry among finite ones is ignored by the maximum and is
+  !! not detected.
   !! @param this The MMA optimizer object.
   !! @param objective_sensitivities Objective sensitivity as handed to MMA.
   !! @param constraint_sensitivities Constraint sensitivities as handed to
@@ -502,7 +504,7 @@ contains
   subroutine mma_optimizer_compute_gradient_scaling(this, &
        objective_sensitivities, constraint_sensitivities)
     class(mma_optimizer_t), intent(inout) :: this
-    type(vector_t), intent(inout) :: objective_sensitivities
+    type(vector_t), intent(in) :: objective_sensitivities
     type(matrix_t), intent(inout) :: constraint_sensitivities
     real(kind=rp) :: gmax
     real(kind=rp) :: local_max(size(this%constraint_gradient_scaling))
