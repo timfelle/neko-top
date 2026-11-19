@@ -1,0 +1,941 @@
+! Checks of the opt-in `mma.gradient_scaling` option of the MMA optimizer,
+! exercised through the real `optimizer_factory` on a separable analytic
+! problem
+!   f(x) = c * sum_e w_e (x_e - d_e)^2,   grad_e = 2 c w_e (x_e - d_e),
+! with a no-mesh stub design that just stores its values (the shape of
+! `steepest_descent_convergence.pf`), and, for the constrained tests, one
+! linear volume-like constraint g(x) = sum_e x_e / N - v <= 0.
+!
+! With `"adaptive"` the optimizer normalises every function by its own
+! largest sensitivity entry: the objective sensitivity by 1 / max|df0dx|,
+! and each constraint value and sensitivity row by 1 / max|dfdx(i,:)|. The
+! update is therefore invariant to the scale of the objective and to the
+! scale of each constraint, and `mma.scale` / `mma.auto_scale` (applied
+! before, to the constraint) cancel. With `"none"` none of this holds: that
+! is the control of every equivariance check, so each check is seen to be
+! able to fail.
+!
+! The weights w_e span four orders of magnitude and the targets d_e lie on
+! both sides of x0 and, for some entries, outside the box [0, 1], so some
+! variables are free and some end held at a bound.
+!
+! All tests run with 2 ranks and an uneven split of the design variables
+! (5 + 3): the scaling factor is a global maximum, and `neko_init()` in
+! `setUp` performs a collective `MPI_Comm_dup` that a 1-rank subtest would
+! hang against.
+module mma_gradient_scaling
+  use mpi
+  use pfunit
+  use num_types, only: rp
+  use json_module, only: json_file
+  use vector, only: vector_t
+  use vector_math, only: vector_glsc3, vector_sub2, vector_col3, vector_cmult, &
+       vector_cfill
+  use design, only: design_t
+  use objective, only: objective_t
+  use constraint, only: constraint_t, constraint_wrapper_t
+  use problem, only: problem_t
+  use optimizer, only: optimizer_t, optimizer_factory
+  use continuation_scheduler, only: nekotop_continuation
+  use neko, only: neko_init
+  use comm, only: pe_rank, pe_size, NEKO_COMM, MPI_REAL_PRECISION
+  use device, only: DEVICE_TO_HOST, HOST_TO_DEVICE
+
+  implicit none
+
+  logical :: initialized_lock = .false.
+
+  integer, parameter :: LINE_LEN = 1024
+  integer, parameter :: MAX_HIST = 64
+
+  !> Global maximum of |df0dx| at every design the objective was asked for a
+  !! sensitivity at, in call order: entry 0 is the starting design, entry k
+  !! the design after step k. Computed by the objective itself from the
+  !! design values, independently of the optimizer.
+  real(kind=rp) :: gmax_hist(0:MAX_HIST) = 0.0_rp
+  integer :: n_sens_calls = 0
+
+  !> Global number of design variables (the constraint is a mean) and the
+  !! volume target of the constraint.
+  integer, parameter :: N_GLOBAL = 8
+  real(kind=rp), parameter :: V_TARGET = 0.4_rp
+
+  ! ========================================================================== !
+  ! Inline helpers (kept per-file: one helper module compiled into several
+  ! test targets races in parallel builds).
+
+  !> Stub design that just stores its values.
+  type, extends(design_t) :: stub_design_t
+     type(vector_t) :: values
+   contains
+     procedure, pass(this) :: init => stub_design_init
+     procedure, pass(this) :: free => stub_design_free
+     procedure, pass(this) :: get_values => stub_design_get_values
+     procedure, pass(this) :: update_design => stub_design_update_design
+     procedure, pass(this) :: map_forward => stub_design_map_forward
+     procedure, pass(this) :: map_backward => stub_design_map_backward
+     procedure, pass(this) :: write => stub_design_write
+  end type stub_design_t
+
+  !> f = c * sum w (x - d)^2, globally reduced, with its exact gradient.
+  type, extends(objective_t) :: quad_obj_t
+     type(vector_t) :: w, d
+     real(kind=rp) :: cs = 1.0_rp
+     !> Hand the sensitivity over divided by its own global max |grad|
+     logical :: normalise = .false.
+   contains
+     procedure, pass(this) :: free => quad_obj_free
+     procedure, pass(this) :: update_value => quad_obj_update_value
+     procedure, pass(this) :: update_sensitivity => quad_obj_update_sensitivity
+  end type quad_obj_t
+
+  !> g = sum(x) / N_GLOBAL - V_TARGET, a linear volume-like constraint.
+  type, extends(constraint_t) :: lin_con_t
+     !> Factor k multiplying the constraint function, value and gradient
+     real(kind=rp) :: ks = 1.0_rp
+   contains
+     procedure, pass(this) :: free => lin_con_free
+     procedure, pass(this) :: update_value => lin_con_update_value
+     procedure, pass(this) :: update_sensitivity => lin_con_update_sensitivity
+  end type lin_con_t
+
+  @TestCase
+  type, extends(MPITestCase) :: test_mma_scaling
+     !> Everything a run builds is a type component, so tearDown frees it
+     !! even if an assertion returned early (see `release`).
+     type(stub_design_t) :: des
+     type(problem_t) :: prob
+     class(optimizer_t), allocatable :: opt
+     type(vector_t) :: x1
+   contains
+     procedure :: setUp
+     procedure :: tearDown
+  end type test_mma_scaling
+
+contains
+
+  subroutine setUp(this)
+    class(test_mma_scaling), intent(inout) :: this
+
+    if (initialized_lock) return
+    initialized_lock = .true.
+    call neko_init()
+  end subroutine setUp
+
+  subroutine tearDown(this)
+    class(test_mma_scaling), intent(inout) :: this
+
+    call release(this)
+  end subroutine tearDown
+
+  !> Free the optimizer, problem and design of a run. Safe to call twice.
+  subroutine release(this)
+    class(test_mma_scaling), intent(inout) :: this
+
+    if (allocated(this%opt)) then
+       call this%opt%free()
+       deallocate(this%opt)
+    end if
+    call this%prob%free()
+    call this%des%free()
+    call this%x1%free()
+    call nekotop_continuation%free()
+  end subroutine release
+
+  ! ========================================================================== !
+  ! stub_design_t
+
+  subroutine stub_design_init(this, x0)
+    class(stub_design_t), intent(inout) :: this
+    real(kind=rp), intent(in) :: x0(:)
+
+    call this%init_base('stub_design', size(x0))
+    this%values = x0
+    call this%values%copy_from(HOST_TO_DEVICE, .true.)
+  end subroutine stub_design_init
+
+  subroutine stub_design_free(this)
+    class(stub_design_t), intent(inout) :: this
+
+    call this%values%free()
+    call this%free_base()
+  end subroutine stub_design_free
+
+  subroutine stub_design_get_values(this, values)
+    class(stub_design_t), intent(in) :: this
+    type(vector_t), intent(inout) :: values
+
+    if (this%size() .gt. 0) values%x(1:this%size()) = this%values%x(:)
+    call values%copy_from(HOST_TO_DEVICE, .true.)
+  end subroutine stub_design_get_values
+
+  subroutine stub_design_update_design(this, values)
+    class(stub_design_t), intent(inout) :: this
+    type(vector_t), intent(inout) :: values
+
+    if (this%size() .eq. 0) return
+    call values%copy_from(DEVICE_TO_HOST, .true.)
+    this%values%x(:) = values%x(1:this%size())
+    call this%values%copy_from(HOST_TO_DEVICE, .true.)
+  end subroutine stub_design_update_design
+
+  subroutine stub_design_map_forward(this)
+    class(stub_design_t), intent(inout) :: this
+  end subroutine stub_design_map_forward
+
+  subroutine stub_design_map_backward(this, sensitivity)
+    class(stub_design_t), intent(inout) :: this
+    type(vector_t), intent(in) :: sensitivity
+  end subroutine stub_design_map_backward
+
+  subroutine stub_design_write(this, idx)
+    class(stub_design_t), intent(inout) :: this
+    integer, intent(in) :: idx
+  end subroutine stub_design_write
+
+  ! ========================================================================== !
+  ! quad_obj_t
+
+  subroutine quad_obj_free(this)
+    class(quad_obj_t), intent(inout) :: this
+
+    call this%w%free()
+    call this%d%free()
+    call this%free_base()
+  end subroutine quad_obj_free
+
+  subroutine quad_obj_update_value(this, design)
+    class(quad_obj_t), intent(inout) :: this
+    class(design_t), intent(in) :: design
+    type(vector_t) :: r
+
+    call r%init(design%size())
+    call design%get_values(r)
+    call vector_sub2(r, this%d)
+    this%value = this%cs * vector_glsc3(this%w, r, r)
+    call r%free()
+  end subroutine quad_obj_update_value
+
+  !> Besides the sensitivity, records the global max |grad| computed on the
+  !! host from the design values, for the checks of the logged factor.
+  subroutine quad_obj_update_sensitivity(this, design)
+    class(quad_obj_t), intent(inout) :: this
+    class(design_t), intent(in) :: design
+    type(vector_t) :: r
+    real(kind=rp) :: local_max, global_max
+    integer :: i, ierr
+
+    call r%init(design%size())
+    call design%get_values(r)
+    call vector_sub2(r, this%d)
+    call vector_col3(this%sensitivity, this%w, r)
+    call vector_cmult(this%sensitivity, 2.0_rp)
+    call vector_cmult(this%sensitivity, this%cs)
+
+    call this%w%copy_from(DEVICE_TO_HOST, .false.)
+    call r%copy_from(DEVICE_TO_HOST, .true.)
+    local_max = 0.0_rp
+    do i = 1, design%size()
+       local_max = max(local_max, abs(2.0_rp * this%cs * this%w%x(i) * r%x(i)))
+    end do
+    call MPI_Allreduce(local_max, global_max, 1, MPI_REAL_PRECISION%mpi_val, &
+         MPI_MAX, NEKO_COMM%mpi_val, ierr)
+    if (n_sens_calls .le. MAX_HIST) gmax_hist(n_sens_calls) = global_max
+    if (this%normalise .and. global_max .gt. 0.0_rp) then
+       call vector_cmult(this%sensitivity, 1.0_rp / global_max)
+    end if
+    n_sens_calls = n_sens_calls + 1
+
+    call r%free()
+  end subroutine quad_obj_update_sensitivity
+
+  ! ========================================================================== !
+  ! lin_con_t
+
+  subroutine lin_con_free(this)
+    class(lin_con_t), intent(inout) :: this
+
+    call this%free_base()
+  end subroutine lin_con_free
+
+  subroutine lin_con_update_value(this, design)
+    class(lin_con_t), intent(inout) :: this
+    class(design_t), intent(in) :: design
+    type(vector_t) :: r
+    real(kind=rp) :: local_sum, global_sum
+    integer :: ierr
+
+    call r%init(design%size())
+    call design%get_values(r)
+    call r%copy_from(DEVICE_TO_HOST, .true.)
+    local_sum = sum(r%x(1:design%size()))
+    call MPI_Allreduce(local_sum, global_sum, 1, MPI_REAL_PRECISION%mpi_val, &
+         MPI_SUM, NEKO_COMM%mpi_val, ierr)
+    this%value = this%ks * (global_sum / real(N_GLOBAL, rp) - V_TARGET)
+    call r%free()
+  end subroutine lin_con_update_value
+
+  subroutine lin_con_update_sensitivity(this, design)
+    class(lin_con_t), intent(inout) :: this
+    class(design_t), intent(in) :: design
+
+    call vector_cfill(this%sensitivity, this%ks / real(N_GLOBAL, rp))
+  end subroutine lin_con_update_sensitivity
+
+  ! ========================================================================== !
+  ! Runner
+
+  !> Run MMA for `n_iter` iterations on the stub problem and return the local
+  !! part of the final design. No assertion in here: everything is freed
+  !! again before returning.
+  !! @param mode `'absent'` (no gradient_scaling key), `'none'`, `'adaptive'`
+  !!        or any other string, passed on as given.
+  !! @param cs Factor c multiplying the objective.
+  !! @param with_con Add the linear constraint.
+  !! @param output Write `optimization_data.csv` and drive the loop with
+  !!        `run`; otherwise `initialize` + `step` without logging, which
+  !!        also does not stop on the final constraint validation.
+  !! @param x_out The local part of the final design.
+  !! @param csv The lines of `optimization_data.csv`, broadcast to all ranks.
+  !! @param con_value The final value of the unscaled constraint g (global).
+  !! @param normalise Let the stub objective normalise its own sensitivity.
+  !! @param ck Factor k multiplying the constraint function (value and
+  !!        gradient together); default 1.
+  !! @param mma_scale Value of `mma.scale`, if given.
+  !! @param auto_scale Value of `mma.auto_scale`, if given.
+  subroutine run_mma(this, mode, cs, n_iter, with_con, output, x_out, csv, &
+       con_value, normalise, ck, mma_scale, auto_scale)
+    class(test_mma_scaling), intent(inout) :: this
+    character(len=*), intent(in) :: mode
+    real(kind=rp), intent(in) :: cs
+    integer, intent(in) :: n_iter
+    logical, intent(in) :: with_con
+    logical, intent(in) :: output
+    real(kind=rp), allocatable, intent(out) :: x_out(:)
+    character(len=LINE_LEN), allocatable, intent(out), optional :: csv(:)
+    real(kind=rp), intent(out), optional :: con_value
+    logical, intent(in), optional :: normalise
+    real(kind=rp), intent(in), optional :: ck
+    real(kind=rp), intent(in), optional :: mma_scale
+    logical, intent(in), optional :: auto_scale
+
+    type(json_file) :: parameters
+    class(objective_t), allocatable :: obj
+    class(constraint_t), allocatable :: con
+    real(kind=rp), allocatable :: w(:), d(:), x0(:)
+    character(len=2048) :: json_str
+    character(len=256) :: mma_str
+    character(len=64) :: num_str
+    integer :: n, iter, n_lines, unit, ios, ierr
+    logical :: conv
+    real(kind=rp) :: local_g, g
+    character(len=LINE_LEN) :: line
+
+    ! Global layout (8 variables): 1-5 on rank 0, 6-8 on rank 1.
+    !   w spans 1e-3 .. 50: gradient entries differ by orders of magnitude.
+    !   d  < x0 and d > x0 mixed; d = 1.4 and d = -0.3 and d = 1.2 lie outside
+    !   the box [0, 1], so those entries end up held at a bound.
+    if (pe_rank .eq. 0) then
+       n = 5
+       w = [50.0_rp, 5.0_rp, 0.5_rp, 0.05_rp, 0.001_rp]
+       d = [0.9_rp, 0.2_rp, 0.8_rp, 1.4_rp, -0.3_rp]
+       x0 = [0.5_rp, 0.45_rp, 0.5_rp, 0.5_rp, 0.5_rp]
+    else
+       n = 3
+       w = [10.0_rp, 1.0_rp, 0.1_rp]
+       d = [0.7_rp, 0.6_rp, 1.2_rp]
+       x0 = [0.5_rp, 0.55_rp, 0.5_rp]
+    end if
+
+    n_sens_calls = 0
+    gmax_hist = 0.0_rp
+
+    call this%des%init(x0)
+
+    json_str = '{"optimization": {"solver": {"type": "mma", ' // &
+         '"tolerance": 0.0, "stop_design_change": 0.0, "max_iterations": '
+    write(json_str(len_trim(json_str) + 1:), '(I0)') n_iter
+    if (output) then
+       json_str = trim(json_str) // ', "enable_output": true'
+    else
+       json_str = trim(json_str) // ', "enable_output": false'
+    end if
+    mma_str = ''
+    if (trim(mode) .ne. 'absent') then
+       mma_str = '"gradient_scaling": "' // trim(mode) // '"'
+    end if
+    if (present(mma_scale)) then
+       write(num_str, '(ES23.15E3)') mma_scale
+       if (len_trim(mma_str) .gt. 0) mma_str = trim(mma_str) // ', '
+       mma_str = trim(mma_str) // '"scale": ' // trim(adjustl(num_str))
+    end if
+    if (present(auto_scale)) then
+       if (len_trim(mma_str) .gt. 0) mma_str = trim(mma_str) // ', '
+       if (auto_scale) then
+          mma_str = trim(mma_str) // '"auto_scale": true'
+       else
+          mma_str = trim(mma_str) // '"auto_scale": false'
+       end if
+    end if
+    if (len_trim(mma_str) .gt. 0) then
+       json_str = trim(json_str) // ', "mma": {' // trim(mma_str) // '}'
+    end if
+    json_str = trim(json_str) // '}}}'
+
+    call parameters%initialize()
+    call parameters%load_from_string(trim(json_str))
+
+    call this%prob%init(parameters, this%des)
+    allocate(quad_obj_t :: obj)
+    select type (q => obj)
+    type is (quad_obj_t)
+       call q%init_base('quadratic', n, 1.0_rp)
+       q%w = w
+       q%d = d
+       q%cs = cs
+       if (present(normalise)) q%normalise = normalise
+    end select
+    call this%prob%add_objective(obj)
+
+    if (with_con) then
+       allocate(lin_con_t :: con)
+       call con%init_base('volume', n)
+       select type (c => con)
+       type is (lin_con_t)
+          if (present(ck)) c%ks = ck
+       end select
+       call this%prob%add_constraint(con)
+    end if
+
+    call optimizer_factory(this%opt, parameters, this%prob, this%des)
+    call parameters%destroy()
+
+    if (output) then
+       call this%opt%run(this%prob, this%des)
+    else
+       call this%opt%initialize(this%prob, this%des)
+       do iter = 1, n_iter
+          conv = this%opt%step(iter, this%prob, this%des)
+       end do
+    end if
+
+    call this%x1%init(n)
+    call this%des%get_values(this%x1)
+    call this%x1%copy_from(DEVICE_TO_HOST, .true.)
+    x_out = this%x1%x(1:n)
+
+    if (present(con_value)) then
+       local_g = sum(x_out)
+       call MPI_Allreduce(local_g, g, 1, MPI_REAL_PRECISION%mpi_val, &
+            MPI_SUM, NEKO_COMM%mpi_val, ierr)
+       con_value = g / real(N_GLOBAL, rp) - V_TARGET
+    end if
+
+    if (present(csv)) then
+       allocate(csv(n_iter + 2))
+       csv = ''
+       if (output .and. pe_rank .eq. 0) then
+          n_lines = 0
+          open(newunit = unit, file = 'optimization_data.csv', &
+               status = 'old', action = 'read')
+          do
+             read(unit, '(A)', iostat = ios) line
+             if (ios .ne. 0) exit
+             if (len_trim(line) .eq. 0) cycle
+             n_lines = n_lines + 1
+             if (n_lines .le. size(csv)) csv(n_lines) = line
+          end do
+          close(unit)
+       end if
+       call MPI_Bcast(csv, LINE_LEN * size(csv), MPI_CHARACTER, 0, &
+            NEKO_COMM%mpi_val, ierr)
+    end if
+
+    call release(this)
+  end subroutine run_mma
+
+  !> Max |a - b| over all ranks.
+  function global_maxdiff(a, b) result(diff)
+    real(kind=rp), intent(in) :: a(:), b(:)
+    real(kind=rp) :: diff
+    real(kind=rp) :: local
+    integer :: ierr
+
+    local = 0.0_rp
+    if (size(a) .gt. 0) local = maxval(abs(a - b))
+    call MPI_Allreduce(local, diff, 1, MPI_REAL_PRECISION%mpi_val, &
+         MPI_MAX, NEKO_COMM%mpi_val, ierr)
+  end function global_maxdiff
+
+  !> Max |a| over all ranks.
+  function global_maxabs(a) result(m)
+    real(kind=rp), intent(in) :: a(:)
+    real(kind=rp) :: m
+    real(kind=rp) :: local
+    integer :: ierr
+
+    local = 0.0_rp
+    if (size(a) .gt. 0) local = maxval(abs(a))
+    call MPI_Allreduce(local, m, 1, MPI_REAL_PRECISION%mpi_val, &
+         MPI_MAX, NEKO_COMM%mpi_val, ierr)
+  end function global_maxabs
+
+  !> 1-based number of the column of `header` called `name`, or 0.
+  function column_of(header, name) result(col)
+    character(len=*), intent(in) :: header, name
+    integer :: col, pos, i
+
+    col = 0
+    pos = index(header, ', ' // name)
+    if (pos .eq. 0) return
+    col = 1
+    do i = 1, pos
+       if (header(i:i) .eq. ',') col = col + 1
+    end do
+  end function column_of
+
+  !> The number in column `col` of the comma separated `line`.
+  function field_of(line, col) result(val)
+    character(len=*), intent(in) :: line
+    integer, intent(in) :: col
+    real(kind=rp) :: val
+    integer :: i, first, last, k
+
+    first = 1
+    k = 1
+    last = len_trim(line)
+    do i = 1, len_trim(line)
+       if (line(i:i) .eq. ',') then
+          if (k .eq. col) then
+             last = i - 1
+             exit
+          end if
+          k = k + 1
+          first = i + 1
+       end if
+    end do
+    read(line(first:last), *) val
+  end function field_of
+
+  !> Number of comma separated fields of a line.
+  function n_fields(line) result(n)
+    character(len=*), intent(in) :: line
+    integer :: n, i
+
+    n = 1
+    do i = 1, len_trim(line)
+       if (line(i:i) .eq. ',') n = n + 1
+    end do
+  end function n_fields
+
+  ! ========================================================================== !
+  ! 1. Scale equivariance without a constraint.
+
+  @test(npes=[2])
+  subroutine scale_equivariance_no_constraint(this)
+    class(test_mma_scaling), intent(inout) :: this
+    integer, parameter :: n_iter = 12
+    real(kind=rp), allocatable :: xa1(:), xa2(:), xa3(:), xn1(:), xn2(:)
+    real(kind=rp) :: diff_ad, diff_ad_big, diff_none, moved
+    character(len=256) :: msg
+
+    call run_mma(this, 'adaptive', 1.0_rp, n_iter, .false., .false., xa1)
+    call run_mma(this, 'adaptive', 1.0e-8_rp, n_iter, .false., .false., xa2)
+    call run_mma(this, 'adaptive', 1.0e6_rp, n_iter, .false., .false., xa3)
+    call run_mma(this, 'none', 1.0_rp, n_iter, .false., .false., xn1)
+    call run_mma(this, 'none', 1.0e-8_rp, n_iter, .false., .false., xn2)
+
+    diff_ad = global_maxdiff(xa1, xa2)
+    diff_ad_big = global_maxdiff(xa1, xa3)
+    diff_none = global_maxdiff(xn1, xn2)
+
+    ! Guard against the vacuous pass: the adaptive design has to have moved
+    ! well away from the starting design (all entries start at 0.45-0.55).
+    moved = global_maxabs(xa1 - 0.5_rp)
+    if (pe_rank .eq. 0) then
+       write(*, '(A,3ES12.4)') 'MMA-GS unconstrained: adaptive |x(c=1)-' // &
+            'x(c=1e-8)|, |x(c=1)-x(c=1e6)|, none |x(c=1)-x(c=1e-8)| = ', &
+            diff_ad, diff_ad_big, diff_none
+       write(*, '(A,ES12.4)') 'MMA-GS unconstrained: max|x-0.5| = ', moved
+       write(*, '(A,8F10.6)') 'MMA-GS unconstrained: rank-0 x(c=1) = ', xa1
+    end if
+
+    write(msg, '(A)') 'adaptive design must have moved from the start'
+    @assertTrue(moved .gt. 0.3_rp, msg)
+
+    ! Some entries must sit on a bound (d = 1.4 and d = -0.3 on rank 0).
+    if (pe_rank .eq. 0) then
+       write(msg, '(A)') 'variable 4 (d = 1.4) should be held at xmax'
+       @assertEqual(1.0_rp, xa1(4), 1.0e-12_rp, msg)
+       write(msg, '(A)') 'variable 5 (d = -0.3) should be held at xmin'
+       @assertEqual(0.0_rp, xa1(5), 1.0e-12_rp, msg)
+       write(msg, '(A)') 'variable 2 should stay free (interior)'
+       @assertTrue(xa1(2) .gt. 0.05_rp .and. xa1(2) .lt. 0.95_rp, msg)
+    end if
+
+    write(msg, '(A)') 'adaptive: c = 1 and c = 1e-8 must give one design'
+    @assertEqual(0.0_rp, diff_ad, 1.0e-10_rp, msg)
+    write(msg, '(A)') 'adaptive: c = 1 and c = 1e6 must give one design'
+    @assertEqual(0.0_rp, diff_ad_big, 1.0e-10_rp, msg)
+
+    ! Control: without the scaling the same pair is clearly different, so
+    ! the assertions above can fail.
+    write(msg, '(A)') 'none: c = 1 and c = 1e-8 must differ clearly (control)'
+    @assertTrue(diff_none .gt. 1.0e-2_rp, msg)
+  end subroutine scale_equivariance_no_constraint
+
+  ! ========================================================================== !
+  ! 2. Scale equivariance with an active constraint: objective scale c.
+
+  @test(npes=[2])
+  subroutine scale_equivariance_with_constraint(this)
+    class(test_mma_scaling), intent(inout) :: this
+    integer, parameter :: n_iter = 15
+    real(kind=rp), allocatable :: xa1(:), xa2(:), xa3(:), xn1(:), xn2(:), &
+         xn3(:)
+    real(kind=rp) :: ga1, ga2, ga3, gn1, gn2, gn3
+    real(kind=rp) :: d12, d13, dn12, dn13
+    character(len=256) :: msg
+
+    call run_mma(this, 'adaptive', 1.0_rp, n_iter, .true., .false., xa1, &
+         con_value = ga1)
+    call run_mma(this, 'adaptive', 1.0e-8_rp, n_iter, .true., .false., xa2, &
+         con_value = ga2)
+    call run_mma(this, 'adaptive', 1.0e6_rp, n_iter, .true., .false., xa3, &
+         con_value = ga3)
+    call run_mma(this, 'none', 1.0_rp, n_iter, .true., .false., xn1, &
+         con_value = gn1)
+    call run_mma(this, 'none', 1.0e-8_rp, n_iter, .true., .false., xn2, &
+         con_value = gn2)
+    call run_mma(this, 'none', 1.0e6_rp, n_iter, .true., .false., xn3, &
+         con_value = gn3)
+
+    d12 = global_maxdiff(xa1, xa2)
+    d13 = global_maxdiff(xa1, xa3)
+    dn12 = global_maxdiff(xn1, xn2)
+    dn13 = global_maxdiff(xn1, xn3)
+
+    if (pe_rank .eq. 0) then
+       write(*, '(A,3ES12.4)') 'MMA-GS with constraint: adaptive g(c=1,' // &
+            '1e-8,1e6) = ', ga1, ga2, ga3
+       write(*, '(A,3ES12.4)') 'MMA-GS with constraint: none     g(c=1,' // &
+            '1e-8,1e6) = ', gn1, gn2, gn3
+       write(*, '(A,2ES12.4)') 'MMA-GS with constraint: adaptive ' // &
+            '|x(1)-x(1e-8)|, |x(1)-x(1e6)| = ', d12, d13
+       write(*, '(A,2ES12.4)') 'MMA-GS with constraint: none     ' // &
+            '|x(1)-x(1e-8)|, |x(1)-x(1e6)| = ', dn12, dn13
+    end if
+
+    ! The constraint is active: the unconstrained optimum has a mean of
+    ! about 0.65, far above the target 0.4, so g approaches 0 from below.
+    write(msg, '(A)') 'adaptive c = 1 must be feasible'
+    @assertTrue(ga1 .le. 1.0e-8_rp, msg)
+    write(msg, '(A)') 'adaptive c = 1 must be active, not slack'
+    @assertTrue(ga1 .gt. -0.05_rp, msg)
+    write(msg, '(A)') 'adaptive c = 1e-8 must be feasible'
+    @assertTrue(ga2 .le. 1.0e-8_rp, msg)
+    write(msg, '(A)') 'adaptive c = 1e6 must be feasible'
+    @assertTrue(ga3 .le. 1.0e-8_rp, msg)
+
+    write(msg, '(A)') 'adaptive: c = 1 and c = 1e-8 must give one design'
+    @assertEqual(0.0_rp, d12, 1.0e-10_rp, msg)
+    write(msg, '(A)') 'adaptive: c = 1 and c = 1e6 must give one design'
+    @assertEqual(0.0_rp, d13, 1.0e-10_rp, msg)
+
+    ! Control
+    write(msg, '(A)') 'none: some objective scale must change the design'
+    @assertTrue(max(dn12, dn13) .gt. 1.0e-2_rp, msg)
+  end subroutine scale_equivariance_with_constraint
+
+  !> Control for the test above: the same constrained problem with only the
+  !! objective normalised by its own max |grad| (done by the stub objective,
+  !! the optimizer in mode "none", constraint left alone) is invariant to c,
+  !! feasible and identical for all three scales. It shows that the harness
+  !! can exhibit invariance on this problem without the optimizer doing it.
+  @test(npes=[2])
+  subroutine control_objective_only_normalisation(this)
+    class(test_mma_scaling), intent(inout) :: this
+    integer, parameter :: n_iter = 15
+    real(kind=rp), allocatable :: x1(:), x2(:), x3(:)
+    real(kind=rp) :: g1, g2, g3, d12, d13
+    character(len=256) :: msg
+
+    call run_mma(this, 'none', 1.0_rp, n_iter, .true., .false., x1, &
+         con_value = g1, normalise = .true.)
+    call run_mma(this, 'none', 1.0e-8_rp, n_iter, .true., .false., x2, &
+         con_value = g2, normalise = .true.)
+    call run_mma(this, 'none', 1.0e6_rp, n_iter, .true., .false., x3, &
+         con_value = g3, normalise = .true.)
+    d12 = global_maxdiff(x1, x2)
+    d13 = global_maxdiff(x1, x3)
+    if (pe_rank .eq. 0) then
+       write(*, '(A,3ES12.4)') 'MMA-GS control objective-only g = ', g1, g2, g3
+       write(*, '(A,2ES12.4)') 'MMA-GS control objective-only dx = ', d12, d13
+    end if
+
+    write(msg, '(A)') 'objective-only: designs for c = 1, 1e-8, 1e6 agree'
+    @assertEqual(0.0_rp, max(d12, d13), 1.0e-10_rp, msg)
+    write(msg, '(A)') 'objective-only: feasible for every scale'
+    @assertTrue(max(g1, g2, g3) .le. 1.0e-8_rp, msg)
+    write(msg, '(A)') 'objective-only: the constraint is binding, not slack'
+    @assertTrue(min(g1, g2, g3) .gt. -0.05_rp, msg)
+  end subroutine control_objective_only_normalisation
+
+  ! ========================================================================== !
+  ! 2b. Scale equivariance with respect to the constraint function itself.
+
+  @test(npes=[2])
+  subroutine constraint_scale_equivariance(this)
+    class(test_mma_scaling), intent(inout) :: this
+    integer, parameter :: n_iter = 15
+    real(kind=rp), allocatable :: xa1(:), xa2(:), xa3(:), xn1(:), xn2(:), &
+         xn3(:)
+    real(kind=rp) :: ga1, ga2, ga3, gn1, gn2, gn3
+    real(kind=rp) :: d12, d13, dn12, dn13
+    character(len=256) :: msg
+
+    call run_mma(this, 'adaptive', 1.0_rp, n_iter, .true., .false., xa1, &
+         con_value = ga1, ck = 1.0_rp)
+    call run_mma(this, 'adaptive', 1.0_rp, n_iter, .true., .false., xa2, &
+         con_value = ga2, ck = 1.0e-6_rp)
+    call run_mma(this, 'adaptive', 1.0_rp, n_iter, .true., .false., xa3, &
+         con_value = ga3, ck = 1.0e6_rp)
+    call run_mma(this, 'none', 1.0_rp, n_iter, .true., .false., xn1, &
+         con_value = gn1, ck = 1.0_rp)
+    call run_mma(this, 'none', 1.0_rp, n_iter, .true., .false., xn2, &
+         con_value = gn2, ck = 1.0e-6_rp)
+    call run_mma(this, 'none', 1.0_rp, n_iter, .true., .false., xn3, &
+         con_value = gn3, ck = 1.0e6_rp)
+
+    d12 = global_maxdiff(xa1, xa2)
+    d13 = global_maxdiff(xa1, xa3)
+    dn12 = global_maxdiff(xn1, xn2)
+    dn13 = global_maxdiff(xn1, xn3)
+
+    if (pe_rank .eq. 0) then
+       write(*, '(A,3ES12.4)') 'MMA-GS constraint scale: adaptive g(k=1,' // &
+            '1e-6,1e6) = ', ga1, ga2, ga3
+       write(*, '(A,3ES12.4)') 'MMA-GS constraint scale: none     g(k=1,' // &
+            '1e-6,1e6) = ', gn1, gn2, gn3
+       write(*, '(A,2ES12.4)') 'MMA-GS constraint scale: adaptive ' // &
+            '|x(1)-x(1e-6)|, |x(1)-x(1e6)| = ', d12, d13
+       write(*, '(A,2ES12.4)') 'MMA-GS constraint scale: none     ' // &
+            '|x(1)-x(1e-6)|, |x(1)-x(1e6)| = ', dn12, dn13
+    end if
+
+    write(msg, '(A)') 'adaptive k = 1 must be feasible'
+    @assertTrue(ga1 .le. 1.0e-8_rp, msg)
+    write(msg, '(A)') 'adaptive k = 1 must be active, not slack'
+    @assertTrue(ga1 .gt. -0.05_rp, msg)
+    write(msg, '(A)') 'adaptive k = 1e-6 must be feasible'
+    @assertTrue(ga2 .le. 1.0e-8_rp, msg)
+    write(msg, '(A)') 'adaptive k = 1e6 must be feasible'
+    @assertTrue(ga3 .le. 1.0e-8_rp, msg)
+
+    write(msg, '(A)') 'adaptive: k = 1 and k = 1e-6 must give one design'
+    @assertEqual(0.0_rp, d12, 1.0e-10_rp, msg)
+    write(msg, '(A)') 'adaptive: k = 1 and k = 1e6 must give one design'
+    @assertEqual(0.0_rp, d13, 1.0e-10_rp, msg)
+
+    ! Control: without the normalisation the constraint scale matters
+    write(msg, '(A)') 'none: some constraint scale must change the design'
+    @assertTrue(max(dn12, dn13) .gt. 1.0e-2_rp, msg)
+  end subroutine constraint_scale_equivariance
+
+  ! ========================================================================== !
+  ! 2c. `mma.scale` and `mma.auto_scale` cancel in adaptive mode.
+
+  @test(npes=[2])
+  subroutine scale_options_have_no_effect_in_adaptive(this)
+    class(test_mma_scaling), intent(inout) :: this
+    integer, parameter :: n_iter = 15
+    real(kind=rp), allocatable :: xa1(:), xa2(:), xa3(:), xn1(:), xn2(:), &
+         xn3(:)
+    real(kind=rp) :: ga1, ga2, ga3, gn1, gn2, gn3
+    real(kind=rp) :: d12, d13, dn12, dn13
+    character(len=256) :: msg
+
+    call run_mma(this, 'adaptive', 1.0_rp, n_iter, .true., .false., xa1, &
+         con_value = ga1, mma_scale = 1.0_rp)
+    call run_mma(this, 'adaptive', 1.0_rp, n_iter, .true., .false., xa2, &
+         con_value = ga2, mma_scale = 1.0e3_rp)
+    call run_mma(this, 'adaptive', 1.0_rp, n_iter, .true., .false., xa3, &
+         con_value = ga3, mma_scale = 1.0e-2_rp, auto_scale = .true.)
+    call run_mma(this, 'none', 1.0_rp, n_iter, .true., .false., xn1, &
+         con_value = gn1, mma_scale = 1.0_rp)
+    call run_mma(this, 'none', 1.0_rp, n_iter, .true., .false., xn2, &
+         con_value = gn2, mma_scale = 1.0e3_rp)
+    call run_mma(this, 'none', 1.0_rp, n_iter, .true., .false., xn3, &
+         con_value = gn3, mma_scale = 1.0e-2_rp, auto_scale = .true.)
+
+    d12 = global_maxdiff(xa1, xa2)
+    d13 = global_maxdiff(xa1, xa3)
+    dn12 = global_maxdiff(xn1, xn2)
+    dn13 = global_maxdiff(xn1, xn3)
+
+    if (pe_rank .eq. 0) then
+       write(*, '(A,3ES12.4)') 'MMA-GS scale option: adaptive g(scale=1,' // &
+            '1e3,auto) = ', ga1, ga2, ga3
+       write(*, '(A,3ES12.4)') 'MMA-GS scale option: none     g(scale=1,' // &
+            '1e3,auto) = ', gn1, gn2, gn3
+       write(*, '(A,2ES12.4)') 'MMA-GS scale option: adaptive |x(1)-x(' // &
+            '1e3)|, |x(1)-x(auto)| = ', d12, d13
+       write(*, '(A,2ES12.4)') 'MMA-GS scale option: none     |x(1)-x(' // &
+            '1e3)|, |x(1)-x(auto)| = ', dn12, dn13
+    end if
+
+    write(msg, '(A)') 'adaptive: scale 1 must be active, not slack'
+    @assertTrue(ga1 .gt. -0.05_rp .and. ga1 .le. 1.0e-8_rp, msg)
+    write(msg, '(A)') 'adaptive: scale = 1 and scale = 1e3 must agree'
+    @assertEqual(0.0_rp, d12, 1.0e-10_rp, msg)
+    write(msg, '(A)') 'adaptive: scale = 1 and auto_scale must agree'
+    @assertEqual(0.0_rp, d13, 1.0e-10_rp, msg)
+
+    ! Control: in mode "none" the same options do alter the design
+    write(msg, '(A)') 'none: scale = 1e3 must change the design (control)'
+    @assertTrue(dn12 .gt. 1.0e-3_rp, msg)
+    write(msg, '(A)') 'none: auto_scale must change the design (control)'
+    @assertTrue(dn13 .gt. 1.0e-3_rp, msg)
+  end subroutine scale_options_have_no_effect_in_adaptive
+
+  ! ========================================================================== !
+  ! 3. The default is "none", bit for bit, and the CSV columns.
+
+  @test(npes=[2])
+  subroutine default_is_none_and_csv_columns(this)
+    class(test_mma_scaling), intent(inout) :: this
+    integer, parameter :: n_iter = 5
+    character(len=*), parameter :: tail_none = &
+         ', KKTmax, KKTnorm2, scaling factor, max_design_change, ' // &
+         'norm2_design_change'
+    character(len=*), parameter :: tail_ad = &
+         ', KKTmax, KKTnorm2, scaling factor, gradient scaling factor, ' // &
+         'max_design_change, norm2_design_change'
+    real(kind=rp), allocatable :: x_abs(:), x_none(:), x_ad(:)
+    character(len=LINE_LEN), allocatable :: csv_abs(:), csv_none(:), csv_ad(:)
+    real(kind=rp) :: hist_ad(0:MAX_HIST)
+    real(kind=rp) :: factor, expected, max_rel
+    character(len=256) :: msg
+    integer :: col, k, h, nh, nc, i
+    logical :: same_csv, hdr_none_ok, hdr_ad_ok, no_col_none, rows_ok
+
+    call run_mma(this, 'absent', 1.0e-3_rp, n_iter, .false., .true., x_abs, &
+         csv_abs)
+    call run_mma(this, 'none', 1.0e-3_rp, n_iter, .false., .true., x_none, &
+         csv_none)
+    call run_mma(this, 'adaptive', 1.0e-3_rp, n_iter, .false., .true., x_ad, &
+         csv_ad)
+    ! The history of the last run: the objective's own max|grad| per design.
+    hist_ad = gmax_hist
+    nh = n_sens_calls
+
+    write(msg, '(A)') 'key absent and "none" must give bitwise equal designs'
+    @assertEqual(0.0_rp, global_maxdiff(x_abs, x_none), 0.0_rp, msg)
+
+    same_csv = .true.
+    do i = 1, size(csv_abs)
+       if (csv_abs(i) .ne. csv_none(i)) same_csv = .false.
+    end do
+    write(msg, '(A)') 'key absent and "none" must write the same CSV'
+    @assertTrue(same_csv, msg)
+
+    ! Header: exactly the three extra columns of today with "none" ...
+    nc = len_trim(csv_none(1))
+    hdr_none_ok = nc .gt. len(tail_none)
+    if (hdr_none_ok) hdr_none_ok = &
+         csv_none(1)(nc - len(tail_none) + 1:nc) .eq. tail_none
+    no_col_none = index(csv_none(1), 'gradient scaling factor') .eq. 0
+    write(msg, '(A)') 'default header must end with the three known extras'
+    @assertTrue(hdr_none_ok, msg)
+    write(msg, '(A)') 'default header must not name a gradient scaling column'
+    @assertTrue(no_col_none, msg)
+
+    ! ... and the fourth with "adaptive".
+    nc = len_trim(csv_ad(1))
+    hdr_ad_ok = nc .gt. len(tail_ad)
+    if (hdr_ad_ok) hdr_ad_ok = csv_ad(1)(nc - len(tail_ad) + 1:nc) .eq. tail_ad
+    write(msg, '(A)') 'adaptive header must carry the fourth extra column'
+    @assertTrue(hdr_ad_ok, msg)
+    write(msg, '(A)') 'adaptive header must have one more column than none'
+    @assertEqual(n_fields(csv_none(1)) + 1, n_fields(csv_ad(1)), msg)
+
+    rows_ok = .true.
+    do i = 2, n_iter + 2
+       if (n_fields(csv_none(i)) .ne. n_fields(csv_none(1))) rows_ok = .false.
+       if (n_fields(csv_ad(i)) .ne. n_fields(csv_ad(1))) rows_ok = .false.
+    end do
+    write(msg, '(A)') 'every CSV row must have as many fields as its header'
+    @assertTrue(rows_ok, msg)
+
+    ! The logged factor equals 1 / max|df0dx| of the design the update of
+    ! that iteration started from: row 0 (initialize) and row 1 both from the
+    ! starting design (history entry 0), row k >= 1 from the design after
+    ! step k-1 (history entry k-1).
+    write(msg, '(A)') 'the objective must have been asked n_iter+1 times'
+    @assertEqual(n_iter + 1, nh, msg)
+    col = column_of(csv_ad(1), 'gradient scaling factor')
+    write(msg, '(A)') 'the gradient scaling column must exist'
+    @assertTrue(col .gt. 0, msg)
+
+    max_rel = 0.0_rp
+    do k = 0, n_iter
+       h = max(k - 1, 0)
+       factor = field_of(csv_ad(k + 2), col)
+       expected = 1.0_rp / hist_ad(h)
+       max_rel = max(max_rel, abs(factor - expected) / expected)
+       if (pe_rank .eq. 0) then
+          write(*, '(A,I2,2ES16.8)') 'MMA-GS CSV iter, logged, expected = ', &
+               k, factor, expected
+       end if
+    end do
+    ! The CSV carries 7-8 significant digits.
+    write(msg, '(A)') 'logged factor must equal 1/max|df0dx| at every row'
+    @assertEqual(0.0_rp, max_rel, 1.0e-6_rp, msg)
+
+    ! The factor must actually vary (guard against a constant column) and
+    ! be the right order: with c = 1e-3 the gradient is O(1e-2), so s > 1.
+    write(msg, '(A)') 'the factor must change between iteration 0 and 5'
+    @assertTrue(abs(field_of(csv_ad(2), col) - &
+         field_of(csv_ad(n_iter + 2), col)) .gt. 1.0e-3_rp * &
+         field_of(csv_ad(2), col), msg)
+  end subroutine default_is_none_and_csv_columns
+
+  ! ========================================================================== !
+  ! 4. Degenerate gradient: identically zero sensitivity.
+
+  @test(npes=[2])
+  subroutine zero_gradient_gives_unit_factor(this)
+    class(test_mma_scaling), intent(inout) :: this
+    integer, parameter :: n_iter = 4
+    real(kind=rp), allocatable :: x_ad(:)
+    character(len=LINE_LEN), allocatable :: csv(:)
+    real(kind=rp) :: factor, max_dev, hist_max
+    character(len=256) :: msg
+    integer :: col, k
+    logical :: finite
+
+    call run_mma(this, 'adaptive', 0.0_rp, n_iter, .false., .true., x_ad, csv)
+    hist_max = maxval(gmax_hist(0:n_sens_calls - 1))
+
+    write(msg, '(A)') 'the sensitivity must be identically zero (guard)'
+    @assertEqual(0.0_rp, hist_max, 0.0_rp, msg)
+
+    finite = all(x_ad .eq. x_ad) .and. all(abs(x_ad) .lt. huge(1.0_rp))
+    write(msg, '(A)') 'the design must be finite (no NaN/Inf)'
+    @assertTrue(finite, msg)
+
+    col = column_of(csv(1), 'gradient scaling factor')
+    write(msg, '(A)') 'the gradient scaling column must exist'
+    @assertTrue(col .gt. 0, msg)
+    max_dev = 0.0_rp
+    do k = 0, n_iter
+       factor = field_of(csv(k + 2), col)
+       max_dev = max(max_dev, abs(factor - 1.0_rp))
+    end do
+    write(msg, '(A)') 'the factor of a zero gradient must be exactly 1'
+    @assertEqual(0.0_rp, max_dev, 0.0_rp, msg)
+    write(msg, '(A)') 'all CSV rows must have been written'
+    @assertTrue(len_trim(csv(n_iter + 2)) .gt. 0, msg)
+  end subroutine zero_gradient_gives_unit_factor
+
+end module mma_gradient_scaling

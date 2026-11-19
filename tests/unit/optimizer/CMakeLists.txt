@@ -56,6 +56,34 @@ if (CMAKE_Fortran_COMPILER_ID STREQUAL "GNU")
 endif()
 
 # ============================================================================ #
+# mma_gradient_scaling: the opt-in `mma.gradient_scaling` option of the MMA
+# optimizer, via the real optimizer_factory on an analytic problem with and
+# without a linear constraint: equivariance to the objective and to the
+# constraint scale (with the "none" mode as the control), `mma.scale` having
+# no effect, default-is-"none", the CSV column and the zero gradient case. No HDF5. Two ranks with an uneven split, since the factor
+# is a global maximum.
+
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/run/mma_gradient_scaling)
+
+add_pfunit_ctest(mma_gradient_scaling
+    TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/mma_gradient_scaling.pf
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/run/mma_gradient_scaling
+    LINK_LIBRARIES Neko-TOP::neko-top
+    MAX_PES 2
+)
+add_dependencies(Unit mma_gradient_scaling)
+set_tests_properties(mma_gradient_scaling PROPERTIES
+    LABELS "unit;optimizer;mma"
+    ENVIRONMENT "NEKO_LOG_FILE=mma_gradient_scaling.log"
+    TIMEOUT 300
+)
+if (CMAKE_Fortran_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(mma_gradient_scaling PRIVATE
+        $<$<COMPILE_LANGUAGE:Fortran>:-Wno-unused-variable>
+    )
+endif()
+
+# ============================================================================ #
 # Everything below this point requires HDF5: the pre-existing MMA
 # save/restart test, and the steepest-descent delta/xold1/xold2 checkpoint
 # test. CI most likely builds without HDF5, so anything placed below this
