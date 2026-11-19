@@ -60,8 +60,8 @@ endif()
 # optimizer, via the real optimizer_factory on an analytic problem with and
 # without a linear constraint: equivariance to the objective and to the
 # constraint scale (with the "none" mode as the control), `mma.scale` having
-# no effect, default-is-"none", the CSV column and the zero gradient case. No HDF5. Two ranks with an uneven split, since the factor
-# is a global maximum.
+# no effect, default-is-"none", the CSV column and the zero gradient case. No
+# HDF5. Two ranks with an uneven split, since the factor is a global maximum.
 
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/run/mma_gradient_scaling)
 
