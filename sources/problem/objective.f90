@@ -84,6 +84,9 @@ module objective
      procedure, pass(this) :: get_log_headers => objective_get_log_headers
      !> Get values for this objective's log entries
      procedure, pass(this) :: get_log_values => objective_get_log_values
+     !> Get the factor the stored sensitivity carries, the weight
+     procedure, pass(this) :: get_sensitivity_scale => &
+          objective_get_sensitivity_scale
 
   end type objective_t
 
@@ -223,6 +226,20 @@ contains
     if (size(values) .lt. 2) return
     values(2) = this%weight
   end subroutine objective_get_log_values
+
+  !> Factor the stored sensitivity carries on top of the objective's own
+  !! derivative.
+  !!
+  !! The problem sums the stored objective sensitivities without weights, so
+  !! an objective stores its sensitivity with its weight applied.
+  !! @param[in] this The objective object.
+  !! @return scale The weight of the objective.
+  pure function objective_get_sensitivity_scale(this) result(scale)
+    class(objective_t), intent(in) :: this
+    real(kind=rp) :: scale
+
+    scale = this%weight
+  end function objective_get_sensitivity_scale
 
   ! -------------------------------------------------------------------------- !
   ! Implementations for the wrapper

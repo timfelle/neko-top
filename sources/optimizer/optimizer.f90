@@ -691,8 +691,8 @@ contains
     logical, intent(in), optional :: include_constraints
     character(len=*), intent(in), optional :: filename
 
-    character(len=:), allocatable :: header
-    integer :: total_size, base_size, i, n_cont
+    character(len=:), allocatable :: header, sens_header
+    integer :: total_size, base_size, sens_size, i, n_cont
     character(len=256) :: log_name
 
     if (present(include_constraints)) then
@@ -704,7 +704,9 @@ contains
     this%log_extra_size = 0
     if (present(extra_headers)) this%log_extra_size = size(extra_headers)
 
-    total_size = 1 + base_size + this%log_extra_size + 2 + n_cont
+    sens_size = problem%get_sensitivity_log_size(this%log_include_constraints)
+
+    total_size = 1 + base_size + this%log_extra_size + 2 + n_cont + sens_size
     call this%log_data%init(total_size)
 
     if (present(filename)) then
@@ -733,13 +735,22 @@ contains
             trim(nekotop_continuation%get_param_name(i))
     end do
 
-    ! csv_file_t keeps its header in a fixed-length field.
-    if (len(header) .gt. len(this%log_file%header)) then
+    ! Sensitivity statistics come last, so that the columns before them keep
+    ! their positions.
+    sens_header = problem%get_sensitivity_log_header( &
+         this%log_include_constraints)
+    if (len(sens_header) .gt. 0) header = header // ', ' // sens_header
+
+    ! Older Neko versions keep the csv_file_t header in a fixed-length field,
+    ! newer ones in a deferred-length one. Comparing after setting it works
+    ! for both, where the length of an unset deferred-length header would be
+    ! undefined.
+    call this%log_file%set_header(header)
+    if (len(this%log_file%header) .lt. len(header)) then
        call neko_log%warning("Optimization log header exceeds the " // &
             "csv_file_t header length; " // trim(log_name) // &
             " will carry truncated column names.")
     end if
-    call this%log_file%set_header(header)
 
     this%log_initialized = .true.
   end subroutine optimizer_init_log
@@ -754,7 +765,7 @@ contains
     integer, intent(in) :: iter
     class(problem_t), intent(in) :: problem
     real(kind=rp), intent(in), optional :: extra_values(:)
-    integer :: base_size, offset, n_cont, i
+    integer :: base_size, sens_size, offset, n_cont, i
 
     if (.not. this%log_initialized) return
 
@@ -798,6 +809,15 @@ contains
        this%log_data%x(offset + i - 1) = &
             nekotop_continuation%params(i)%target
     end do
+
+    ! Sensitivity statistics, after the continuation parameters
+    offset = offset + n_cont
+    sens_size = problem%get_sensitivity_log_size(this%log_include_constraints)
+    if (sens_size .gt. 0) then
+       call problem%get_sensitivity_log_values( &
+            this%log_data%x(offset:offset + sens_size - 1), &
+            this%log_include_constraints)
+    end if
 
     call this%log_file%write(this%log_data)
 

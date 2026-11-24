@@ -434,8 +434,8 @@ contains
     logical, allocatable :: mask(:)
     type(json_file) :: parameters
     class(objective_t), allocatable :: obj
-    integer :: n, csv_unit, ios, pos, ierr
-    character(len=4096) :: line, last_line
+    integer :: n, csv_unit, ios, col, ierr
+    character(len=4096) :: line, header, last_line
     character(len=256) :: msg
     real(kind=rp) :: read_val
 
@@ -486,12 +486,14 @@ contains
     call this%opt%run(this%prob, this%des)
 
     ! Read the last row of the CSV on rank 0 and broadcast the result, so
-    ! every rank asserts the same, already-collective value.
+    ! every rank asserts the same, already-collective value. The column is
+    ! found by its header, since the sensitivity statistics follow it.
     read_val = 0.0_rp
     if (pe_rank .eq. 0) then
        last_line = ''
        open(newunit = csv_unit, file = 'optimization_data.csv', &
             status = 'old', action = 'read')
+       read(csv_unit, '(A)') header
        do
           read(csv_unit, '(A)', iostat = ios) line
           if (ios .ne. 0) exit
@@ -499,8 +501,14 @@ contains
        end do
        close(csv_unit)
 
-       pos = index(trim(last_line), ',', back = .true.)
-       read(last_line(pos + 1:), *) read_val
+       col = 1
+       do while (csv_field(header, col) .ne. &
+            trim(nekotop_continuation%get_param_name(1)))
+          if (len(csv_field(header, col)) .eq. 0) exit
+          col = col + 1
+       end do
+       line = csv_field(last_line, col)
+       read(line, *, iostat = ios) read_val
     end if
     call MPI_Bcast(read_val, 1, MPI_REAL_PRECISION%mpi_val, 0, &
          NEKO_COMM%mpi_val, ierr)
@@ -509,5 +517,30 @@ contains
          ' of the final iteration (iteration 4 -> 40.0)'
     @assertEqual(40.0_rp, read_val, 1.0e-6_rp, msg)
   end subroutine csv_log_continuation_column
+
+  !> Return a field of a comma-separated line, without surrounding blanks.
+  !! @param line The line.
+  !! @param k The index of the field, from one.
+  !! @return field The field, empty if the line has fewer fields.
+  function csv_field(line, k) result(field)
+    character(len=*), intent(in) :: line
+    integer, intent(in) :: k
+    character(len=:), allocatable :: field
+    integer :: i, start, pos
+
+    field = ''
+    start = 1
+    do i = 1, k - 1
+       pos = index(line(start:), ',')
+       if (pos .eq. 0) return
+       start = start + pos
+    end do
+    pos = index(line(start:), ',')
+    if (pos .eq. 0) then
+       field = trim(adjustl(line(start:)))
+    else
+       field = trim(adjustl(line(start:start + pos - 2)))
+    end if
+  end function csv_field
 
 end module steepest_descent_convergence

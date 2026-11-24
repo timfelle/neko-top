@@ -47,6 +47,26 @@ Restart and checkpoint keys (`restart_file`, `checkpoint.*`) are likewise read
 the same way by every optimizer; see
 \ref configuration-checkpointing "Checkpointing and restart" below.
 
+#### Sensitivity statistics in the convergence log {#configuration-solver-sensitivity-log}
+
+The last columns of `optimization_data.csv` hold, for every logged objective
+and then every logged constraint, the maximum, minimum and mean of that
+functional's own sensitivity: `<name>.sens_max`, `<name>.sens_min` and
+`<name>.sens_mean`. They come after all other columns, so the columns before
+them keep their positions. A row holds the sensitivity at the same design as
+the functional values in that row.
+
+- The values are without the objective's `weight`. A weight of zero cannot
+  be divided out, so such an objective logs its sensitivity as stored, which
+  is zero.
+- They are of the sensitivity the functional stores, before the design's
+  mapping back to the design variable. For an objective this is only the
+  part it contributes directly: the part that reaches the design through the
+  adjoint flow is summed over all objectives and not logged per objective. A
+  viscous dissipation or scalar mixing objective therefore logs zeros.
+- The mean is the arithmetic mean over all design entries on all ranks
+  (for a field design, the GLL points), not a volume average.
+
 ### The Method of Moving Asymptotes (MMA) {#configuration-solver-mma}
 
 In a case file, MMA is configured in `optimization.solver`, with MMA-specific

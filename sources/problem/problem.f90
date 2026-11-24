@@ -131,6 +131,9 @@ module problem
      procedure, pass(this), public :: write => problem_write
      !> Fill optimization log values.
      procedure, pass(this), public :: get_log_values => problem_get_log_values
+     !> Fill the sensitivity statistics log values.
+     procedure, pass(this), public :: get_sensitivity_log_values => &
+          problem_get_sensitivity_log_values
 
      !> Add an objective to the list.
      procedure, pass(this), public :: add_objective => problem_add_objective
@@ -207,6 +210,12 @@ module problem
      procedure, pass(this) :: get_log_header => problem_get_log_header
      !> Return the logfile base size (excluding iter and optimizer extras)
      procedure, pass(this) :: get_log_size => problem_get_log_size
+     !> Return the sensitivity statistics logfile header
+     procedure, pass(this) :: get_sensitivity_log_header => &
+          problem_get_sensitivity_log_header
+     !> Return the number of sensitivity statistics log entries
+     procedure, pass(this) :: get_sensitivity_log_size => &
+          problem_get_sensitivity_log_size
 
   end type problem_t
 
@@ -1060,4 +1069,123 @@ contains
     end if
 
   end function problem_get_log_size
+
+  !> Return the number of sensitivity statistics log entries.
+  !! @param[in] this The problem object.
+  !! @param[in] include_constraints Include constraints in the size count.
+  !! @return n Number of sensitivity statistics log entries.
+  function problem_get_sensitivity_log_size(this, include_constraints) &
+       result(n)
+    class(problem_t), intent(in) :: this
+    logical, intent(in), optional :: include_constraints
+    integer :: n, i
+    logical :: do_constraints
+
+    do_constraints = .true.
+    if (present(include_constraints)) do_constraints = include_constraints
+
+    n = 0
+    do i = 1, this%get_n_objectives()
+       n = n + this%objective_list(i)%objective%get_sensitivity_log_size()
+    end do
+
+    if (do_constraints) then
+       do i = 1, this%get_n_constraints()
+          n = n + &
+               this%constraint_list(i)%constraint%get_sensitivity_log_size()
+       end do
+    end if
+
+  end function problem_get_sensitivity_log_size
+
+  !> Return the sensitivity statistics header, objectives then constraints.
+  !! @param[in] this The problem object.
+  !! @param[in] include_constraints Include constraints in the header.
+  !! @return buff Comma-separated header string, without a leading comma.
+  function problem_get_sensitivity_log_header(this, include_constraints) &
+       result(buff)
+    class(problem_t), intent(in) :: this
+    logical, intent(in), optional :: include_constraints
+    character(len=:), allocatable :: buff
+    integer :: i
+    logical :: do_constraints
+
+    do_constraints = .true.
+    if (present(include_constraints)) do_constraints = include_constraints
+
+    buff = ""
+    do i = 1, this%get_n_objectives()
+       call problem_append_header(buff, &
+            this%objective_list(i)%objective%get_sensitivity_log_header())
+    end do
+
+    if (do_constraints) then
+       do i = 1, this%get_n_constraints()
+          call problem_append_header(buff, &
+               this%constraint_list(i)%constraint%get_sensitivity_log_header())
+       end do
+    end if
+
+  end function problem_get_sensitivity_log_header
+
+  !> Append a header to a comma-separated header list.
+  !! @param[inout] buff The header list to append to.
+  !! @param[in] header The header to append, nothing if empty.
+  subroutine problem_append_header(buff, header)
+    character(len=:), allocatable, intent(inout) :: buff
+    character(len=*), intent(in) :: header
+
+    if (len(header) .eq. 0) return
+    if (len(buff) .gt. 0) buff = buff // ", "
+    buff = buff // header
+  end subroutine problem_append_header
+
+  !> Fill the sensitivity statistics log values, in the header's order.
+  !!
+  !! Each functional reports the maximum, minimum and mean of its own stored
+  !! sensitivity, without its weight, before the design's backward map. An
+  !! objective that reaches the design only through the adjoint stores none:
+  !! the adjoint part of all objectives is held, weighted and summed, by the
+  !! augmented Lagrangian objective, which is not logged.
+  !! Collective over all ranks.
+  !! @param[in] this The problem object.
+  !! @param[out] values Array to populate with the log values.
+  !! @param[in] include_constraints Include constraints in the log values.
+  subroutine problem_get_sensitivity_log_values(this, values, &
+       include_constraints)
+    class(problem_t), intent(in) :: this
+    real(kind=rp), intent(out) :: values(:)
+    logical, intent(in), optional :: include_constraints
+    integer :: i, n, offset
+    logical :: do_constraints
+
+    do_constraints = .true.
+    if (present(include_constraints)) do_constraints = include_constraints
+
+    values = 0.0_rp
+    offset = 1
+    do i = 1, this%n_objectives
+       associate(functional => this%objective_list(i)%objective)
+         n = functional%get_sensitivity_log_size()
+         if (n .gt. 0) then
+            call functional%get_sensitivity_log_values( &
+                 values(offset:offset + n - 1))
+            offset = offset + n
+         end if
+       end associate
+    end do
+
+    if (do_constraints) then
+       do i = 1, this%n_constraints
+          associate(functional => this%constraint_list(i)%constraint)
+            n = functional%get_sensitivity_log_size()
+            if (n .gt. 0) then
+               call functional%get_sensitivity_log_values( &
+                    values(offset:offset + n - 1))
+               offset = offset + n
+            end if
+          end associate
+       end do
+    end if
+  end subroutine problem_get_sensitivity_log_values
 end module problem

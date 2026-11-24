@@ -37,14 +37,17 @@ module base_functional
   use design, only: design_t
   use json_module, only: json_file
   use json_utils, only: json_get
-  use num_types, only: rp, dp, xp
+  use num_types, only: rp, dp, xp, i8
   use point_zone, only: point_zone_t
   use simulation_m, only: simulation_t
   use time_state, only: time_state_t
   use vector, only: vector_t
   use utils, only: neko_error
   use scratch_registry, only: neko_scratch_registry
-  use vector_math, only: vector_copy, vector_add3s2, vector_rzero
+  use vector_math, only: vector_copy, vector_add3s2, vector_rzero, &
+       vector_glmax, vector_glmin, vector_glsum
+  use comm, only: NEKO_COMM
+  use mpi_f08, only: MPI_Allreduce, MPI_INTEGER8, MPI_SUM
   implicit none
   private
 
@@ -121,6 +124,18 @@ module base_functional
      procedure, pass(this) :: get_log_headers => functional_get_log_headers
      !> Get values for this functional's log entries
      procedure, pass(this) :: get_log_values => functional_get_log_values
+     !> Get number of sensitivity statistics log entries
+     procedure, pass(this) :: get_sensitivity_log_size => &
+          functional_get_sensitivity_log_size
+     !> Get header labels for the sensitivity statistics log entries
+     procedure, pass(this) :: get_sensitivity_log_header => &
+          functional_get_sensitivity_log_header
+     !> Get values for the sensitivity statistics log entries
+     procedure, pass(this) :: get_sensitivity_log_values => &
+          functional_get_sensitivity_log_values
+     !> Get the factor the stored sensitivity carries
+     procedure, pass(this) :: get_sensitivity_scale => &
+          functional_get_sensitivity_scale
      !> Set the value to zero
      procedure, pass(this) :: reset_value => functional_reset_value
      !> Set the sensitivity to zero
@@ -251,6 +266,95 @@ contains
     if (size(values) .eq. 0) return
     values(1) = this%value
   end subroutine functional_get_log_values
+
+  !> Return number of sensitivity statistics log entries.
+  !!
+  !! A functional that keeps itself out of the log, by logging no entries,
+  !! logs no sensitivity statistics either.
+  !! @param[in] this The functional object.
+  !! @return n Number of sensitivity statistics log entries.
+  function functional_get_sensitivity_log_size(this) result(n)
+    class(base_functional_t), intent(in) :: this
+    integer :: n
+
+    if (this%get_log_size() .gt. 0) then
+       n = 3
+    else
+       n = 0
+    end if
+  end function functional_get_sensitivity_log_size
+
+  !> Return the comma-separated sensitivity statistics header labels.
+  !! @param[in] this The functional object.
+  !! @return buff Header labels, empty if the functional logs none.
+  function functional_get_sensitivity_log_header(this) result(buff)
+    class(base_functional_t), intent(in) :: this
+    character(len=:), allocatable :: buff
+    character(len=:), allocatable :: prefix
+
+    buff = ""
+    if (this%get_sensitivity_log_size() .lt. 1) return
+    prefix = this%get_name()
+    buff = prefix // ".sens_max, " // prefix // ".sens_min, " // &
+         prefix // ".sens_mean"
+  end function functional_get_sensitivity_log_header
+
+  !> Populate the sensitivity statistics log values.
+  !!
+  !! The maximum, minimum and arithmetic mean of the stored sensitivity,
+  !! over all its entries on all ranks, divided by the factor of
+  !! `get_sensitivity_scale`, so that an objective's weight is taken out.
+  !! The mean is not weighted by the mass matrix: the sensitivity lives in
+  !! design space, which need not be the GLL points of a mesh. For a field
+  !! design it is the mean over the GLL points, duplicates on element faces
+  !! included. A factor of zero cannot be divided out, and leaves the
+  !! statistics as stored.
+  !! @param[in] this The functional object.
+  !! @param[out] values Maximum, minimum and mean of the sensitivity.
+  subroutine functional_get_sensitivity_log_values(this, values)
+    class(base_functional_t), intent(in) :: this
+    real(kind=rp), intent(out) :: values(:)
+    real(kind=rp) :: s_max, s_min, s_mean, scale
+    integer(kind=i8) :: n_local, n_global
+
+    if (size(values) .lt. 3) return
+    values = 0.0_rp
+
+    n_local = int(this%sensitivity%size(), kind=i8)
+    call MPI_Allreduce(n_local, n_global, 1, MPI_INTEGER8, MPI_SUM, NEKO_COMM)
+    if (n_global .lt. 1) return
+
+    s_max = vector_glmax(this%sensitivity)
+    s_min = vector_glmin(this%sensitivity)
+    s_mean = vector_glsum(this%sensitivity) / real(n_global, kind=rp)
+
+    scale = this%get_sensitivity_scale()
+    if (scale .gt. 0.0_rp) then
+       values(1) = s_max / scale
+       values(2) = s_min / scale
+       values(3) = s_mean / scale
+    else if (scale .lt. 0.0_rp) then
+       ! A negative factor swaps the extremes
+       values(1) = s_min / scale
+       values(2) = s_max / scale
+       values(3) = s_mean / scale
+    else
+       values(1) = s_max
+       values(2) = s_min
+       values(3) = s_mean
+    end if
+  end subroutine functional_get_sensitivity_log_values
+
+  !> Factor the stored sensitivity carries on top of the functional's own
+  !! derivative. One for a functional without a weight.
+  !! @param[in] this The functional object.
+  !! @return scale The factor.
+  pure function functional_get_sensitivity_scale(this) result(scale)
+    class(base_functional_t), intent(in) :: this
+    real(kind=rp) :: scale
+
+    scale = 1.0_rp
+  end function functional_get_sensitivity_scale
 
   !> Zero value of the function
   subroutine functional_reset_value(this)
