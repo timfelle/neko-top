@@ -238,16 +238,11 @@ contains
        call json_get(neko_case%params, &
             'case.scalar.initial_condition', json_subdict)
        if (trim(string_val) .ne. 'user') then
-          if (trim(neko_case%scalars%scalar_fields(1)%scalar%name) .eq. &
-               'temperature') then
-             call set_scalar_ic(neko_case%scalars%scalar_fields(1)%scalar%s, &
-                  neko_case%fluid%c_Xh, neko_case%fluid%gs_Xh, string_val, &
-                  json_subdict, 0)
-          else
-             call set_scalar_ic(neko_case%scalars%scalar_fields(1)%scalar%s, &
-                  neko_case%fluid%c_Xh, neko_case%fluid%gs_Xh, string_val, &
-                  json_subdict, 1)
-          end if
+          ! Scalar k defaults to field-file slot k - 1, where Neko writes
+          ! it, as in Neko's scalars_set_initial_conditions. Here k = 1.
+          call set_scalar_ic(neko_case%scalars%scalar_fields(1)%scalar%s, &
+               neko_case%fluid%c_Xh, neko_case%fluid%gs_Xh, string_val, &
+               json_subdict, 0)
        else
           call set_scalar_ic(neko_case%scalars%scalar_fields(1)%scalar%name, &
                neko_case%scalars%scalar_fields(1)%scalar%s, &
@@ -416,24 +411,20 @@ contains
           call field_rzero(s_scheme%abx2)
        end select
 
-       ! reset the forward scalar
+       ! reset the adjoint scalar
        call json_get(neko_case%params, &
             'case.adjoint_scalar.initial_condition.type', string_val)
        call json_get(neko_case%params, &
             'case.adjoint_scalar.initial_condition', json_subdict)
        if (trim(string_val) .ne. 'user') then
-          if (trim(neko_case%scalars%scalar_fields(1)%scalar%name) .eq. &
-               'temperature') then
-             call set_scalar_ic( &
-                  adjoint_case%adjoint_scalars%adjoint_scalar_fields(1)%s_adj, &
-                  adjoint_case%fluid_adj%c_Xh, adjoint_case%fluid_adj%gs_Xh, &
-                  string_val, json_subdict, 0)
-          else
-             call set_scalar_ic( &
-                  adjoint_case%adjoint_scalars%adjoint_scalar_fields(1)%s_adj, &
-                  adjoint_case%fluid_adj%c_Xh, adjoint_case%fluid_adj%gs_Xh, &
-                  string_val, json_subdict, 1)
-          end if
+          ! Adjoint scalar k defaults to field-file slot k - 1, where
+          ! adjoint_output_t writes it (the first in the temperature slot);
+          ! the same rule as Neko's scalars_set_initial_conditions.
+          ! Here k = 1.
+          call set_scalar_ic( &
+               adjoint_case%adjoint_scalars%adjoint_scalar_fields(1)%s_adj, &
+               adjoint_case%fluid_adj%c_Xh, adjoint_case%fluid_adj%gs_Xh, &
+               string_val, json_subdict, 0)
        else
           call neko_error("adjoint scalar user IC not supported")
        end if
