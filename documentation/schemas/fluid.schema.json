@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:neko-top:schema:fluid",
+  "$defs": {
+    "fluidAdditions": {
+      "description": "Keys Neko-TOP reads under `case.fluid`, added to Neko's open `fluid` object.",
+      "type": "object",
+      "properties": {
+        "freeze_flow": {
+          "description": "Freeze the flow at every design iteration. Default false. Read by the topology optimisation drivers; Neko's own `freeze` has no effect there (sources/neko_ext/neko_ext.f90:267).",
+          "type": "boolean"
+        },
+        "source_terms": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:neko-top:schema:source-terms#/$defs/registeredSourceTerm"
+          }
+        }
+      }
+    },
+    "fluidOptimizing": {
+      "description": "Restrictions on `case.fluid` of a case with an `optimization` object.",
+      "type": "object",
+      "required": [
+        "initial_condition"
+      ],
+      "properties": {
+        "scheme": {
+          "$comment": "adjoint_fluid_fctry.f90:56-60 knows only the Pn/Pn scheme (adjoint_case.f90:133).",
+          "const": "pnpn"
+        },
+        "full_stress_formulation": {
+          "$comment": "adjoint_fluid_pnpn.f90:316-318 aborts when it is true.",
+          "const": false
+        },
+        "nut_field": false,
+        "flow_rate_force": false,
+        "cyclic": {
+          "$comment": "adjoint_curl_curl.f90:136-139 aborts when it is true.",
+          "const": false
+        },
+        "Re": {
+          "$ref": "urn:neko:schema:common#/$defs/realNumber"
+        },
+        "mu": {
+          "$ref": "urn:neko:schema:common#/$defs/realNumber"
+        },
+        "rho": {
+          "$ref": "urn:neko:schema:common#/$defs/realNumber"
+        },
+        "boundary_conditions": {
+          "type": "array",
+          "items": {
+            "$comment": "adjoint_curl_curl.f90:128-134 aborts for a symmetry velocity condition, plain or in a split item.",
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "type"
+                  ],
+                  "properties": {
+                    "type": {
+                      "const": "symmetry"
+                    }
+                  }
+                },
+                {
+                  "required": [
+                    "velocity"
+                  ],
+                  "properties": {
+                    "velocity": {
+                      "required": [
+                        "type"
+                      ],
+                      "properties": {
+                        "type": {
+                          "const": "symmetry"
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "pressure_solver": {
+          "$comment": "adjoint_fluid_pnpn.f90:411-422 reads the adjoint pressure solver keys from here, without a constants lookup.",
+          "properties": {
+            "absolute_tolerance": {
+              "$ref": "urn:neko:schema:common#/$defs/realNumber"
+            },
+            "max_iterations": {
+              "$ref": "urn:neko:schema:common#/$defs/positiveInteger"
+            },
+            "projection_space_size": {
+              "type": "integer"
+            },
+            "projection_hold_steps": {
+              "type": "integer"
+            }
+          }
+        }
+      },
+      "$comment": "`nut_field` (adjoint_fluid_pnpn.f90:338-342) and `flow_rate_force` (adjoint_fluid_scheme_incompressible.f90:242-243) abort when present; `Re`, `mu` and `rho` are read as JSON reals without a constants lookup when there is no user material_properties routine (adjoint_fluid_scheme_incompressible.f90:700-729). A case with such a routine and a constants name for them would be accepted by the code, which a case file cannot show."
+    }
+  }
+}

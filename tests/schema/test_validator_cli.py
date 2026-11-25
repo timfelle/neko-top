@@ -15,7 +15,7 @@ import validate_case_schema as vcs
 
 SCRIPT = Path(vcs.__file__).resolve()
 TOP_ROOT = SCRIPT.parents[2]
-GOOD_CASE = TOP_ROOT / "tests/unit/sensitivity/volume.case"
+GOOD_CASE = TOP_ROOT / "tests/schema/fixtures/topopt_steady.case"
 
 
 def run(*args, env=None, cwd=None):
@@ -109,9 +109,32 @@ def test_exit_3_when_nothing_is_found(clean_env):
 
 
 def test_exit_3_without_the_simcomp_fallback(neko_dir, tmp_path):
-    """Neko schemas lacking the registered-type fallback are incompatible."""
-    shutil.copytree(neko_dir, tmp_path / "neko")
-    path = tmp_path / "neko" / "simulation-components.schema.json"
+    """Neko schemas lacking the registered-type fallback are too old."""
+    old = without_fallback(neko_dir, tmp_path / "neko")
+    result = run("--neko-schema-dir", old, GOOD_CASE)
+    assert result.returncode == 3
+    assert "registered-type fallback" in result.stderr
+
+
+def dangling_top_dir(tmp_path: Path) -> Path:
+    """A Neko-TOP schema directory whose root refers to a Neko definition
+    that does not exist."""
+    top = tmp_path / "top"
+    top.mkdir()
+    (top / "case-file.schema.json").write_text(json.dumps({
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": vcs.ROOT_IDS["neko-top"],
+        "allOf": [
+            {"$ref": vcs.NEKO_PREFIX + "common#/$defs/noSuchDefinition"}
+        ],
+    }))
+    return top
+
+
+def without_fallback(neko_dir: Path, destination: Path) -> Path:
+    """A copy of Neko's schemas without the registered-type fallback."""
+    shutil.copytree(neko_dir, destination)
+    path = destination / "simulation-components.schema.json"
     schema = json.loads(path.read_text())
     union = schema["$defs"]["simulationComponent"]["oneOf"]
     kept = [
@@ -122,25 +145,47 @@ def test_exit_3_without_the_simcomp_fallback(neko_dir, tmp_path):
     assert len(kept) == len(union) - 1, "fallback branch not found"
     schema["$defs"]["simulationComponent"]["oneOf"] = kept
     path.write_text(json.dumps(schema))
-    result = run("--neko-schema-dir", tmp_path / "neko", GOOD_CASE)
-    assert result.returncode == 3
-    assert "registered-type fallback" in result.stderr
+    return destination
 
 
-def test_exit_3_dangling_neko_def(neko_dir, tmp_path):
-    """A Neko-TOP reference to a Neko definition that is missing is caught."""
-    top = tmp_path / "top"
-    top.mkdir()
-    (top / "case-file.schema.json").write_text(json.dumps({
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "$id": vcs.ROOT_IDS["neko-top"],
-        "allOf": [
-            {"$ref": vcs.NEKO_PREFIX + "common#/$defs/noSuchDefinition"}
-        ],
-    }))
+def test_exit_1_dangling_neko_def_in_a_new_enough_neko(neko_dir, tmp_path):
+    """A Neko-TOP reference to a Neko definition that is missing, in a Neko
+    that has the registered-type fallback, is a mistake in Neko-TOP's own
+    schemas: exit 1, not the exit 3 (skip) of a Neko that is too old."""
+    top = dangling_top_dir(tmp_path)
     result = run("--neko-schema-dir", neko_dir, "--schema-dir", top, GOOD_CASE)
-    assert result.returncode == 3
+    assert result.returncode == 1, result.stdout + result.stderr
     assert "no such Neko definition" in result.stderr
+    assert "although it has the registered-type fallback" in result.stderr
+
+
+def test_exit_3_dangling_neko_def_in_an_old_neko(neko_dir, tmp_path):
+    """The same reference, in a Neko without the fallback, means the Neko is
+    too old: exit 3, with both problems listed."""
+    old = without_fallback(neko_dir, tmp_path / "neko")
+    top = dangling_top_dir(tmp_path)
+    result = run("--neko-schema-dir", old, "--schema-dir", top, GOOD_CASE)
+    assert result.returncode == 3, result.stdout + result.stderr
+    assert "too old" in result.stderr
+    assert "registered-type fallback" in result.stderr
+    assert "no such Neko definition" in result.stderr
+
+
+def test_probe_returns_old_neko_and_typo_problems_apart(registry, schemas):
+    """probe() returns `(too_old, typos)`; both are empty for a compatible
+    Neko."""
+    assert vcs.probe(registry, schemas) == ([], [])
+
+
+def test_load_all_raises_the_matching_error(neko_dir, tmp_path):
+    """load_all() raises SchemaSetupError for a Neko that is too old and
+    TopSchemaError for a Neko-TOP typo."""
+    top = dangling_top_dir(tmp_path)
+    with pytest.raises(vcs.TopSchemaError):
+        vcs.load_all(str(top), str(neko_dir))
+    old = without_fallback(neko_dir, tmp_path / "neko")
+    with pytest.raises(vcs.SchemaSetupError):
+        vcs.load_all(str(top), str(old))
 
 
 def test_duplicate_schema_ids_are_rejected(neko_dir, tmp_path):

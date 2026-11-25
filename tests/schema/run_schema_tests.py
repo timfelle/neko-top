@@ -38,6 +38,10 @@ def unavailable() -> str | None:
         vcs.load_all()
     except vcs.SchemaSetupError as exc:
         return str(exc)
+    except vcs.TopSchemaError as exc:
+        # A mistake in Neko-TOP's own schemas is never a reason to skip.
+        print(f"Schema tests FAILED: {exc}", file=sys.stderr)
+        raise SystemExit(1)
     return None
 
 

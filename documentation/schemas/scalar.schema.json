@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:neko-top:schema:scalar",
+  "$defs": {
+    "scalarAdditions": {
+      "description": "Neko-TOP additions to Neko's open scalar object (`case.scalar` and the items of `case.scalars`).",
+      "type": "object",
+      "properties": {
+        "source_terms": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:neko-top:schema:source-terms#/$defs/registeredSourceTerm"
+          }
+        }
+      }
+    },
+    "scalarOptimizing": {
+      "description": "Restrictions on `case.scalar` while the adjoint scalar is enabled.",
+      "$comment": "adjoint_scalar_scheme.f90:355-358 aborts when `variable_material_properties` is present; without a user material_properties routine :610-637 read Pe, or lambda and cp, as JSON reals without a constants lookup.",
+      "type": "object",
+      "properties": {
+        "variable_material_properties": false,
+        "Pe": {
+          "$ref": "urn:neko:schema:common#/$defs/realNumber"
+        },
+        "lambda": {
+          "$ref": "urn:neko:schema:common#/$defs/realNumber"
+        },
+        "cp": {
+          "$ref": "urn:neko:schema:common#/$defs/realNumber"
+        }
+      }
+    },
+    "scalarForward": {
+      "description": "Restrictions on an enabled `case.scalar` of a case with an `optimization` object.",
+      "$comment": "neko_ext.f90:236-238 reads the scalar initial condition type at every design iteration, with no default and even with `restart_file`.",
+      "type": "object",
+      "required": [
+        "initial_condition"
+      ]
+    }
+  }
+}

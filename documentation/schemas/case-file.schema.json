@@ -2,11 +2,1059 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:neko-top:schema:case-file",
   "title": "Neko-TOP case file",
-  "$comment": "Placeholder collected root: it accepts exactly what Neko's own root accepts. The Neko-TOP additions are added to this allOf, never by widening Neko's schemas.",
+  "description": "Neko's case file plus the keys of the Neko-TOP drivers. Everything Neko's own schema accepts outside Neko-TOP's keys stays accepted.",
   "allOf": [
     {
       "$ref": "urn:neko:schema:case-file"
+    },
+    {
+      "type": "object",
+      "properties": {
+        "case": {
+          "$ref": "#/$defs/case"
+        },
+        "optimization": {
+          "$ref": "urn:neko-top:schema:optimization#/$defs/optimization"
+        },
+        "unsteady": {
+          "description": "Run the optimisation with an unsteady forward and adjoint solve. Default false. Read by the topology optimisation drivers only (sources/simulation/simulation.f90:271).",
+          "type": "boolean"
+        },
+        "state_recovery": {
+          "description": "How the forward state is recovered for the adjoint; read, and required, only when `unsteady` is true.",
+          "$ref": "urn:neko-top:schema:state-recovery#/$defs/stateRecovery"
+        },
+        "norm_scaling": {
+          "description": "Left over from the power iteration, which has no caller; read at the document root. Default 0.5.",
+          "$ref": "urn:neko:schema:common#/$defs/realNumber"
+        },
+        "norm_target": {
+          "description": "As `norm_scaling`. Default -1.0.",
+          "$ref": "urn:neko:schema:common#/$defs/realNumber"
+        },
+        "norm_tolerance": {
+          "description": "As `norm_scaling`. Default 10.0.",
+          "$ref": "urn:neko:schema:common#/$defs/realNumber"
+        },
+        "output_file": {
+          "description": "Left over from the power iteration; read at the document root and checked for a file suffix Neko knows. Default `power_iterations.csv`.",
+          "$comment": "adjoint_fluid_pnpn.f90:489-491; neko src/io/file.f90:133 aborts for an unknown suffix.",
+          "type": "string",
+          "pattern": "\\.(rea|re2|map|vtk|nmsh|bp|fld|chkp|stl|csv|hdf5|h5|vtkhdf)$"
+        }
+      },
+      "allOf": [
+        {
+          "$comment": "simulation.f90:271-287: state_recovery is required for an unsteady run and not read otherwise.",
+          "if": {
+            "required": [
+              "unsteady"
+            ],
+            "properties": {
+              "unsteady": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "state_recovery"
+            ]
+          },
+          "else": {
+            "properties": {
+              "state_recovery": false
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "optimization"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/optimizing"
+          }
+        }
+      ]
     }
   ],
-  "additionalProperties": true
+  "$defs": {
+    "case": {
+      "description": "Neko-TOP additions to Neko's open `case` object.",
+      "type": "object",
+      "properties": {
+        "fluid": {
+          "$ref": "urn:neko-top:schema:fluid#/$defs/fluidAdditions"
+        },
+        "scalar": {
+          "$ref": "urn:neko-top:schema:scalar#/$defs/scalarAdditions"
+        },
+        "scalars": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:neko-top:schema:scalar#/$defs/scalarAdditions"
+          }
+        },
+        "adjoint_fluid": {
+          "$ref": "urn:neko-top:schema:adjoint-fluid#/$defs/adjointFluid"
+        },
+        "adjoint_scalar": {
+          "$ref": "urn:neko-top:schema:adjoint-scalar#/$defs/adjointScalar"
+        },
+        "simulation_components": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:neko-top:schema:simulation-components#/$defs/simulationComponentAdditions"
+          }
+        }
+      }
+    },
+    "optimizing": {
+      "description": "Restrictions that apply when the case has an `optimization` object, that is when a topology optimisation driver runs it.",
+      "allOf": [
+        {
+          "properties": {
+            "case": {
+              "allOf": [
+                {
+                  "$comment": "neko_ext.f90:356-359 (reset_adjoint) reads case.adjoint_fluid.initial_condition at every design iteration with no fallback.",
+                  "required": [
+                    "adjoint_fluid"
+                  ]
+                },
+                {
+                  "properties": {
+                    "fluid": {
+                      "$ref": "urn:neko-top:schema:fluid#/$defs/fluidOptimizing"
+                    },
+                    "numerics": {
+                      "$comment": "adjoint_fluid_pnpn.f90:309, adjoint_case.f90:136 and advection_adjoint_fctry.f90:96-100 read these as JSON integers (no constants name); a true `oifs` aborts (advection_adjoint_fctry.f90:105, adjoint_fluid_pnpn.f90:741).",
+                      "properties": {
+                        "time_order": {
+                          "type": "integer"
+                        },
+                        "polynomial_order": {
+                          "type": "integer"
+                        },
+                        "dealiased_polynomial_order": {
+                          "type": "integer"
+                        },
+                        "oifs": {
+                          "const": false
+                        }
+                      }
+                    }
+                  }
+                },
+                {
+                  "$comment": "adjoint_case.f90:252-253 aborts after the whole initialisation when only case.adjoint_scalars is given and has entries.",
+                  "if": {
+                    "not": {
+                      "required": [
+                        "adjoint_scalar"
+                      ]
+                    }
+                  },
+                  "then": {
+                    "properties": {
+                      "adjoint_scalars": {
+                        "maxItems": 0
+                      }
+                    }
+                  }
+                },
+                {
+                  "$comment": "neko_ext.f90:236-238 and :399-423 reset the scalar and its adjoint at every design iteration; with an enabled scalar but no enabled adjoint scalar reset_adjoint dereferences an unallocated array (neko_ext.f90:404).",
+                  "if": {
+                    "required": [
+                      "scalar"
+                    ],
+                    "properties": {
+                      "scalar": {
+                        "not": {
+                          "required": [
+                            "enabled"
+                          ],
+                          "properties": {
+                            "enabled": {
+                              "const": false
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "then": {
+                    "allOf": [
+                      {
+                        "properties": {
+                          "scalar": {
+                            "$ref": "urn:neko-top:schema:scalar#/$defs/scalarForward"
+                          }
+                        }
+                      },
+                      {
+                        "required": [
+                          "adjoint_scalar"
+                        ],
+                        "properties": {
+                          "adjoint_scalar": {
+                            "not": {
+                              "required": [
+                                "enabled"
+                              ],
+                              "properties": {
+                                "enabled": {
+                                  "const": false
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "$comment": "adjoint_case.f90:204 needs case.scalar; adjoint_scalar_scheme.f90:341 needs it enabled.",
+                  "if": {
+                    "required": [
+                      "adjoint_scalar"
+                    ],
+                    "properties": {
+                      "adjoint_scalar": {
+                        "not": {
+                          "required": [
+                            "enabled"
+                          ],
+                          "properties": {
+                            "enabled": {
+                              "const": false
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "then": {
+                    "allOf": [
+                      {
+                        "required": [
+                          "scalar"
+                        ],
+                        "properties": {
+                          "scalar": {
+                            "not": {
+                              "required": [
+                                "enabled"
+                              ],
+                              "properties": {
+                                "enabled": {
+                                  "const": false
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "properties": {
+                          "scalar": {
+                            "$ref": "urn:neko-top:schema:scalar#/$defs/scalarOptimizing"
+                          }
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "$comment": "adjoint_scalar_scheme.f90:281 reads primal_name (default s) and looks the field up by it (:341); the field is named case.scalar.name (Neko default s). That the two names are equal cannot be expressed; the cases that cannot match are rejected.",
+                  "if": {
+                    "required": [
+                      "scalar",
+                      "adjoint_scalar"
+                    ],
+                    "properties": {
+                      "scalar": {
+                        "required": [
+                          "name"
+                        ],
+                        "properties": {
+                          "name": {
+                            "not": {
+                              "const": "s"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "then": {
+                    "properties": {
+                      "adjoint_scalar": {
+                        "required": [
+                          "primal_name"
+                        ],
+                        "properties": {
+                          "primal_name": {
+                            "not": {
+                              "const": "s"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                {
+                  "$comment": "Same lookup: with the scalar named s (explicitly or by default) primal_name can only be s.",
+                  "if": {
+                    "required": [
+                      "adjoint_scalar"
+                    ],
+                    "properties": {
+                      "scalar": {
+                        "not": {
+                          "required": [
+                            "name"
+                          ],
+                          "properties": {
+                            "name": {
+                              "not": {
+                                "const": "s"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "then": {
+                    "properties": {
+                      "adjoint_scalar": {
+                        "properties": {
+                          "primal_name": {
+                            "const": "s"
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                {
+                  "$comment": "steady_simcomp.f90:149-151 aborts with more than one scalar.",
+                  "if": {
+                    "required": [
+                      "simulation_components"
+                    ],
+                    "properties": {
+                      "simulation_components": {
+                        "not": {
+                          "items": {
+                            "not": {
+                              "required": [
+                                "type"
+                              ],
+                              "properties": {
+                                "type": {
+                                  "const": "steady"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "then": {
+                    "properties": {
+                      "scalars": {
+                        "maxItems": 1
+                      }
+                    }
+                  }
+                },
+                {
+                  "$comment": "The adjoint reads this key from case.adjoint_fluid.velocity_solver when present and from case.fluid.velocity_solver otherwise, without a constants lookup (adjoint_fluid_scheme_incompressible.f90:211-336, adjoint_scalar_scheme.f90:288-385).",
+                  "if": {
+                    "not": {
+                      "required": [
+                        "adjoint_fluid"
+                      ],
+                      "properties": {
+                        "adjoint_fluid": {
+                          "required": [
+                            "velocity_solver"
+                          ],
+                          "properties": {
+                            "velocity_solver": {
+                              "required": [
+                                "absolute_tolerance"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "then": {
+                    "properties": {
+                      "fluid": {
+                        "properties": {
+                          "velocity_solver": {
+                            "properties": {
+                              "absolute_tolerance": {
+                                "$ref": "urn:neko:schema:common#/$defs/realNumber"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                {
+                  "$comment": "The adjoint reads this key from case.adjoint_fluid.velocity_solver when present and from case.fluid.velocity_solver otherwise, without a constants lookup (adjoint_fluid_scheme_incompressible.f90:211-336, adjoint_scalar_scheme.f90:288-385).",
+                  "if": {
+                    "not": {
+                      "required": [
+                        "adjoint_fluid"
+                      ],
+                      "properties": {
+                        "adjoint_fluid": {
+                          "required": [
+                            "velocity_solver"
+                          ],
+                          "properties": {
+                            "velocity_solver": {
+                              "required": [
+                                "max_iterations"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "then": {
+                    "properties": {
+                      "fluid": {
+                        "properties": {
+                          "velocity_solver": {
+                            "properties": {
+                              "max_iterations": {
+                                "$ref": "urn:neko:schema:common#/$defs/positiveInteger"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                {
+                  "$comment": "The adjoint reads this key from case.adjoint_fluid.velocity_solver when present and from case.fluid.velocity_solver otherwise, without a constants lookup (adjoint_fluid_scheme_incompressible.f90:211-336, adjoint_scalar_scheme.f90:288-385).",
+                  "if": {
+                    "not": {
+                      "required": [
+                        "adjoint_fluid"
+                      ],
+                      "properties": {
+                        "adjoint_fluid": {
+                          "required": [
+                            "velocity_solver"
+                          ],
+                          "properties": {
+                            "velocity_solver": {
+                              "required": [
+                                "projection_space_size"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "then": {
+                    "properties": {
+                      "fluid": {
+                        "properties": {
+                          "velocity_solver": {
+                            "properties": {
+                              "projection_space_size": {
+                                "type": "integer"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                {
+                  "$comment": "The adjoint reads this key from case.adjoint_fluid.velocity_solver when present and from case.fluid.velocity_solver otherwise, without a constants lookup (adjoint_fluid_scheme_incompressible.f90:211-336, adjoint_scalar_scheme.f90:288-385).",
+                  "if": {
+                    "not": {
+                      "required": [
+                        "adjoint_fluid"
+                      ],
+                      "properties": {
+                        "adjoint_fluid": {
+                          "required": [
+                            "velocity_solver"
+                          ],
+                          "properties": {
+                            "velocity_solver": {
+                              "required": [
+                                "projection_hold_steps"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "then": {
+                    "properties": {
+                      "fluid": {
+                        "properties": {
+                          "velocity_solver": {
+                            "properties": {
+                              "projection_hold_steps": {
+                                "type": "integer"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                {
+                  "$comment": "The adjoint reads this key from case.adjoint_scalar.solver when present and from case.scalar.solver otherwise, without a constants lookup (adjoint_fluid_scheme_incompressible.f90:211-336, adjoint_scalar_scheme.f90:288-385). Applies while the adjoint scalar is enabled.",
+                  "if": {
+                    "allOf": [
+                      {
+                        "required": [
+                          "adjoint_scalar"
+                        ],
+                        "properties": {
+                          "adjoint_scalar": {
+                            "not": {
+                              "required": [
+                                "enabled"
+                              ],
+                              "properties": {
+                                "enabled": {
+                                  "const": false
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "not": {
+                          "required": [
+                            "adjoint_scalar"
+                          ],
+                          "properties": {
+                            "adjoint_scalar": {
+                              "required": [
+                                "solver"
+                              ],
+                              "properties": {
+                                "solver": {
+                                  "required": [
+                                    "absolute_tolerance"
+                                  ]
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "then": {
+                    "properties": {
+                      "scalar": {
+                        "properties": {
+                          "solver": {
+                            "properties": {
+                              "absolute_tolerance": {
+                                "$ref": "urn:neko:schema:common#/$defs/realNumber"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                {
+                  "$comment": "The adjoint reads this key from case.adjoint_scalar.solver when present and from case.scalar.solver otherwise, without a constants lookup (adjoint_fluid_scheme_incompressible.f90:211-336, adjoint_scalar_scheme.f90:288-385). Applies while the adjoint scalar is enabled.",
+                  "if": {
+                    "allOf": [
+                      {
+                        "required": [
+                          "adjoint_scalar"
+                        ],
+                        "properties": {
+                          "adjoint_scalar": {
+                            "not": {
+                              "required": [
+                                "enabled"
+                              ],
+                              "properties": {
+                                "enabled": {
+                                  "const": false
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "not": {
+                          "required": [
+                            "adjoint_scalar"
+                          ],
+                          "properties": {
+                            "adjoint_scalar": {
+                              "required": [
+                                "solver"
+                              ],
+                              "properties": {
+                                "solver": {
+                                  "required": [
+                                    "max_iterations"
+                                  ]
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "then": {
+                    "properties": {
+                      "scalar": {
+                        "properties": {
+                          "solver": {
+                            "properties": {
+                              "max_iterations": {
+                                "$ref": "urn:neko:schema:common#/$defs/positiveInteger"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                {
+                  "$comment": "The adjoint reads this key from case.adjoint_scalar.solver when present and from case.scalar.solver otherwise, without a constants lookup (adjoint_fluid_scheme_incompressible.f90:211-336, adjoint_scalar_scheme.f90:288-385). Applies while the adjoint scalar is enabled.",
+                  "if": {
+                    "allOf": [
+                      {
+                        "required": [
+                          "adjoint_scalar"
+                        ],
+                        "properties": {
+                          "adjoint_scalar": {
+                            "not": {
+                              "required": [
+                                "enabled"
+                              ],
+                              "properties": {
+                                "enabled": {
+                                  "const": false
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "not": {
+                          "required": [
+                            "adjoint_scalar"
+                          ],
+                          "properties": {
+                            "adjoint_scalar": {
+                              "required": [
+                                "solver"
+                              ],
+                              "properties": {
+                                "solver": {
+                                  "required": [
+                                    "projection_space_size"
+                                  ]
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "then": {
+                    "properties": {
+                      "scalar": {
+                        "properties": {
+                          "solver": {
+                            "properties": {
+                              "projection_space_size": {
+                                "type": "integer"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                {
+                  "$comment": "The adjoint reads this key from case.adjoint_scalar.solver when present and from case.scalar.solver otherwise, without a constants lookup (adjoint_fluid_scheme_incompressible.f90:211-336, adjoint_scalar_scheme.f90:288-385). Applies while the adjoint scalar is enabled.",
+                  "if": {
+                    "allOf": [
+                      {
+                        "required": [
+                          "adjoint_scalar"
+                        ],
+                        "properties": {
+                          "adjoint_scalar": {
+                            "not": {
+                              "required": [
+                                "enabled"
+                              ],
+                              "properties": {
+                                "enabled": {
+                                  "const": false
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "not": {
+                          "required": [
+                            "adjoint_scalar"
+                          ],
+                          "properties": {
+                            "adjoint_scalar": {
+                              "required": [
+                                "solver"
+                              ],
+                              "properties": {
+                                "solver": {
+                                  "required": [
+                                    "projection_hold_steps"
+                                  ]
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "then": {
+                    "properties": {
+                      "scalar": {
+                        "properties": {
+                          "solver": {
+                            "properties": {
+                              "projection_hold_steps": {
+                                "type": "integer"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "properties": {
+            "case": {
+              "required": [
+                "adjoint_fluid"
+              ]
+            }
+          }
+        },
+        {
+          "$comment": "brinkman_dissipation_objective.f90:150-162: both flags default to case.numerics.dealias and must end up equal, so a single flag must equal it.",
+          "if": {
+            "required": [
+              "case"
+            ],
+            "properties": {
+              "case": {
+                "required": [
+                  "numerics"
+                ],
+                "properties": {
+                  "numerics": {
+                    "required": [
+                      "dealias"
+                    ],
+                    "properties": {
+                      "dealias": {
+                        "const": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "optimization": {
+                "properties": {
+                  "objectives": {
+                    "items": {
+                      "if": {
+                        "required": [
+                          "type"
+                        ],
+                        "properties": {
+                          "type": {
+                            "const": "brinkman_dissipation"
+                          }
+                        }
+                      },
+                      "then": {
+                        "anyOf": [
+                          {
+                            "required": [
+                              "dealias_sensitivity",
+                              "dealias_forcing"
+                            ]
+                          },
+                          {
+                            "properties": {
+                              "dealias_sensitivity": {
+                                "const": true
+                              },
+                              "dealias_forcing": {
+                                "const": true
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "$comment": "brinkman_dissipation_objective.f90:150-162: both flags default to case.numerics.dealias and must end up equal, so a single flag must equal it.",
+          "if": {
+            "required": [
+              "case"
+            ],
+            "properties": {
+              "case": {
+                "required": [
+                  "numerics"
+                ],
+                "properties": {
+                  "numerics": {
+                    "required": [
+                      "dealias"
+                    ],
+                    "properties": {
+                      "dealias": {
+                        "const": false
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "optimization": {
+                "properties": {
+                  "objectives": {
+                    "items": {
+                      "if": {
+                        "required": [
+                          "type"
+                        ],
+                        "properties": {
+                          "type": {
+                            "const": "brinkman_dissipation"
+                          }
+                        }
+                      },
+                      "then": {
+                        "anyOf": [
+                          {
+                            "required": [
+                              "dealias_sensitivity",
+                              "dealias_forcing"
+                            ]
+                          },
+                          {
+                            "properties": {
+                              "dealias_sensitivity": {
+                                "const": false
+                              },
+                              "dealias_forcing": {
+                                "const": false
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "$comment": "scalar_mixing_objective_function.f90:171 aborts without an enabled adjoint scalar.",
+          "if": {
+            "required": [
+              "optimization"
+            ],
+            "properties": {
+              "optimization": {
+                "required": [
+                  "objectives"
+                ],
+                "properties": {
+                  "objectives": {
+                    "not": {
+                      "items": {
+                        "not": {
+                          "required": [
+                            "type"
+                          ],
+                          "properties": {
+                            "type": {
+                              "const": "scalar_mixing"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "case": {
+                "allOf": [
+                  {
+                    "required": [
+                      "adjoint_scalar"
+                    ],
+                    "properties": {
+                      "adjoint_scalar": {
+                        "not": {
+                          "required": [
+                            "enabled"
+                          ],
+                          "properties": {
+                            "enabled": {
+                              "const": false
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "$comment": "simulation.f90:283 aborts for an unsteady run with case.time.variable_timestep true.",
+          "if": {
+            "required": [
+              "unsteady"
+            ],
+            "properties": {
+              "unsteady": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "case": {
+                "properties": {
+                  "time": {
+                    "properties": {
+                      "variable_timestep": {
+                        "const": false
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "$comment": "Owner ruling 2026-11-16: a `steady` simulation component with `unsteady: true` is invalid. The rejection exists in the code only on an unmerged branch; steady_simcomp.f90:116-133 does not reject it yet.",
+          "if": {
+            "required": [
+              "unsteady"
+            ],
+            "properties": {
+              "unsteady": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "case": {
+                "properties": {
+                  "simulation_components": {
+                    "items": {
+                      "not": {
+                        "required": [
+                          "type"
+                        ],
+                        "properties": {
+                          "type": {
+                            "const": "steady"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
 }

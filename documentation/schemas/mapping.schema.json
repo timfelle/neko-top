@@ -1,0 +1,431 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:neko-top:schema:mapping",
+  "$defs": {
+    "linearMapping": {
+      "$comment": "sources/mapping_functions/linear_mapping.f90:80-81",
+      "description": "Linear map between `f_min` and `f_max`.",
+      "type": "object",
+      "required": [
+        "type",
+        "f_max"
+      ],
+      "properties": {
+        "type": {
+          "const": "linear"
+        },
+        "f_min": {
+          "description": "Lower bound of the mapped range. Default 0.0.",
+          "$ref": "urn:neko:schema:common#/$defs/realNumber"
+        },
+        "f_max": {
+          "description": "Upper bound of the mapped range (required). A real, or an array of reals that the continuation scheduler steps through.",
+          "$ref": "urn:neko-top:schema:common#/$defs/continuationReal"
+        },
+        "f_max_iterations": {
+          "description": "Iterations per step of the `f_max` array. Read only when `f_max` is an array; defaults to `optimization.solver.continuation_iterations`.",
+          "$ref": "urn:neko-top:schema:common#/$defs/continuationIterations"
+        }
+      },
+      "allOf": [
+        {
+          "$comment": "`f_max_iterations` is read only when `f_max` is an array (sources/continuation/continuation_scheduler.f90:152-155).",
+          "if": {
+            "required": [
+              "f_max"
+            ],
+            "properties": {
+              "f_max": {
+                "type": "array"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "f_max_iterations": false
+            }
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "SIMPMapping": {
+      "$comment": "sources/mapping_functions/SIMP_mapping.f90:86-89",
+      "description": "SIMP interpolation.",
+      "type": "object",
+      "required": [
+        "type",
+        "f_max"
+      ],
+      "properties": {
+        "type": {
+          "const": "SIMP"
+        },
+        "f_min": {
+          "description": "Lower bound of the mapped range. Default 0.0.",
+          "$ref": "urn:neko:schema:common#/$defs/realNumber"
+        },
+        "f_max": {
+          "description": "Upper bound of the mapped range (required). A real, or an array of reals that the continuation scheduler steps through.",
+          "$ref": "urn:neko-top:schema:common#/$defs/continuationReal"
+        },
+        "f_max_iterations": {
+          "description": "Iterations per step of the `f_max` array. Read only when `f_max` is an array; defaults to `optimization.solver.continuation_iterations`.",
+          "$ref": "urn:neko-top:schema:common#/$defs/continuationIterations"
+        },
+        "p": {
+          "description": "SIMP penalisation exponent. Default 1.0. A real, or an array of reals that the continuation scheduler steps through.",
+          "$ref": "urn:neko-top:schema:common#/$defs/continuationReal"
+        },
+        "p_iterations": {
+          "description": "Iterations per step of the `p` array. Read only when `p` is an array; defaults to `optimization.solver.continuation_iterations`.",
+          "$ref": "urn:neko-top:schema:common#/$defs/continuationIterations"
+        }
+      },
+      "allOf": [
+        {
+          "$comment": "`f_max_iterations` is read only when `f_max` is an array (sources/continuation/continuation_scheduler.f90:152-155).",
+          "if": {
+            "required": [
+              "f_max"
+            ],
+            "properties": {
+              "f_max": {
+                "type": "array"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "f_max_iterations": false
+            }
+          }
+        },
+        {
+          "$comment": "`p_iterations` is read only when `p` is an array (sources/continuation/continuation_scheduler.f90:152-155).",
+          "if": {
+            "required": [
+              "p"
+            ],
+            "properties": {
+              "p": {
+                "type": "array"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "p_iterations": false
+            }
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "RAMPMapping": {
+      "$comment": "RAMP_mapping.f90:106-107 aborts when the key `convex_up` is present (any value), so it is not a property here.",
+      "description": "RAMP interpolation. The key `convex_up` is not listed: any occurrence of it aborts.",
+      "type": "object",
+      "required": [
+        "type",
+        "f_max"
+      ],
+      "properties": {
+        "type": {
+          "const": "RAMP"
+        },
+        "f_min": {
+          "description": "Lower bound of the mapped range. Default 0.0.",
+          "$ref": "urn:neko:schema:common#/$defs/realNumber"
+        },
+        "f_max": {
+          "description": "Upper bound of the mapped range (required). A real, or an array of reals that the continuation scheduler steps through.",
+          "$ref": "urn:neko-top:schema:common#/$defs/continuationReal"
+        },
+        "f_max_iterations": {
+          "description": "Iterations per step of the `f_max` array. Read only when `f_max` is an array; defaults to `optimization.solver.continuation_iterations`.",
+          "$ref": "urn:neko-top:schema:common#/$defs/continuationIterations"
+        },
+        "q": {
+          "description": "RAMP penalisation parameter. Default 1.0. A real, or an array of reals that the continuation scheduler steps through.",
+          "$ref": "urn:neko-top:schema:common#/$defs/continuationReal"
+        },
+        "q_iterations": {
+          "description": "Iterations per step of the `q` array. Read only when `q` is an array; defaults to `optimization.solver.continuation_iterations`.",
+          "$ref": "urn:neko-top:schema:common#/$defs/continuationIterations"
+        }
+      },
+      "allOf": [
+        {
+          "$comment": "`f_max_iterations` is read only when `f_max` is an array (sources/continuation/continuation_scheduler.f90:152-155).",
+          "if": {
+            "required": [
+              "f_max"
+            ],
+            "properties": {
+              "f_max": {
+                "type": "array"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "f_max_iterations": false
+            }
+          }
+        },
+        {
+          "$comment": "`q_iterations` is read only when `q` is an array (sources/continuation/continuation_scheduler.f90:152-155).",
+          "if": {
+            "required": [
+              "q"
+            ],
+            "properties": {
+              "q": {
+                "type": "array"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "q_iterations": false
+            }
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "BorrvallPeterssonMapping": {
+      "$comment": "sources/mapping_functions/Borrvall_Petersson_mapping.f90:114-117",
+      "description": "Borrvall-Petersson interpolation.",
+      "type": "object",
+      "required": [
+        "type",
+        "f_max"
+      ],
+      "properties": {
+        "type": {
+          "const": "Borrvall_Petersson"
+        },
+        "f_min": {
+          "description": "Lower bound of the mapped range. Default 0.0.",
+          "$ref": "urn:neko:schema:common#/$defs/realNumber"
+        },
+        "f_max": {
+          "description": "Upper bound of the mapped range (required). A real, or an array of reals that the continuation scheduler steps through.",
+          "$ref": "urn:neko-top:schema:common#/$defs/continuationReal"
+        },
+        "f_max_iterations": {
+          "description": "Iterations per step of the `f_max` array. Read only when `f_max` is an array; defaults to `optimization.solver.continuation_iterations`.",
+          "$ref": "urn:neko-top:schema:common#/$defs/continuationIterations"
+        },
+        "q": {
+          "description": "Borrvall-Petersson penalisation parameter. Default 1.0. A real, or an array of reals that the continuation scheduler steps through.",
+          "$ref": "urn:neko-top:schema:common#/$defs/continuationReal"
+        },
+        "q_iterations": {
+          "description": "Iterations per step of the `q` array. Read only when `q` is an array; defaults to `optimization.solver.continuation_iterations`.",
+          "$ref": "urn:neko-top:schema:common#/$defs/continuationIterations"
+        }
+      },
+      "allOf": [
+        {
+          "$comment": "`f_max_iterations` is read only when `f_max` is an array (sources/continuation/continuation_scheduler.f90:152-155).",
+          "if": {
+            "required": [
+              "f_max"
+            ],
+            "properties": {
+              "f_max": {
+                "type": "array"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "f_max_iterations": false
+            }
+          }
+        },
+        {
+          "$comment": "`q_iterations` is read only when `q` is an array (sources/continuation/continuation_scheduler.f90:152-155).",
+          "if": {
+            "required": [
+              "q"
+            ],
+            "properties": {
+              "q": {
+                "type": "array"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "q_iterations": false
+            }
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "heavisideMapping": {
+      "$comment": "heaviside_mapping.f90:94-96 reads eta, beta; :112 aborts for an initial beta <= 0 (only the first element of an array is checked, which the schema cannot express), :116 aborts for eta outside [0, 1]. mapping_fctry.f90 accepts both type names.",
+      "description": "Smoothed Heaviside projection; `heaviside_projection` is an alias of `heaviside_mapping`.",
+      "type": "object",
+      "required": [
+        "type",
+        "beta"
+      ],
+      "properties": {
+        "type": {
+          "enum": [
+            "heaviside_mapping",
+            "heaviside_projection"
+          ]
+        },
+        "eta": {
+          "description": "Projection threshold, in [0, 1]. Default 0.5.",
+          "type": "number",
+          "x-neko-real": true,
+          "minimum": 0,
+          "maximum": 1
+        },
+        "beta": {
+          "description": "Projection sharpness (required). The first value must be > 0. A real, or an array of reals that the continuation scheduler steps through.",
+          "oneOf": [
+            {
+              "$ref": "urn:neko:schema:common#/$defs/positiveRealNumber"
+            },
+            {
+              "$ref": "urn:neko:schema:common#/$defs/numberArray"
+            }
+          ]
+        },
+        "beta_iterations": {
+          "description": "Iterations per step of the `beta` array. Read only when `beta` is an array; defaults to `optimization.solver.continuation_iterations`.",
+          "$ref": "urn:neko-top:schema:common#/$defs/continuationIterations"
+        }
+      },
+      "allOf": [
+        {
+          "$comment": "`beta_iterations` is read only when `beta` is an array (sources/continuation/continuation_scheduler.f90:152-155).",
+          "if": {
+            "required": [
+              "beta"
+            ],
+            "properties": {
+              "beta": {
+                "type": "array"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "beta_iterations": false
+            }
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "PDEFilterMapping": {
+      "$comment": "sources/mapping_functions/PDE_filter_mapping.f90:136-141",
+      "description": "Helmholtz-type PDE filter.",
+      "type": "object",
+      "required": [
+        "type",
+        "r"
+      ],
+      "properties": {
+        "type": {
+          "const": "PDE_filter"
+        },
+        "r": {
+          "description": "Filter radius (required). A real, or an array of reals that the continuation scheduler steps through.",
+          "$ref": "urn:neko-top:schema:common#/$defs/continuationReal"
+        },
+        "r_iterations": {
+          "description": "Iterations per step of the `r` array. Read only when `r` is an array; defaults to `optimization.solver.continuation_iterations`.",
+          "$ref": "urn:neko-top:schema:common#/$defs/continuationIterations"
+        },
+        "tol": {
+          "description": "Tolerance of the filter solve. Default 1.0e-10.",
+          "$ref": "urn:neko:schema:common#/$defs/realNumber"
+        },
+        "max_iter": {
+          "description": "Maximum iterations of the filter solve. Default 200.",
+          "type": "integer"
+        },
+        "solver": {
+          "description": "Krylov solver of the filter. Default `cg`.",
+          "$comment": "The coupled solvers are accepted by the factory and then abort on the first single-field solve (neko src/krylov/bcknd/cpu/cg_coupled.f90:178, via PDE_filter_mapping.f90:290). `fused_cg` aborts on a CPU build only (krylov_fctry.f90:168), so it is accepted here.",
+          "$ref": "urn:neko:schema:common#/$defs/nonEmptyString",
+          "not": {
+            "enum": [
+              "coupled_cg",
+              "fused_coupled_cg",
+              "coupled_bicgstab"
+            ]
+          }
+        },
+        "preconditioner": {
+          "description": "Preconditioner of the filter solve. Default `jacobi`.",
+          "$comment": "filter_precon_factory initialises only the Jacobi preconditioner (PDE_filter_mapping.f90:436-460); `hsmg` and `phmg` would be allocated without being initialised.",
+          "enum": [
+            "jacobi",
+            "ident"
+          ]
+        },
+        "strict_convergence": {
+          "description": "Abort if a filter solve does not converge. Default false.",
+          "type": "boolean"
+        }
+      },
+      "allOf": [
+        {
+          "$comment": "`r_iterations` is read only when `r` is an array (sources/continuation/continuation_scheduler.f90:152-155).",
+          "if": {
+            "required": [
+              "r"
+            ],
+            "properties": {
+              "r": {
+                "type": "array"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "r_iterations": false
+            }
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "mapping": {
+      "description": "One entry of a mapping cascade, discriminated by `type` (the cases of mapping_factory).",
+      "$comment": "Factory: sources/mapping_functions/mapping_fctry.f90:68-84 (no fallback: unknown types abort).",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/linearMapping"
+        },
+        {
+          "$ref": "#/$defs/SIMPMapping"
+        },
+        {
+          "$ref": "#/$defs/RAMPMapping"
+        },
+        {
+          "$ref": "#/$defs/BorrvallPeterssonMapping"
+        },
+        {
+          "$ref": "#/$defs/heavisideMapping"
+        },
+        {
+          "$ref": "#/$defs/PDEFilterMapping"
+        }
+      ]
+    }
+  }
+}

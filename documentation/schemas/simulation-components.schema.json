@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:neko-top:schema:simulation-components",
+  "$defs": {
+    "simulationComponentAdditions": {
+      "description": "Overlay for the simulation components that Neko-TOP registers, applied to every entry of `case.simulation_components`.",
+      "$comment": "sources/simulation_components/neko_top_simcomps.f90:54 registers `steady`. Neko's registered-type fallback admits it; the overlay types its keys.",
+      "if": {
+        "required": [
+          "type"
+        ],
+        "properties": {
+          "type": {
+            "const": "steady"
+          }
+        }
+      },
+      "then": {
+        "$ref": "urn:neko-top:schema:simcomps:steady#/$defs/simulationComponent"
+      }
+    }
+  }
+}

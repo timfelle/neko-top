@@ -9,8 +9,9 @@ The Neko-TOP schemas extend Neko's, so the registry holds the schemas of both
 projects, each keyed by its declared `$id`. Neko's schemas are not copied: they
 are read from a Neko install (or source tree) found at run time.
 
-Exit codes: 0 all files valid, 1 a file failed, 2 usage error, 3 Neko's
-schemas are missing or incompatible with Neko-TOP's.
+Exit codes: 0 all files valid, 1 a file failed (or Neko-TOP's own schemas
+are broken, see TopSchemaError), 2 usage error, 3 Neko's schemas are missing
+or too old for Neko-TOP's.
 """
 
 from __future__ import annotations
@@ -48,7 +49,21 @@ EXIT_OK, EXIT_FAILED, EXIT_USAGE, EXIT_SCHEMAS = 0, 1, 2, 3
 
 
 class SchemaSetupError(Exception):
-    """The schemas are missing, malformed or incompatible (exit code 3)."""
+    """The schemas are missing, malformed or too old (exit code 3).
+
+    Raised when Neko's schemas cannot be used: not found, not valid, or
+    lacking the registered-type fallback that Neko-TOP's schemas rely on, so
+    that the fault is in the Neko found rather than in Neko-TOP's schemas.
+    """
+
+
+class TopSchemaError(Exception):
+    """Neko-TOP's own schemas are broken (exit code 1).
+
+    Raised when Neko's schemas do have the registered-type fallback, so they
+    are new enough, yet a Neko-TOP schema refers to a Neko schema or
+    definition that does not exist: a mistake in Neko-TOP's schemas.
+    """
 
 
 # --------------------------------------------------------------------------- #
@@ -254,14 +269,24 @@ def make_validator(registry: Registry, schemas: dict[str, Any], root: str):
     )
 
 
-def probe(registry: Registry, schemas: dict[str, Any]) -> list[str]:
+def probe(
+    registry: Registry, schemas: dict[str, Any]
+) -> tuple[list[str], list[str]]:
     """Check Neko's schemas are compatible with Neko-TOP's.
 
-    Returns the problems found (empty when compatible): a Neko definition
-    referenced by a Neko-TOP schema that does not exist, or Neko's simcomp
-    union lacking the registered-type fallback that admits `steady`.
+    Returns `(too_old, typos)`, both empty when compatible.
+
+    `too_old` holds the problems that mean the Neko found is not new enough:
+    its simulation-component union lacks the registered-type fallback that
+    admits `steady`. When that is the case a Neko definition that Neko-TOP
+    refers to is expected to be missing too, so such references are listed
+    there as well.
+
+    `typos` holds, only for a Neko that has the fallback, the references from
+    a Neko-TOP schema to a Neko schema or definition that does not exist.
+    That is a mistake in Neko-TOP's schemas, not a Neko that is too old.
     """
-    problems: list[str] = []
+    missing: list[str] = []
     for schema_id, schema in schemas.items():
         if not schema_id.startswith(TOP_PREFIX):
             continue
@@ -270,28 +295,31 @@ def probe(registry: Registry, schemas: dict[str, Any]) -> list[str]:
                 continue
             target, _, fragment = ref.partition("#")
             if target not in schemas:
-                problems.append(f"{schema_id}: {ref}: no such Neko schema")
+                missing.append(f"{schema_id}: {ref}: no such Neko schema")
                 continue
             if not fragment:
                 continue
             try:
                 registry.resolver(base_uri=target).lookup("#" + fragment)
             except Exception:  # noqa: BLE001 - any lookup failure counts
-                problems.append(f"{schema_id}: {ref}: no such Neko definition")
+                missing.append(f"{schema_id}: {ref}: no such Neko definition")
+    too_old: list[str] = []
     cls = strict_validator_class()
     union = cls({"$ref": SIMCOMP_UNION}, registry=registry)
     try:
         accepted = union.is_valid({"type": "steady"})
     except Exception as exc:  # noqa: BLE001
-        problems.append(f"{SIMCOMP_UNION}: cannot be evaluated: {exc}")
+        too_old.append(f"{SIMCOMP_UNION}: cannot be evaluated: {exc}")
     else:
         if not accepted:
-            problems.append(
+            too_old.append(
                 f"{SIMCOMP_UNION} rejects {{'type': 'steady'}}: Neko's "
                 "schemas lack the registered-type fallback for simulation "
                 "components."
             )
-    return problems
+    if too_old:
+        return too_old + missing, []
+    return [], missing
 
 
 def load_all(
@@ -303,11 +331,17 @@ def load_all(
     neko_dir, neko_src = find_neko_schema_dir(neko_schema_dir)
     top_dir, top_src = find_top_schema_dir(schema_dir)
     registry, schemas = load_registry(neko_dir, top_dir)
-    problems = probe(registry, schemas)
-    if problems:
+    too_old, typos = probe(registry, schemas)
+    if too_old:
         raise SchemaSetupError(
-            f"Neko's schemas in {neko_dir} are incompatible with Neko-TOP's:\n"
-            + "\n".join("  " + p for p in problems)
+            f"Neko's schemas in {neko_dir} are too old for Neko-TOP's:\n"
+            + "\n".join("  " + p for p in too_old)
+        )
+    if typos:
+        raise TopSchemaError(
+            f"Neko-TOP's schemas in {top_dir} refer to Neko schemas that "
+            f"{neko_dir} does not have, although it has the registered-type "
+            "fallback:\n" + "\n".join("  " + p for p in typos)
         )
     return argparse.Namespace(
         registry=registry, schemas=schemas,
@@ -493,6 +527,9 @@ def main(argv: list[str] | None = None) -> int:
     except SchemaSetupError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return EXIT_SCHEMAS
+    except TopSchemaError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_FAILED
     try:
         case_files = iter_case_files(args.paths)
     except FileNotFoundError as exc:

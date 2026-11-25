@@ -160,3 +160,110 @@ def test_root_delegates_to_neko(validator):
     """The collected root accepts and rejects what Neko's root does."""
     assert not validator.is_valid({})
     assert not validator.is_valid({"case": 1})
+
+
+# --------------------------------------------------------------------------- #
+# Reuse of Neko's definitions
+# --------------------------------------------------------------------------- #
+ANNOTATION_STRINGS = {"description", "$comment", "title"}
+ANNOTATIONS_DROPPED = {"default", "examples", "deprecated", "format"}
+
+#: Subschemas of Neko-TOP's schemas that equal a Neko definition without
+#: copying it: (schema id, path) -> why. Empty unless a coincidence is real.
+ALLOWED_COINCIDENCES: dict[tuple[str, str], str] = {}
+
+
+def normalised(node: Any, base: str) -> Any:
+    """`node` without annotations and with local refs made absolute."""
+    if isinstance(node, dict):
+        out = {}
+        for key, value in node.items():
+            if key in ANNOTATIONS_DROPPED:
+                continue
+            if key in ANNOTATION_STRINGS and isinstance(value, str):
+                continue
+            if key == "$ref" and isinstance(value, str) \
+                    and value.startswith("#"):
+                value = base + value
+            if key in ("const", "enum", "required"):
+                out[key] = value
+            else:
+                out[key] = normalised(value, base)
+        return out
+    if isinstance(node, list):
+        return [normalised(item, base) for item in node]
+    return node
+
+
+def neko_definitions(schemas):
+    out = {}
+    for schema_id, schema in schemas.items():
+        if schema_id.startswith(vcs.NEKO_PREFIX):
+            for name, definition in schema.get("$defs", {}).items():
+                out[f"{schema_id}#/$defs/{name}"] = normalised(
+                    definition, schema_id)
+    return out
+
+
+def test_no_copied_neko_definitions(schemas, top_schemas):
+    """A subschema that equals one of Neko's definitions is a `$ref` to it,
+    not a copy (a bare `$ref` is the reuse and is skipped)."""
+    neko = neko_definitions(schemas)
+    copies = []
+    for schema_id, schema in top_schemas.items():
+        for path, sub in walk(schema):
+            if "$ref" in sub or len(sub) == 0:
+                continue
+            flat = normalised(sub, schema_id)
+            if not flat:
+                continue
+            for ref, definition in neko.items():
+                if flat == definition and \
+                        (schema_id, path) not in ALLOWED_COINCIDENCES:
+                    copies.append(f"{schema_id} {path} equals {ref}")
+    assert not copies, "\n".join(copies)
+
+
+def test_the_copy_check_can_fail(schemas):
+    """A schema holding a copy of a Neko definition is reported."""
+    neko = neko_definitions(schemas)
+    copy_of = dict(schemas[vcs.NEKO_PREFIX + "common"]["$defs"][
+        "positiveInteger"])
+    flat = normalised({"description": "mine", **copy_of}, "urn:x")
+    assert any(flat == definition for definition in neko.values())
+
+
+# The Neko objects that Neko-TOP adds keys under. They are open in Neko
+# (`additionalProperties` true), as they have to be for the additions to be
+# accepted by Neko's own root as well: (schema, definition or None for the
+# root, what Neko-TOP adds there).
+EXTENSION_POINTS = [
+    ("case-file", None, "optimization, unsteady, state_recovery, ..."),
+    ("case-file", "case", "adjoint_fluid, adjoint_scalar, ..."),
+    ("fluid", "fluid", "freeze_flow, source_terms overlay"),
+    ("scalar", "scalarField", "source_terms overlay"),
+    ("simulation-components", "simcompBase", "steady's keys"),
+]
+
+
+@pytest.mark.parametrize("schema, name, what", EXTENSION_POINTS,
+                         ids=[f"{s}:{n or 'root'}" for s, n, _ in
+                              EXTENSION_POINTS])
+def test_extension_points_are_open_in_neko(schemas, schema, name, what):
+    node = schemas[vcs.NEKO_PREFIX + schema]
+    if name is not None:
+        node = node["$defs"][name]
+    assert node.get("additionalProperties") is True, (
+        f"Neko's {schema} {name or 'root'} is closed: Neko-TOP cannot add "
+        f"{what} below it without widening it")
+
+
+def test_neko_top_does_not_add_keys_under_closed_neko_objects(
+        schemas, top_schemas):
+    """The only Neko objects Neko-TOP's `properties` land on are the open
+    ones listed above: `case.numerics` is closed in Neko and gets no key."""
+    numerics = schemas[vcs.NEKO_PREFIX + "numerics"]["$defs"]["numerics"]
+    assert numerics["additionalProperties"] is False
+    root = top_schemas[vcs.TOP_PREFIX + "case-file"]
+    case = root["$defs"]["case"]["properties"]
+    assert "numerics" not in case and "time" not in case

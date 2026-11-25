@@ -29,6 +29,8 @@ def loaded():
         if os.environ.get("NEKO_TOP_REQUIRE_SCHEMA_TESTS") == "1":
             pytest.fail(str(exc), pytrace=False)
         pytest.skip(str(exc))
+    except vcs.TopSchemaError as exc:
+        pytest.fail(str(exc), pytrace=False)
 
 
 @pytest.fixture(scope="session")
@@ -56,3 +58,9 @@ def top_dir(loaded):
 @pytest.fixture(scope="session")
 def top_schemas(schemas):
     return {k: v for k, v in schemas.items() if k.startswith(vcs.TOP_PREFIX)}
+
+
+@pytest.fixture(scope="session")
+def neko_validator(registry, schemas):
+    """Validator for Neko's own root, with the same registry."""
+    return vcs.make_validator(registry, schemas, "neko")

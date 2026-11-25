@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:neko-top:schema:simcomps:steady",
+  "$defs": {
+    "keys": {
+      "description": "Keys of the `steady` simulation component.",
+      "$comment": "sources/simulation_components/steady_simcomp.f90:126-129",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "steady"
+        },
+        "tol": {
+          "description": "Convergence tolerance on the change per step. Default 1.0e-6.",
+          "$ref": "urn:neko:schema:common#/$defs/realNumber"
+        },
+        "log_frequency": {
+          "description": "Steps between log lines; at least 1. Default 50.",
+          "$comment": "steady_simcomp.f90:276 takes a modulo by it, so 0 divides by zero.",
+          "$ref": "urn:neko:schema:common#/$defs/positiveInteger"
+        },
+        "scalar_coupled": {
+          "description": "Include the scalar in the convergence test. Default false.",
+          "type": "boolean"
+        }
+      }
+    },
+    "simulationComponent": {
+      "allOf": [
+        {
+          "$ref": "urn:neko:schema:simulation-components#/$defs/simcompBase"
+        },
+        {
+          "$ref": "#/$defs/keys"
+        }
+      ]
+    }
+  }
+}

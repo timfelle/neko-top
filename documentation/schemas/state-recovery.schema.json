@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:neko-top:schema:state-recovery",
+  "$defs": {
+    "stateRecovery": {
+      "description": "`state_recovery`: how the forward state is recovered for the adjoint of an unsteady run.",
+      "$comment": "sources/state_recovery/state_recover_fctry.f90:54-75, sources/state_recovery/checkpoint/checkpoint.f90:152-161.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "description": "`checkpoint`, or its alias `simulation_checkpoint`. Default `checkpoint`.",
+          "enum": [
+            "checkpoint",
+            "simulation_checkpoint"
+          ]
+        },
+        "algorithm": {
+          "description": "Checkpointing strategy; only the linear one exists. Default `linear`.",
+          "$comment": "checkpoint.f90:220",
+          "enum": [
+            "linear",
+            "LINEAR",
+            "Linear"
+          ]
+        },
+        "n_memory": {
+          "description": "Checkpoints kept in memory; at least 1. Default 10.",
+          "$comment": "checkpoint_linear.f90:69: 0 divides by zero on the first save; checkpoint.f90:425: a negative value allocates no slots and fails later.",
+          "$ref": "urn:neko:schema:common#/$defs/positiveInteger"
+        },
+        "path": {
+          "description": "Directory of the checkpoint files. Default `checkpoints/`.",
+          "type": "string"
+        },
+        "filename": {
+          "description": "File name base. Default `checkpoint`.",
+          "type": "string"
+        },
+        "format": {
+          "description": "`chkp` or `hdf5`. Default `chkp`.",
+          "enum": [
+            "chkp",
+            "hdf5"
+          ]
+        },
+        "keep_checkpoints": {
+          "description": "Keep the files after the run. Default false.",
+          "type": "boolean"
+        },
+        "extra_fields": {
+          "description": "Names of further registered fields to checkpoint. They must exist when the simulation is initialised.",
+          "type": "array",
+          "items": {
+            "$ref": "urn:neko:schema:common#/$defs/nonEmptyString"
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

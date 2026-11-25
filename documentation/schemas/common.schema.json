@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:neko-top:schema:common",
+  "$defs": {
+    "continuationReal": {
+      "$comment": "Read by json_get_or_register: a JSON real, or an array of JSON reals. An integer, string (no constants lookup for the scalar form), boolean or object aborts (continuation_scheduler.f90:160); array elements must be reals (case_file_utils.f90:347 in Neko); an empty array reads values(1) of a zero-size array (continuation_scheduler.f90:153).",
+      "description": "A real, or a non-empty array of reals stepped through by the continuation scheduler.",
+      "oneOf": [
+        {
+          "$ref": "urn:neko:schema:common#/$defs/realNumber"
+        },
+        {
+          "$ref": "urn:neko:schema:common#/$defs/numberArray"
+        }
+      ]
+    },
+    "continuationIterations": {
+      "$comment": "Read with json_get_or_default (integer variant): a JSON integer, no constants lookup (continuation_scheduler.f90:155). Values <= 0 are accepted and disable the schedule (continuation_scheduler.f90:248).",
+      "type": "integer"
+    },
+    "pointZoneName": {
+      "$comment": "Passed to the point-zone registry as is; an empty string means no mask (sources/problem/objective.f90:151).",
+      "type": "string"
+    }
+  }
+}

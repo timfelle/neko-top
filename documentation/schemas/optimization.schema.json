@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:neko-top:schema:optimization",
+  "$defs": {
+    "optimization": {
+      "description": "The `optimization` object of the topology optimisation drivers.",
+      "$comment": "sources/drivers/topopt.f90:84 (design), sources/optimizer/optimizer_factory.f90:79 (solver), sources/problem/problem.f90:339-391,359.",
+      "type": "object",
+      "required": [
+        "design",
+        "solver"
+      ],
+      "properties": {
+        "design": {
+          "$ref": "urn:neko-top:schema:design#/$defs/design"
+        },
+        "solver": {
+          "$ref": "urn:neko-top:schema:optimizer#/$defs/solver"
+        },
+        "objectives": {
+          "description": "Objective functions.",
+          "type": "array",
+          "items": {
+            "$ref": "urn:neko-top:schema:objectives#/$defs/objective"
+          }
+        },
+        "constraints": {
+          "description": "Constraints.",
+          "type": "array",
+          "items": {
+            "$ref": "urn:neko-top:schema:constraints#/$defs/constraint"
+          }
+        },
+        "augmented_lagrangian": {
+          "description": "Augmented Lagrangian settings.",
+          "type": "object",
+          "properties": {
+            "dealias_sensitivity": {
+              "description": "Dealias the sensitivity. Default `case.numerics.dealias`.",
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        },
+        "fd_test_tolerance": {
+          "description": "Read only by the sensitivity test drivers (tests/unit/sensitivity/problem_tester.f90:75): tolerance of the finite-difference check.",
+          "$ref": "urn:neko:schema:common#/$defs/realNumber"
+        },
+        "fd_test_continuation_iteration": {
+          "description": "Read only by the sensitivity test driver (tests/unit/sensitivity/problem_tester.f90:79): continuation iteration to test at. Default 0.",
+          "type": "integer"
+        },
+        "time_window_test": {
+          "description": "Read only by the time-window test driver (tests/unit/objectives/time_window_tester.f90:107-147).",
+          "type": "object",
+          "properties": {
+            "tolerance": {
+              "description": "Default 1.0e-12.",
+              "$ref": "urn:neko:schema:common#/$defs/realNumber"
+            },
+            "pairwise": {
+              "description": "Default false.",
+              "type": "boolean"
+            },
+            "compare_steady": {
+              "description": "Default false.",
+              "type": "boolean"
+            },
+            "require_steady_state": {
+              "description": "Default false.",
+              "type": "boolean"
+            },
+            "end_times": {
+              "description": "Window end times. Default `[case.time.end_time]`.",
+              "$ref": "urn:neko:schema:common#/$defs/numberArray"
+            }
+          },
+          "additionalProperties": false
+        },
+        "zero_fields": {
+          "description": "Read only by the user module of examples/wiggles (examples/wiggles/user.f90:58). Default false.",
+          "type": "boolean"
+        }
+      },
+      "allOf": [
+        {
+          "$comment": "steepest_descent_optimizer.f90:182 aborts when the problem has any constraint.",
+          "if": {
+            "required": [
+              "solver"
+            ],
+            "properties": {
+              "solver": {
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "const": "steepest_descent"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "constraints": {
+                "maxItems": 0
+              }
+            }
+          }
+        }
+      ],
+      "additionalProperties": false
+    }
+  }
+}

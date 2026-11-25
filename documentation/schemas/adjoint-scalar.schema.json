@@ -1,0 +1,159 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:neko-top:schema:adjoint-scalar",
+  "$defs": {
+    "boundaryCondition": {
+      "description": "A boundary condition of the adjoint scalar.",
+      "$comment": "Factory: sources/adjoint/adjoint_scalar_pnpn_bc_fctry.f90:73-91 (no fallback). `dirichlet` and `neumann` are read by Neko's classes, so Neko's union is reused; its `user_dirichlet` and the other types are not factory cases here. The adjoint's `user` type is not in Neko's union and is a branch of its own (the factory fills in `field_name`).",
+      "oneOf": [
+        {
+          "allOf": [
+            {
+              "$ref": "urn:neko:schema:scalar#/$defs/scalarBoundaryCondition"
+            },
+            {
+              "required": [
+                "type",
+                "zone_indices"
+              ],
+              "properties": {
+                "type": {
+                  "enum": [
+                    "dirichlet",
+                    "neumann"
+                  ]
+                },
+                "zone_indices": {
+                  "description": "Zone indices, a literal array of JSON integers.",
+                  "$ref": "urn:neko:schema:common#/$defs/integerArray"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "zone_indices"
+          ],
+          "properties": {
+            "type": {
+              "const": "user"
+            },
+            "zone_indices": {
+              "description": "Zone indices, a literal array of JSON integers.",
+              "$ref": "urn:neko:schema:common#/$defs/integerArray"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "solver": {
+      "description": "Solver of the adjoint scalar. Each key that is absent here is read from `case.scalar.solver`.",
+      "$comment": "Neko's linear solver objects are open (registered Krylov types define their own keys), so this one is too. sources/adjoint/adjoint_scalar_scheme.f90:288-316,376-385.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "description": "Krylov solver type. Falls back to `case.scalar.solver.type`.",
+          "$ref": "urn:neko:schema:common#/$defs/nonEmptyString"
+        },
+        "preconditioner": {
+          "description": "Preconditioner. Falls back to `case.scalar.solver.preconditioner`.",
+          "$ref": "urn:neko:schema:common#/$defs/preconditioner"
+        },
+        "absolute_tolerance": {
+          "description": "Absolute tolerance, a JSON real (no constants name).",
+          "$ref": "urn:neko:schema:common#/$defs/realNumber"
+        },
+        "max_iterations": {
+          "description": "Maximum iterations, a JSON integer (no constants name). Default `case.scalar.solver.max_iterations`, else 1000.",
+          "$ref": "urn:neko:schema:common#/$defs/positiveInteger"
+        },
+        "monitor": {
+          "description": "Monitor the solve. Default false.",
+          "type": "boolean"
+        },
+        "projection_space_size": {
+          "description": "Projection space size, a JSON integer (no constants name). Default 0.",
+          "type": "integer"
+        },
+        "projection_hold_steps": {
+          "description": "Projection hold steps, a JSON integer (no constants name). Default 5.",
+          "type": "integer"
+        }
+      },
+      "additionalProperties": true
+    },
+    "adjointScalar": {
+      "description": "`case.adjoint_scalar`: the adjoint of the scalar transport equation (a single scalar).",
+      "$comment": "sources/adjoint/adjoint_case.f90:175-219, adjoint_scalar_scheme.f90, adjoint_scalar_pnpn.f90, neko_ext/neko_ext.f90:399-450.",
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "description": "Enable the adjoint scalar. Default true.",
+          "type": "boolean"
+        },
+        "primal_name": {
+          "description": "Name of the primal scalar field; must equal `case.scalar.name`. Default `s`.",
+          "$ref": "urn:neko:schema:common#/$defs/nonEmptyString"
+        },
+        "name": {
+          "description": "Name of the adjoint scalar. Default `<primal_name>_adj`.",
+          "$ref": "urn:neko:schema:common#/$defs/nonEmptyString"
+        },
+        "solver": {
+          "$ref": "#/$defs/solver"
+        },
+        "variable_material_properties": false,
+        "advection": {
+          "description": "Advection of the adjoint scalar. Default true.",
+          "type": "boolean"
+        },
+        "dealias_coupling_term": {
+          "description": "Dealias the coupling term of the adjoint momentum equation. Default `case.numerics.dealias`, else true.",
+          "type": "boolean"
+        },
+        "boundary_conditions": {
+          "description": "Adjoint scalar boundary conditions; every labelled zone of the mesh needs exactly one.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/boundaryCondition"
+          }
+        },
+        "initial_condition": {
+          "description": "Initial condition of the adjoint scalar (required; reset every design iteration).",
+          "allOf": [
+            {
+              "$ref": "urn:neko:schema:scalar#/$defs/scalarInitialCondition"
+            },
+            {
+              "$comment": "adjoint_case.f90:332 and neko_ext.f90:438 abort on a `user` adjoint scalar initial condition.",
+              "required": [
+                "type"
+              ],
+              "properties": {
+                "type": {
+                  "enum": [
+                    "uniform",
+                    "expression",
+                    "point_zone",
+                    "field"
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "$comment": "adjoint_case.f90:309-312 and neko_ext.f90:420-423 read initial_condition.type of an enabled adjoint scalar without a default.",
+          "$ref": "urn:neko:schema:scalar#/$defs/scalarInitialConditionRequired"
+        }
+      ],
+      "additionalProperties": false
+    }
+  }
+}

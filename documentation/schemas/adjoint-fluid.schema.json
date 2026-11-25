@@ -1,0 +1,333 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:neko-top:schema:adjoint-fluid",
+  "$defs": {
+    "boundaryCondition": {
+      "description": "A boundary condition of the adjoint velocity and pressure.",
+      "$comment": "Factories: sources/adjoint/adjoint_fluid_pnpn_bc_fctry.f90:87-109 (pressure) and :149-191 (velocity); keys are read by Neko's boundary condition classes, so the Neko union is reused. `symmetry` (adjoint_fluid_pnpn.f90:1042), `shear_stress` and `wall_model` (:1061) abort and are not listed. `user_velocity_pointwise` is a known type whose factory branch is commented out (adjoint_fluid_pnpn_bc_fctry.f90:178): it is accepted and does nothing. Neko's union has no such type, so it is a branch of its own.",
+      "oneOf": [
+        {
+          "allOf": [
+            {
+              "$ref": "urn:neko:schema:fluid-pnpn-boundary-conditions#/$defs/fluidPnpnBoundaryCondition"
+            },
+            {
+              "required": [
+                "type",
+                "zone_indices"
+              ],
+              "properties": {
+                "type": {
+                  "enum": [
+                    "velocity_value",
+                    "no_slip",
+                    "outflow",
+                    "normal_outflow",
+                    "outflow+dong",
+                    "normal_outflow+dong",
+                    "user_velocity",
+                    "user_pressure",
+                    "blasius_profile"
+                  ]
+                },
+                "zone_indices": {
+                  "description": "Zone indices, a literal array of JSON integers (a constants name is not accepted).",
+                  "$ref": "urn:neko:schema:common#/$defs/integerArray"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "zone_indices"
+          ],
+          "properties": {
+            "type": {
+              "const": "user_velocity_pointwise"
+            },
+            "zone_indices": {
+              "description": "Zone indices, a literal array of JSON integers (a constants name is not accepted).",
+              "$ref": "urn:neko:schema:common#/$defs/integerArray"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "velocitySolver": {
+      "description": "Solver of the adjoint velocity. Each key that is absent here is read from `case.fluid.velocity_solver`.",
+      "$comment": "Neko's linear solver objects are open (registered Krylov types define their own keys), so this one is too. sources/adjoint/adjoint_fluid_scheme_incompressible.f90:211-336.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "description": "Krylov solver type. Falls back to `case.fluid.velocity_solver.type`.",
+          "$ref": "urn:neko:schema:common#/$defs/nonEmptyString"
+        },
+        "preconditioner": {
+          "description": "Preconditioner. Falls back to `case.fluid.velocity_solver.preconditioner`.",
+          "$ref": "urn:neko:schema:common#/$defs/preconditioner"
+        },
+        "absolute_tolerance": {
+          "description": "Absolute tolerance, a JSON real (no constants name).",
+          "$ref": "urn:neko:schema:common#/$defs/realNumber"
+        },
+        "max_iterations": {
+          "description": "Maximum iterations, a JSON integer (no constants name). Default 1000 for the velocity solver.",
+          "$ref": "urn:neko:schema:common#/$defs/positiveInteger"
+        },
+        "monitor": {
+          "description": "Monitor the solve. Default false.",
+          "type": "boolean"
+        },
+        "projection_space_size": {
+          "description": "Projection space size, a JSON integer (no constants name). Default 0.",
+          "type": "integer"
+        },
+        "projection_hold_steps": {
+          "description": "Projection hold steps, a JSON integer (no constants name). Default 5.",
+          "type": "integer"
+        }
+      },
+      "additionalProperties": true
+    },
+    "pressureSolver": {
+      "description": "Projection settings of the adjoint pressure solver; all other pressure solver keys come from `case.fluid.pressure_solver`.",
+      "$comment": "sources/adjoint/adjoint_fluid_scheme_incompressible.f90:215-229.",
+      "type": "object",
+      "properties": {
+        "projection_space_size": {
+          "description": "Projection space size, a JSON integer (no constants name). Default 0.",
+          "type": "integer"
+        },
+        "projection_hold_steps": {
+          "description": "Projection hold steps, a JSON integer (no constants name). Default 5.",
+          "type": "integer"
+        }
+      },
+      "additionalProperties": false
+    },
+    "adjointFluid": {
+      "description": "`case.adjoint_fluid`: the adjoint of the incompressible Navier-Stokes solver.",
+      "$comment": "sources/adjoint/adjoint_case.f90, adjoint_fluid_pnpn.f90, adjoint_fluid_scheme_incompressible.f90, neko_ext/neko_ext.f90:356-450.",
+      "type": "object",
+      "required": [
+        "initial_condition"
+      ],
+      "properties": {
+        "initial_condition": {
+          "description": "Initial condition of the adjoint fluid (required; reset every design iteration, with no fallback to `case.fluid`).",
+          "allOf": [
+            {
+              "$ref": "urn:neko:schema:fluid#/$defs/fluidInitialCondition"
+            },
+            {
+              "$comment": "neko_ext.f90:356-373 (reset_adjoint) reads the type with no fallback and aborts on `user` (:372).",
+              "required": [
+                "type"
+              ],
+              "properties": {
+                "type": {
+                  "enum": [
+                    "uniform",
+                    "expression",
+                    "blasius",
+                    "point_zone",
+                    "field"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "boundary_conditions": {
+          "description": "Adjoint boundary conditions; every labelled zone of the mesh needs exactly one.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/boundaryCondition"
+          }
+        },
+        "velocity_solver": {
+          "$ref": "#/$defs/velocitySolver"
+        },
+        "pressure_solver": {
+          "$ref": "#/$defs/pressureSolver"
+        },
+        "freeze": {
+          "description": "Freeze the adjoint flow at initialisation. Default `case.fluid.freeze`.",
+          "type": "boolean"
+        },
+        "freeze_flow": {
+          "description": "Freeze the adjoint flow at every design iteration. Default false.",
+          "type": "boolean"
+        },
+        "source_term": {
+          "description": "Source terms of the adjoint momentum equation (note the singular key).",
+          "type": "array",
+          "items": {
+            "allOf": [
+              {
+                "$ref": "urn:neko:schema:source-terms#/$defs/fluidSourceTerm"
+              },
+              {
+                "$ref": "urn:neko-top:schema:source-terms#/$defs/registeredSourceTerm"
+              }
+            ]
+          }
+        },
+        "output_filename": {
+          "description": "Base name of the adjoint output. Default `adjoint`.",
+          "type": "string"
+        },
+        "output_format": {
+          "description": "Output format. Default `fld`.",
+          "enum": [
+            "fld",
+            "nek5000",
+            "adios2",
+            "vtkhdf"
+          ]
+        },
+        "output_mesh_in_all_files": {
+          "description": "Default false.",
+          "type": "boolean"
+        },
+        "output_subdivide": {
+          "description": "Default false.",
+          "type": "boolean"
+        },
+        "output_control": {
+          "description": "When to write output. Default `never`.",
+          "enum": [
+            "org",
+            "never",
+            "tsteps",
+            "nsamples",
+            "simulationtime"
+          ]
+        },
+        "output_value": {
+          "description": "Output frequency or interval, read for `tsteps`, `nsamples` and `simulationtime` only.",
+          "$ref": "urn:neko:schema:common#/$defs/numericOrRef"
+        },
+        "norm_output_control": {
+          "description": "When to write the adjoint norm. Default `never`.",
+          "enum": [
+            "never",
+            "simulationtime",
+            "nsamples",
+            "tsteps"
+          ]
+        },
+        "norm_output_value": {
+          "description": "Interval of the norm output; read only when `norm_output_control` is not `never`. Default 1.0.",
+          "$ref": "urn:neko:schema:common#/$defs/positiveRealNumber"
+        },
+        "norm_output_file": {
+          "description": "File of the norm output, with a suffix known to Neko's file_t. Default `adjoint_norm.csv`; read only when `norm_output_control` is not `never`.",
+          "$comment": "neko src/io/file.f90:133 aborts for an unknown suffix (adjoint_case.f90:476).",
+          "type": "string",
+          "pattern": "\\.(rea|re2|map|vtk|nmsh|bp|fld|chkp|stl|csv|hdf5|h5|vtkhdf)$"
+        }
+      },
+      "allOf": [
+        {
+          "$comment": "adjoint_case.f90:452-459: tsteps and nsamples read an integer, simulationtime a real; both go through the constants lookup. A value must be positive (neko src/common/time_based_controller.f90:210-235).",
+          "if": {
+            "required": [
+              "output_control"
+            ],
+            "properties": {
+              "output_control": {
+                "enum": [
+                  "tsteps",
+                  "nsamples"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "output_value"
+            ],
+            "properties": {
+              "output_value": {
+                "$ref": "urn:neko:schema:common#/$defs/positiveIntegerOrRef"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "output_control"
+            ],
+            "properties": {
+              "output_control": {
+                "const": "simulationtime"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "output_value"
+            ],
+            "properties": {
+              "output_value": {
+                "$ref": "urn:neko:schema:common#/$defs/positiveNumberOrRef"
+              }
+            }
+          }
+        },
+        {
+          "$comment": "adjoint_case.f90:445-458 reads output_value only for tsteps, nsamples and simulationtime.",
+          "if": {
+            "required": [
+              "output_control"
+            ],
+            "properties": {
+              "output_control": {
+                "enum": [
+                  "tsteps",
+                  "nsamples",
+                  "simulationtime"
+                ]
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "output_value": false
+            }
+          }
+        },
+        {
+          "$comment": "adjoint_case.f90:471-477 reads norm_output_value and norm_output_file only when norm_output_control is not never.",
+          "if": {
+            "required": [
+              "norm_output_control"
+            ],
+            "properties": {
+              "norm_output_control": {
+                "enum": [
+                  "simulationtime",
+                  "nsamples",
+                  "tsteps"
+                ]
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "norm_output_value": false,
+              "norm_output_file": false
+            }
+          }
+        }
+      ],
+      "additionalProperties": false
+    }
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:neko-top:schema:constraints",
+  "$defs": {
+    "volumeConstraint": {
+      "description": "Volume constraint on the design field.",
+      "$comment": "sources/problem/constraints/volume_constraint.f90:134-143; the constraint needs a Brinkman design (:310).",
+      "type": "object",
+      "required": [
+        "type",
+        "limit"
+      ],
+      "properties": {
+        "type": {
+          "const": "volume"
+        },
+        "limit": {
+          "description": "Volume limit (required, a JSON real).",
+          "$ref": "urn:neko:schema:common#/$defs/realNumber"
+        },
+        "is_max": {
+          "description": "Treat `limit` as a maximum. Default false.",
+          "type": "boolean"
+        },
+        "mask_name": {
+          "description": "Point zone the volume is measured on; empty for the whole domain. Default empty.",
+          "$ref": "urn:neko-top:schema:common#/$defs/pointZoneName"
+        },
+        "name": {
+          "description": "Display name. Default `Volume constraint`.",
+          "type": "string"
+        },
+        "mapping": {
+          "description": "Mapping cascade applied to the design before the volume is measured.",
+          "type": "array",
+          "items": {
+            "$ref": "urn:neko-top:schema:mapping#/$defs/mapping"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "constraint": {
+      "description": "One entry of `optimization.constraints`, discriminated by `type`.",
+      "$comment": "Factory: sources/problem/constraints/constraint_factory.f90:67-72 (no fallback).",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/volumeConstraint"
+        }
+      ]
+    }
+  }
+}

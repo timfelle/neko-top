@@ -1,0 +1,244 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:neko-top:schema:objectives",
+  "$defs": {
+    "viscousDissipationObjective": {
+      "description": "Viscous dissipation of the flow.",
+      "$comment": "sources/problem/objectives/viscous_dissipation_objective.f90:156-161",
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "const": "viscous_dissipation"
+        },
+        "weight": {
+          "description": "Weight of the objective in the total. Default 1.0. A real, or an array of reals that the continuation scheduler steps through.",
+          "$ref": "urn:neko-top:schema:common#/$defs/continuationReal"
+        },
+        "weight_iterations": {
+          "description": "Iterations per step of the `weight` array. Read only when `weight` is an array; defaults to `optimization.solver.continuation_iterations`.",
+          "$ref": "urn:neko-top:schema:common#/$defs/continuationIterations"
+        },
+        "mask_name": {
+          "description": "Point zone the objective is evaluated on; empty for the whole domain. Default empty.",
+          "$ref": "urn:neko-top:schema:common#/$defs/pointZoneName"
+        },
+        "name": {
+          "description": "Display name. Default depends on the type.",
+          "type": "string"
+        },
+        "start_time": {
+          "description": "Start of the evaluation window; used only by unsteady runs. Default 0.0.",
+          "$ref": "urn:neko:schema:common#/$defs/realNumber"
+        },
+        "end_time": {
+          "description": "End of the evaluation window; used only by unsteady runs. Default: no end.",
+          "$ref": "urn:neko:schema:common#/$defs/realNumber"
+        }
+      },
+      "allOf": [
+        {
+          "$comment": "`weight_iterations` is read only when `weight` is an array (sources/continuation/continuation_scheduler.f90:152-155).",
+          "if": {
+            "required": [
+              "weight"
+            ],
+            "properties": {
+              "weight": {
+                "type": "array"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "weight_iterations": false
+            }
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "scalarMixingObjective": {
+      "description": "Scalar mixing; needs an adjoint scalar (see the case-file root).",
+      "$comment": "sources/problem/objectives/scalar_mixing_objective_function.f90:128-133. The key `phi_ref` that some case files carry is not read.",
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "const": "scalar_mixing"
+        },
+        "weight": {
+          "description": "Weight of the objective in the total. Default 1.0. A real, or an array of reals that the continuation scheduler steps through.",
+          "$ref": "urn:neko-top:schema:common#/$defs/continuationReal"
+        },
+        "weight_iterations": {
+          "description": "Iterations per step of the `weight` array. Read only when `weight` is an array; defaults to `optimization.solver.continuation_iterations`.",
+          "$ref": "urn:neko-top:schema:common#/$defs/continuationIterations"
+        },
+        "mask_name": {
+          "description": "Point zone the objective is evaluated on; empty for the whole domain. Default empty.",
+          "$ref": "urn:neko-top:schema:common#/$defs/pointZoneName"
+        },
+        "name": {
+          "description": "Display name. Default depends on the type.",
+          "type": "string"
+        },
+        "start_time": {
+          "description": "Start of the evaluation window; used only by unsteady runs. Default 0.0.",
+          "$ref": "urn:neko:schema:common#/$defs/realNumber"
+        },
+        "end_time": {
+          "description": "End of the evaluation window; used only by unsteady runs. Default: no end.",
+          "$ref": "urn:neko:schema:common#/$defs/realNumber"
+        },
+        "target_concentration": {
+          "description": "Target scalar concentration. Default 0.5.",
+          "$ref": "urn:neko:schema:common#/$defs/realNumber"
+        },
+        "scalar_name": {
+          "description": "Name of the scalar. Default `s`.",
+          "type": "string"
+        }
+      },
+      "allOf": [
+        {
+          "$comment": "`weight_iterations` is read only when `weight` is an array (sources/continuation/continuation_scheduler.f90:152-155).",
+          "if": {
+            "required": [
+              "weight"
+            ],
+            "properties": {
+              "weight": {
+                "type": "array"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "weight_iterations": false
+            }
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "brinkmanDissipationObjective": {
+      "description": "Dissipation caused by the Brinkman penalisation.",
+      "$comment": "sources/problem/objectives/brinkman_dissipation_objective.f90:150-162; the objective needs a Brinkman design (:212).",
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "const": "brinkman_dissipation"
+        },
+        "weight": {
+          "description": "Weight of the objective in the total. Default 1.0. A real, or an array of reals that the continuation scheduler steps through.",
+          "$ref": "urn:neko-top:schema:common#/$defs/continuationReal"
+        },
+        "weight_iterations": {
+          "description": "Iterations per step of the `weight` array. Read only when `weight` is an array; defaults to `optimization.solver.continuation_iterations`.",
+          "$ref": "urn:neko-top:schema:common#/$defs/continuationIterations"
+        },
+        "mask_name": {
+          "description": "Point zone the objective is evaluated on; empty for the whole domain. Default empty.",
+          "$ref": "urn:neko-top:schema:common#/$defs/pointZoneName"
+        },
+        "name": {
+          "description": "Display name. Default depends on the type.",
+          "type": "string"
+        },
+        "start_time": {
+          "description": "Start of the evaluation window; used only by unsteady runs. Default 0.0.",
+          "$ref": "urn:neko:schema:common#/$defs/realNumber"
+        },
+        "end_time": {
+          "description": "End of the evaluation window; used only by unsteady runs. Default: no end.",
+          "$ref": "urn:neko:schema:common#/$defs/realNumber"
+        },
+        "dealias_sensitivity": {
+          "description": "Dealias the sensitivity. Default `case.numerics.dealias`.",
+          "type": "boolean"
+        },
+        "dealias_forcing": {
+          "description": "Dealias the forcing. Default `case.numerics.dealias`.",
+          "type": "boolean"
+        }
+      },
+      "allOf": [
+        {
+          "$comment": "`weight_iterations` is read only when `weight` is an array (sources/continuation/continuation_scheduler.f90:152-155).",
+          "if": {
+            "required": [
+              "weight"
+            ],
+            "properties": {
+              "weight": {
+                "type": "array"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "weight_iterations": false
+            }
+          }
+        },
+        {
+          "$comment": "brinkman_dissipation_objective.f90:162 aborts when dealias_sensitivity differs from dealias_forcing. When only one is given, the case-file root compares it with case.numerics.dealias.",
+          "if": {
+            "required": [
+              "dealias_sensitivity",
+              "dealias_forcing"
+            ]
+          },
+          "then": {
+            "oneOf": [
+              {
+                "properties": {
+                  "dealias_sensitivity": {
+                    "const": true
+                  },
+                  "dealias_forcing": {
+                    "const": true
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "dealias_sensitivity": {
+                    "const": false
+                  },
+                  "dealias_forcing": {
+                    "const": false
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "objective": {
+      "description": "One entry of `optimization.objectives`, discriminated by `type`.",
+      "$comment": "Factory: sources/problem/objectives/objective_factory.f90:71-81 (no fallback: unknown types abort).",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/viscousDissipationObjective"
+        },
+        {
+          "$ref": "#/$defs/scalarMixingObjective"
+        },
+        {
+          "$ref": "#/$defs/brinkmanDissipationObjective"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,212 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:neko-top:schema:design",
+  "$defs": {
+    "initialDistribution": {
+      "description": "Initial design field, discriminated by `type`.",
+      "$comment": "sources/design/bcknd/set_optimization_ic.f90:100-123.",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "value"
+          ],
+          "properties": {
+            "type": {
+              "const": "uniform"
+            },
+            "value": {
+              "description": "Uniform design value.",
+              "$ref": "urn:neko:schema:common#/$defs/realNumber"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "base_value",
+            "zone_name",
+            "zone_value"
+          ],
+          "properties": {
+            "type": {
+              "const": "point_zone"
+            },
+            "base_value": {
+              "description": "Value outside the zone.",
+              "$ref": "urn:neko:schema:common#/$defs/realNumber"
+            },
+            "zone_name": {
+              "description": "Name of the point zone.",
+              "$ref": "urn:neko:schema:common#/$defs/nonEmptyString"
+            },
+            "zone_value": {
+              "description": "Value inside the zone.",
+              "$ref": "urn:neko:schema:common#/$defs/realNumber"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "$comment": "set_optimization_ic.f90:262 requires a `.fNNNNN` suffix. :270 then calls filename_chsuffix with `trim(file_name)` as the output argument, so the suffix may never change to `fld`; that abort was inferred from reading and not run, so the type is accepted. `tolerance` is read as a real (set_optimization_ic.f90:117).",
+          "type": "object",
+          "required": [
+            "type",
+            "file_name"
+          ],
+          "properties": {
+            "type": {
+              "const": "field"
+            },
+            "file_name": {
+              "description": "Field file, with a `.fNNNNN` suffix.",
+              "type": "string",
+              "pattern": "\\.f[0-9]{5}$"
+            },
+            "interpolate": {
+              "description": "Interpolate onto the mesh. Default false.",
+              "type": "boolean"
+            },
+            "tolerance": {
+              "description": "Interpolation tolerance. Default 1.0e-6.",
+              "$ref": "urn:neko:schema:common#/$defs/realNumber"
+            },
+            "mesh_file_name": {
+              "description": "Mesh of the field file when it is another file; `none` uses the field file. Default `none`.",
+              "oneOf": [
+                {
+                  "const": "none"
+                },
+                {
+                  "type": "string",
+                  "pattern": "\\.f[0-9]{5}$"
+                }
+              ]
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "brinkmanDesign": {
+      "description": "Brinkman penalisation design.",
+      "$comment": "sources/design/design_types/design_brinkman.f90:273-319",
+      "type": "object",
+      "required": [
+        "type",
+        "mapping"
+      ],
+      "properties": {
+        "type": {
+          "const": "brinkman"
+        },
+        "name": {
+          "description": "Display name. Default `Brinkman Design`.",
+          "type": "string"
+        },
+        "domain": {
+          "description": "Region of the mesh that is optimised.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "description": "`full` or `point_zone`. Default `full`.",
+              "enum": [
+                "full",
+                "point_zone"
+              ]
+            },
+            "zone_name": {
+              "description": "Point zone; read only with `type: point_zone`.",
+              "$ref": "urn:neko:schema:common#/$defs/nonEmptyString"
+            }
+          },
+          "allOf": [
+            {
+              "$comment": "design_brinkman.f90:302 reads zone_name only for the point_zone domain; it is required there and unread otherwise.",
+              "if": {
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "const": "point_zone"
+                  }
+                }
+              },
+              "then": {
+                "required": [
+                  "zone_name"
+                ]
+              },
+              "else": {
+                "properties": {
+                  "zone_name": false
+                }
+              }
+            }
+          ],
+          "additionalProperties": false
+        },
+        "dealias": {
+          "description": "Dealias the design. Default `case.numerics.dealias`.",
+          "type": "boolean"
+        },
+        "verbose_design": {
+          "description": "Write the design fields. Default false.",
+          "type": "boolean"
+        },
+        "verbose_sensitivity": {
+          "description": "Write the sensitivity fields. Default false.",
+          "type": "boolean"
+        },
+        "output_precision": {
+          "description": "Output precision. Default `sp`.",
+          "$comment": "design_brinkman.f90:293",
+          "enum": [
+            "sp",
+            "SP",
+            "single",
+            "dp",
+            "DP",
+            "double"
+          ]
+        },
+        "output_format": {
+          "description": "Output format. Default `fld`.",
+          "$comment": "design_brinkman.f90:284; the suffix must be known to Neko's file_t (neko src/io/file.f90:133).",
+          "enum": [
+            "fld",
+            "nek5000",
+            "vtkhdf",
+            "adios2",
+            "hdf5",
+            "h5"
+          ]
+        },
+        "mapping": {
+          "description": "Mapping cascade from the design to the Brinkman amplitude (required: without it a null pointer is dereferenced, mapping_handler.f90:644).",
+          "type": "array",
+          "items": {
+            "$ref": "urn:neko-top:schema:mapping#/$defs/mapping"
+          }
+        },
+        "initial_distribution": {
+          "$ref": "urn:neko-top:schema:design#/$defs/initialDistribution"
+        }
+      },
+      "additionalProperties": false
+    },
+    "design": {
+      "description": "`optimization.design`, discriminated by `type`.",
+      "$comment": "Factory: sources/design/design_factory.f90:73-81. The label `simple` is a factory case, but the shipped drivers always abort on it (simple_design_t lacks init_from_json_sim, design.f90:262), so it is not accepted.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/brinkmanDesign"
+        }
+      ]
+    }
+  }
+}

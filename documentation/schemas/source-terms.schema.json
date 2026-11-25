@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:neko-top:schema:source-terms",
+  "$defs": {
+    "registeredSourceTerm": {
+      "description": "Overlay for the source terms that Neko-TOP registers: they read no key from the case file.",
+      "$comment": "sources/source_terms/neko_top_source_terms.f90:71-78 registers the five types; their init_from_json is empty (simple_brinkman_source_term.f90:110-123 and its siblings), so only `type` is meaningful. Neko's registered-type fallback already admits them; this overlay only rejects the keys nothing reads.",
+      "if": {
+        "required": [
+          "type"
+        ],
+        "properties": {
+          "type": {
+            "enum": [
+              "simple_brinkman",
+              "adjoint_brinkman_dissipation",
+              "adjoint_viscous_dissipation",
+              "adjoint_scalar_convection",
+              "adjoint_mixing_scalar"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "type": {
+            "enum": [
+              "simple_brinkman",
+              "adjoint_brinkman_dissipation",
+              "adjoint_viscous_dissipation",
+              "adjoint_scalar_convection",
+              "adjoint_mixing_scalar"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  }
+}
