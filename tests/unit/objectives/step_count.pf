@@ -13,7 +13,8 @@
 !! Neither run may write time-step controller settings at the root of the
 !! case document. They do when the controller is set up from the whole
 !! document instead of `case.time`, which ignores the settings there. The
-!! adjoint run reloads a checkpoint, so this also covers the recompute.
+!! adjoint run reloads a checkpoint, so this also covers the controller set
+!! up on a checkpoint reload.
 module step_count
 
   use mpi

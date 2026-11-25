@@ -46,7 +46,7 @@ submodule (mapping) mapping_fctry
   implicit none
 
   ! List of all possible types created by the factory routine
-  character(len=20) :: MAPPING_KNOWN_TYPES(7) = [character(len=20) :: &
+  character(len=32) :: MAPPING_KNOWN_TYPES(7) = [character(len=32) :: &
        "linear", &
        "PDE_filter", &
        "RAMP", &

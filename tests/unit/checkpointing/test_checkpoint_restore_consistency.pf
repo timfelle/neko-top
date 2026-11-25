@@ -6,6 +6,8 @@ module test_checkpoint_restore_consistency
   use state_recover_checkpoint, only: state_recover_checkpoint_t
   use simulation, only: simulation_init, simulation_step, simulation_finalize
   use time_step_controller, only: time_step_controller_t
+  use json_module, only: json_file
+  use json_utils, only: json_get
   use design, only: design_t
   use problem, only: problem_t
   use field_array, only: field_array_t
@@ -55,6 +57,7 @@ contains
     class(design_t), allocatable :: des
     type(problem_t) :: prob
     type(time_step_controller_t) :: dt_controller
+    type(json_file) :: dt_params
     type(field_t), pointer :: p, u, v, w
     type(field_t), pointer :: scalar, scalar_snapshot
     type(field_t), pointer :: p_snapshot, u_snapshot, v_snapshot, w_snapshot
@@ -92,7 +95,8 @@ contains
          fmt = 'chkp', &
          keep_checkpoints = .false.)
 
-    call dt_controller%init(sim%neko_case%params)
+    call json_get(sim%neko_case%params, 'case.time', dt_params)
+    call dt_controller%init(dt_params)
     call simulation_init(sim%neko_case, dt_controller)
 
     initial_tstep = sim%neko_case%time%tstep
@@ -122,7 +126,8 @@ contains
 
     call simulation_finalize(sim%neko_case)
 
-    call dt_controller%init(sim%neko_case%params)
+    call json_get(sim%neko_case%params, 'case.time', dt_params)
+    call dt_controller%init(dt_params)
     call simulation_init(sim%neko_case, dt_controller)
 
     restore_ok = .true.

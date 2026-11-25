@@ -151,7 +151,7 @@ contains
     integer :: i, n_scalars
     character(len=:), allocatable :: output_directory, precision_s, file_format
     integer :: precision
-    logical :: unsteady, subdivide, variable_dt, found
+    logical :: unsteady, subdivide, variable_dt, exact_output_time, found
 
     ! initialize the primal Neko objects
     call this%neko_case%init(parameters)
@@ -282,6 +282,18 @@ contains
        if (found .and. variable_dt) then
           call neko_error("case.time.variable_timestep is not supported " // &
                "for unsteady problems")
+       end if
+
+       ! Neko fits steps to the output times only with a variable timestep,
+       ! which the check above rules out. Without this check, Neko would
+       ! stop at the first forward run instead.
+       exact_output_time = .false.
+       call parameters%get('case.time.exact_output_time', exact_output_time, &
+            found)
+       if (found .and. exact_output_time) then
+          call neko_error("case.time.exact_output_time is not supported " // &
+               "for unsteady problems, as it requires " // &
+               "case.time.variable_timestep")
        end if
 
        call json_get(parameters, 'state_recovery', state_recovery_params)
