@@ -51,6 +51,12 @@ module objective
   !!
   !! This is the base class for objectives, which is a type of base functional.
   !! Each objective contain a weight that is used to scale the objective value.
+  !!
+  !! The weight enters the value and the sensitivity differently: `value`
+  !! is stored without it, and the problem applies it, while the sensitivity
+  !! an objective's `update_sensitivity` stores must include it. The problem
+  !! sums the stored sensitivities as they are, and the optimization log
+  !! divides the weight back out of them.
   type, abstract, extends(base_functional_t) :: objective_t
      !> Weight of the objective in the overall cost function
      real(kind=rp) :: weight = 1.0_rp

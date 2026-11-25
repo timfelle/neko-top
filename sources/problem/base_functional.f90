@@ -171,7 +171,8 @@ module base_functional
        class(design_t), intent(in) :: design
      end subroutine functional_update_value
 
-     !> Compute the sensitivity
+     !> Compute the sensitivity. An objective includes its weight in it,
+     !! see `objective_t`.
      subroutine functional_update_sensitivity(this, design)
        import base_functional_t, design_t
        class(base_functional_t), intent(inout) :: this

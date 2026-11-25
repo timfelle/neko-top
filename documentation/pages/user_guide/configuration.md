@@ -58,7 +58,8 @@ the functional values in that row.
 
 - The values are without the objective's `weight`. A weight of zero cannot
   be divided out, so such an objective logs its sensitivity as stored, which
-  is zero.
+  is zero. This relies on every objective storing its sensitivity with its
+  weight applied, as the built-in ones do; a user-defined objective must too.
 - They are of the sensitivity the functional stores, before the design's
   mapping back to the design variable. For an objective this is only the
   part it contributes directly: the part that reaches the design through the
