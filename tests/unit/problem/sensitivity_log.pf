@@ -1,0 +1,459 @@
+!> Unit tests for the sensitivity statistics columns of the optimization log.
+!!
+!! Every logged objective and constraint gets its own max, min and mean
+!! sensitivity, and the problem adds those of the summed objective
+!! sensitivity. The statistics are global over all ranks, so every test runs
+!! on two ranks with an uneven split of the design variables.
+!!
+!! The sensitivities are set directly on stub functionals, so no simulation
+!! is needed. An objective stores its sensitivity with its weight applied, so
+!! the stub stores weight * raw, and the log must give back the statistics
+!! of raw.
+!!
+!! Global raw data, three entries on rank 0 and two on rank 1:
+!!   A:  [1, -2, 4] [3, -5]        max 4,   min -5,  mean 0.2
+!!   B:  [0.5, 0.25, -1] [2, 6]    max 6,   min -1,  mean 1.55
+!!   C:  [10, -20, 30] [40, -50]   max 40,  min -50, mean 2
+module sensitivity_log
+  use mpi
+  use pfunit
+  use num_types, only: rp
+  use json_module, only: json_file
+  use vector, only: vector_t
+  use neko, only: neko_init
+  use comm, only: pe_rank, NEKO_COMM, MPI_REAL_PRECISION
+  use design, only: design_t
+  use objective, only: objective_t
+  use constraint, only: constraint_t
+  use problem, only: problem_t
+  use device, only: DEVICE_TO_HOST, HOST_TO_DEVICE
+
+  implicit none
+
+  real(kind=rp), parameter :: TOL = 1.0e-5_rp
+
+  logical :: initialized = .false.
+
+  !> Stub design with no values of its own, only a size.
+  type, extends(design_t) :: stub_design_t
+   contains
+     procedure, pass(this) :: free => stub_design_free
+     procedure, pass(this) :: get_values => stub_design_get_values
+     procedure, pass(this) :: update_design => stub_design_update_design
+     procedure, pass(this) :: map_forward => stub_design_map_forward
+     procedure, pass(this) :: map_backward => stub_design_map_backward
+     procedure, pass(this) :: write => stub_design_write
+  end type stub_design_t
+
+  !> Stub objective, nothing is ever evaluated.
+  type, extends(objective_t) :: stub_objective_t
+   contains
+     procedure, pass(this) :: free => stub_objective_free
+     procedure, pass(this) :: update_value => stub_objective_update_value
+     procedure, pass(this) :: update_sensitivity => &
+          stub_objective_update_sensitivity
+  end type stub_objective_t
+
+  !> Stub constraint, nothing is ever evaluated.
+  type, extends(constraint_t) :: stub_constraint_t
+   contains
+     procedure, pass(this) :: free => stub_constraint_free
+     procedure, pass(this) :: update_value => stub_constraint_update_value
+     procedure, pass(this) :: update_sensitivity => &
+          stub_constraint_update_sensitivity
+  end type stub_constraint_t
+
+  @TestCase
+  type, extends(MPITestCase) :: test_sensitivity_log_case
+     !> Kept as components so that tearDown frees them after a failed assert
+     type(stub_design_t) :: des
+     type(problem_t) :: prob
+     type(vector_t) :: scratch
+   contains
+     procedure :: setUp
+     procedure :: tearDown
+  end type test_sensitivity_log_case
+
+contains
+
+  subroutine setUp(this)
+    class(test_sensitivity_log_case), intent(inout) :: this
+
+    if (initialized) return
+    initialized = .true.
+    call neko_init()
+  end subroutine setUp
+
+  subroutine tearDown(this)
+    class(test_sensitivity_log_case), intent(inout) :: this
+
+    call this%prob%free()
+    call this%des%free()
+    call this%scratch%free()
+  end subroutine tearDown
+
+  ! ========================================================================== !
+  ! Stubs
+
+  subroutine stub_design_free(this)
+    class(stub_design_t), intent(inout) :: this
+
+    call this%free_base()
+  end subroutine stub_design_free
+
+  subroutine stub_design_get_values(this, values)
+    class(stub_design_t), intent(in) :: this
+    type(vector_t), intent(inout) :: values
+  end subroutine stub_design_get_values
+
+  subroutine stub_design_update_design(this, values)
+    class(stub_design_t), intent(inout) :: this
+    type(vector_t), intent(inout) :: values
+  end subroutine stub_design_update_design
+
+  subroutine stub_design_map_forward(this)
+    class(stub_design_t), intent(inout) :: this
+  end subroutine stub_design_map_forward
+
+  subroutine stub_design_map_backward(this, sensitivity)
+    class(stub_design_t), intent(inout) :: this
+    type(vector_t), intent(in) :: sensitivity
+  end subroutine stub_design_map_backward
+
+  subroutine stub_design_write(this, idx)
+    class(stub_design_t), intent(inout) :: this
+    integer, intent(in) :: idx
+  end subroutine stub_design_write
+
+  subroutine stub_objective_free(this)
+    class(stub_objective_t), intent(inout) :: this
+
+    call this%free_base()
+  end subroutine stub_objective_free
+
+  subroutine stub_objective_update_value(this, design)
+    class(stub_objective_t), intent(inout) :: this
+    class(design_t), intent(in) :: design
+  end subroutine stub_objective_update_value
+
+  subroutine stub_objective_update_sensitivity(this, design)
+    class(stub_objective_t), intent(inout) :: this
+    class(design_t), intent(in) :: design
+  end subroutine stub_objective_update_sensitivity
+
+  subroutine stub_constraint_free(this)
+    class(stub_constraint_t), intent(inout) :: this
+
+    call this%free_base()
+  end subroutine stub_constraint_free
+
+  subroutine stub_constraint_update_value(this, design)
+    class(stub_constraint_t), intent(inout) :: this
+    class(design_t), intent(in) :: design
+  end subroutine stub_constraint_update_value
+
+  subroutine stub_constraint_update_sensitivity(this, design)
+    class(stub_constraint_t), intent(inout) :: this
+    class(design_t), intent(in) :: design
+  end subroutine stub_constraint_update_sensitivity
+
+  ! ========================================================================== !
+  ! Helpers
+
+  !> Initialise the design and the problem with `n` local design variables.
+  subroutine make_problem(this, n)
+    class(test_sensitivity_log_case), intent(inout) :: this
+    integer, intent(in) :: n
+    type(json_file) :: parameters
+
+    call this%des%init_base('stub_design', n)
+    call parameters%initialize()
+    call parameters%load_from_string('{"optimization": {}}')
+    call this%prob%init(parameters, this%des)
+    call parameters%destroy()
+  end subroutine make_problem
+
+  !> Add an objective of the given weight whose stored sensitivity is
+  !! `weight * raw`, as an objective stores it.
+  subroutine add_objective(this, name, weight, raw)
+    class(test_sensitivity_log_case), intent(inout) :: this
+    character(len=*), intent(in) :: name
+    real(kind=rp), intent(in) :: weight
+    real(kind=rp), intent(in) :: raw(:)
+    class(objective_t), allocatable :: obj
+
+    allocate(stub_objective_t :: obj)
+    call obj%init_base(name, size(raw), weight)
+    if (size(raw) .gt. 0) obj%sensitivity = weight * raw
+    call this%prob%add_objective(obj)
+  end subroutine add_objective
+
+  !> Add a constraint whose stored sensitivity is `raw`.
+  subroutine add_constraint(this, name, raw)
+    class(test_sensitivity_log_case), intent(inout) :: this
+    character(len=*), intent(in) :: name
+    real(kind=rp), intent(in) :: raw(:)
+    class(constraint_t), allocatable :: con
+
+    allocate(stub_constraint_t :: con)
+    call con%init_base(name, size(raw))
+    if (size(raw) .gt. 0) con%sensitivity = raw
+    call this%prob%add_constraint(con)
+  end subroutine add_constraint
+
+  !> The data of this rank.
+  function local_data(r0, r1) result(r)
+    real(kind=rp), intent(in) :: r0(:), r1(:)
+    real(kind=rp), allocatable :: r(:)
+
+    if (pe_rank .eq. 0) then
+       r = r0
+    else
+       r = r1
+    end if
+  end function local_data
+
+  function raw_a() result(r)
+    real(kind=rp), allocatable :: r(:)
+
+    r = local_data([1.0_rp, -2.0_rp, 4.0_rp], [3.0_rp, -5.0_rp])
+  end function raw_a
+
+  function raw_b() result(r)
+    real(kind=rp), allocatable :: r(:)
+
+    r = local_data([0.5_rp, 0.25_rp, -1.0_rp], [2.0_rp, 6.0_rp])
+  end function raw_b
+
+  function raw_c() result(r)
+    real(kind=rp), allocatable :: r(:)
+
+    r = local_data([10.0_rp, -20.0_rp, 30.0_rp], [40.0_rp, -50.0_rp])
+  end function raw_c
+
+  function n_local() result(n)
+    integer :: n
+
+    if (pe_rank .eq. 0) then
+       n = 3
+    else
+       n = 2
+    end if
+  end function n_local
+
+  ! ========================================================================== !
+  ! Tests
+
+  !> A positive weight is divided out: the log shows the raw statistics,
+  !! global over both ranks.
+  @test(npes=[2])
+  subroutine positive_weight(this)
+    class(test_sensitivity_log_case), intent(inout) :: this
+    real(kind=rp) :: values(6)
+
+    call make_problem(this, n_local())
+    call add_objective(this, 'A', 2.0_rp, raw_a())
+
+    @assertEqual(6, this%prob%get_sensitivity_log_size())
+    call this%prob%get_sensitivity_log_values(values)
+    ! Own columns
+    @assertEqual(4.0_rp, values(1), tolerance = TOL)
+    @assertEqual(-5.0_rp, values(2), tolerance = TOL)
+    @assertEqual(0.2_rp, values(3), tolerance = TOL)
+    ! With a single objective, the total carries its weight
+    @assertEqual(8.0_rp, values(4), tolerance = TOL)
+    @assertEqual(-10.0_rp, values(5), tolerance = TOL)
+    @assertEqual(0.4_rp, values(6), tolerance = TOL)
+  end subroutine positive_weight
+
+  !> A negative weight swaps the stored extremes back: the log still has
+  !! max >= min and shows the raw statistics.
+  @test(npes=[2])
+  subroutine negative_weight(this)
+    class(test_sensitivity_log_case), intent(inout) :: this
+    real(kind=rp) :: values(6)
+
+    call make_problem(this, n_local())
+    call add_objective(this, 'B', -4.0_rp, raw_b())
+
+    call this%prob%get_sensitivity_log_values(values)
+    @assertEqual(6.0_rp, values(1), tolerance = TOL)
+    @assertEqual(-1.0_rp, values(2), tolerance = TOL)
+    @assertEqual(1.55_rp, values(3), tolerance = TOL)
+    @assertTrue(values(1) .ge. values(2))
+    ! Total: stored, -4 * raw: max -4 * -1 = 4, min -4 * 6 = -24
+    @assertEqual(4.0_rp, values(4), tolerance = TOL)
+    @assertEqual(-24.0_rp, values(5), tolerance = TOL)
+    @assertEqual(-6.2_rp, values(6), tolerance = TOL)
+  end subroutine negative_weight
+
+  !> A weight of zero cannot be divided out: the stored values (all zero for
+  !! a real objective, here set to non-zero data to see them) are logged as
+  !! they are.
+  @test(npes=[2])
+  subroutine zero_weight(this)
+    class(test_sensitivity_log_case), intent(inout) :: this
+    real(kind=rp) :: values(6)
+    class(objective_t), allocatable :: obj
+
+    call make_problem(this, n_local())
+    allocate(stub_objective_t :: obj)
+    call obj%init_base('Z', n_local(), 0.0_rp)
+    obj%sensitivity = local_data([7.0_rp, -3.0_rp, 1.0_rp], &
+         [2.0_rp, 9.0_rp])
+    call this%prob%add_objective(obj)
+
+    call this%prob%get_sensitivity_log_values(values)
+    @assertEqual(9.0_rp, values(1), tolerance = TOL)
+    @assertEqual(-3.0_rp, values(2), tolerance = TOL)
+    @assertEqual(3.2_rp, values(3), tolerance = TOL)
+    @assertEqual(9.0_rp, values(4), tolerance = TOL)
+    @assertEqual(-3.0_rp, values(5), tolerance = TOL)
+    @assertEqual(3.2_rp, values(6), tolerance = TOL)
+  end subroutine zero_weight
+
+  !> A constraint stores its sensitivity without a weight: scale 1.
+  @test(npes=[2])
+  subroutine constraint_scale_one(this)
+    class(test_sensitivity_log_case), intent(inout) :: this
+    real(kind=rp) :: values(3)
+
+    call make_problem(this, n_local())
+    call add_constraint(this, 'C', raw_c())
+
+    ! No objectives: only the constraint's own columns
+    @assertEqual(3, this%prob%get_sensitivity_log_size())
+    call this%prob%get_sensitivity_log_values(values)
+    @assertEqual(40.0_rp, values(1), tolerance = TOL)
+    @assertEqual(-50.0_rp, values(2), tolerance = TOL)
+    @assertEqual(2.0_rp, values(3), tolerance = TOL)
+  end subroutine constraint_scale_one
+
+  !> Global statistics when one rank holds all the entries and the other
+  !! none. The mean is over the global count, not a mean of local means.
+  @test(npes=[2])
+  subroutine rank_without_entries(this)
+    class(test_sensitivity_log_case), intent(inout) :: this
+    real(kind=rp) :: values(6)
+    integer :: n
+
+    if (pe_rank .eq. 0) then
+       n = 4
+    else
+       n = 0
+    end if
+    call make_problem(this, n)
+    call add_objective(this, 'A', 2.0_rp, &
+         local_data([1.0_rp, -2.0_rp, 4.0_rp, 3.0_rp], [real(rp) ::]))
+
+    call this%prob%get_sensitivity_log_values(values)
+    @assertEqual(4.0_rp, values(1), tolerance = TOL)
+    @assertEqual(-2.0_rp, values(2), tolerance = TOL)
+    @assertEqual(1.5_rp, values(3), tolerance = TOL)
+    @assertEqual(8.0_rp, values(4), tolerance = TOL)
+    @assertEqual(-4.0_rp, values(5), tolerance = TOL)
+    @assertEqual(3.0_rp, values(6), tolerance = TOL)
+  end subroutine rank_without_entries
+
+  !> No entries on any rank: the statistics are zero, not +-huge.
+  @test(npes=[2])
+  subroutine no_entries_anywhere(this)
+    class(test_sensitivity_log_case), intent(inout) :: this
+    real(kind=rp) :: values(6)
+
+    call make_problem(this, 0)
+    call add_objective(this, 'A', 2.0_rp, [real(rp) ::])
+
+    call this%prob%get_sensitivity_log_values(values)
+    @assertEqual(0.0_rp, values, tolerance = TOL)
+  end subroutine no_entries_anywhere
+
+  !> Header names and order: objectives, constraints, then the total. The
+  !! size equals the number of header names and of values.
+  @test(npes=[2])
+  subroutine header_names_and_size(this)
+    class(test_sensitivity_log_case), intent(inout) :: this
+    character(len=:), allocatable :: header, expected
+    real(kind=rp) :: values(12)
+    integer :: i, n_names
+
+    call make_problem(this, n_local())
+    call add_objective(this, 'A', 2.0_rp, raw_a())
+    call add_objective(this, 'B', -4.0_rp, raw_b())
+    call add_constraint(this, 'C', raw_c())
+
+    expected = "A.sens_max, A.sens_min, A.sens_mean, " // &
+         "B.sens_max, B.sens_min, B.sens_mean, " // &
+         "C.sens_max, C.sens_min, C.sens_mean, " // &
+         "Total objective function.sens_max, " // &
+         "Total objective function.sens_min, " // &
+         "Total objective function.sens_mean"
+    header = this%prob%get_sensitivity_log_header()
+    @assertEqual(expected, header)
+
+    n_names = 1
+    do i = 1, len(header)
+       if (header(i:i) .eq. ',') n_names = n_names + 1
+    end do
+    @assertEqual(12, n_names)
+    @assertEqual(12, this%prob%get_sensitivity_log_size())
+
+    ! Without constraints
+    header = this%prob%get_sensitivity_log_header(.false.)
+    @assertEqual(9, this%prob%get_sensitivity_log_size(.false.))
+    expected = "A.sens_max, A.sens_min, A.sens_mean, " // &
+         "B.sens_max, B.sens_min, B.sens_mean, " // &
+         "Total objective function.sens_max, " // &
+         "Total objective function.sens_min, " // &
+         "Total objective function.sens_mean"
+    @assertEqual(expected, header)
+
+    ! All three functionals in one row, in header order
+    call this%prob%get_sensitivity_log_values(values)
+    @assertEqual([4.0_rp, -5.0_rp, 0.2_rp, 6.0_rp, -1.0_rp, 1.55_rp, &
+         40.0_rp, -50.0_rp, 2.0_rp, 12.0_rp, -34.0_rp, -5.8_rp], values, &
+         tolerance = TOL)
+  end subroutine header_names_and_size
+
+  !> The Total objective function columns are the statistics of
+  !! `get_objective_sensitivities`, the sum the optimizer consumes. The
+  !! expected numbers are worked out by hand from the stored data:
+  !! 2 * A - 4 * B = [0, -5, 12] on rank 0 and [-2, -34] on rank 1.
+  @test(npes=[2])
+  subroutine total_matches_objective_sensitivities(this)
+    class(test_sensitivity_log_case), intent(inout) :: this
+    real(kind=rp) :: values(9)
+    real(kind=rp) :: local_max, local_min, local_sum, g_max, g_min, g_sum
+    integer :: ierr
+
+    call make_problem(this, n_local())
+    call add_objective(this, 'A', 2.0_rp, raw_a())
+    call add_objective(this, 'B', -4.0_rp, raw_b())
+
+    call this%scratch%init(n_local())
+    call this%prob%get_objective_sensitivities(this%scratch)
+    call this%scratch%copy_from(DEVICE_TO_HOST, .true.)
+
+    ! Independent reduction of the very vector the optimizer would use
+    local_max = maxval(this%scratch%x(1:n_local()))
+    local_min = minval(this%scratch%x(1:n_local()))
+    local_sum = sum(this%scratch%x(1:n_local()))
+    call MPI_Allreduce(local_max, g_max, 1, MPI_REAL_PRECISION%mpi_val, &
+         MPI_MAX, NEKO_COMM%mpi_val, ierr)
+    call MPI_Allreduce(local_min, g_min, 1, MPI_REAL_PRECISION%mpi_val, &
+         MPI_MIN, NEKO_COMM%mpi_val, ierr)
+    call MPI_Allreduce(local_sum, g_sum, 1, MPI_REAL_PRECISION%mpi_val, &
+         MPI_SUM, NEKO_COMM%mpi_val, ierr)
+
+    ! The vector itself is what the hand calculation says
+    @assertEqual(12.0_rp, g_max, tolerance = TOL)
+    @assertEqual(-34.0_rp, g_min, tolerance = TOL)
+    @assertEqual(-29.0_rp, g_sum, tolerance = TOL)
+
+    call this%prob%get_sensitivity_log_values(values)
+    @assertEqual(g_max, values(7), tolerance = TOL)
+    @assertEqual(g_min, values(8), tolerance = TOL)
+    @assertEqual(g_sum / 5.0_rp, values(9), tolerance = TOL)
+  end subroutine total_matches_objective_sensitivities
+
+end module sensitivity_log

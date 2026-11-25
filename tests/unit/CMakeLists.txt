@@ -136,6 +136,33 @@ set_tests_properties(problem-time_window PROPERTIES
 )
 add_dependencies(Unit problem-time_window)
 
+# problem-sensitivity_log: the sensitivity statistics columns of the
+# optimization log are global over the ranks, so these tests run on two ranks,
+# with an uneven split of the design variables and, in one test, a rank
+# without any.
+add_pfunit_ctest(problem-sensitivity_log
+    TEST_SOURCES problem/sensitivity_log.pf
+    LINK_LIBRARIES Neko-TOP::neko-top
+    MAX_PES 2
+)
+
+if (CMAKE_Fortran_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(problem-sensitivity_log PRIVATE
+        $<$<COMPILE_LANGUAGE:Fortran>:-Wno-unused-variable>
+    )
+endif()
+
+set_target_properties(problem-sensitivity_log PROPERTIES
+    FOLDER "Tests/Unit"
+)
+set_tests_properties(problem-sensitivity_log PROPERTIES
+    LABELS "unit"
+    ENVIRONMENT
+    "NEKO_LOG_FILE=${CMAKE_BINARY_DIR}/tests/unit/problem-sensitivity_log.log"
+    TIMEOUT 120
+)
+add_dependencies(Unit problem-sensitivity_log)
+
 # mma-io_hdf5: the MMA state is written to and read back from one HDF5 file in
 # parallel, each rank its own slice, with a different number of design
 # variables on each rank.
