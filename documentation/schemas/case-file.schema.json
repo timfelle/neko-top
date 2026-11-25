@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:neko-top:schema:case-file",
+  "title": "Neko-TOP case file",
+  "$comment": "Placeholder collected root: it accepts exactly what Neko's own root accepts. The Neko-TOP additions are added to this allOf, never by widening Neko's schemas.",
+  "allOf": [
+    {
+      "$ref": "urn:neko:schema:case-file"
+    }
+  ],
+  "additionalProperties": true
+}

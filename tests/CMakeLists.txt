@@ -24,6 +24,9 @@ set(SHARED_TEST_SOURCES ${CMAKE_SOURCE_DIR}/tests/shared)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/unit)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/regression)
 
+# The case-file schema tests are pytest tests that need neither pFUnit nor MPI.
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/schema)
+
 # ============================================================================ #
 # Lint the registered tests: every DEPENDS entry must name an existing test.
 # CTest silently ignores any other entry, e.g. a build target. The lint is

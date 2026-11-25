@@ -130,3 +130,15 @@ install(DIRECTORY ${CMAKE_Fortran_MODULE_DIRECTORY}/
     DESTINATION include/neko-top
     FILES_MATCHING PATTERN "*.mod"
 )
+
+# Install the case-file JSON Schemas and the validator that reads them next to
+# each other, so that the validator finds the schemas in share/neko-top/schemas.
+# The schemas build on Neko's, which the validator finds through NEKO_DIR or
+# pkg-config at run time.
+install(DIRECTORY ${PROJECT_SOURCE_DIR}/documentation/schemas/
+    DESTINATION share/neko-top/schemas
+    FILES_MATCHING PATTERN "*.schema.json"
+)
+install(PROGRAMS ${PROJECT_SOURCE_DIR}/scripts/python/validate_case_schema.py
+    DESTINATION share/neko-top
+)
