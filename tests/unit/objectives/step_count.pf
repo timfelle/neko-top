@@ -9,6 +9,11 @@
 !! The adjoint of the unsteady run is then solved once, and must not write a
 !! job-limit checkpoint. With `output_at_end` off, the adjoint's finalisation
 !! writes one when it judges the run to have stopped short of `end_time`.
+!!
+!! Neither run may write time-step controller settings at the root of the
+!! case document. They do when the controller is set up from the whole
+!! document instead of `case.time`, which ignores the settings there. The
+!! adjoint run reloads a checkpoint, so this also covers the recompute.
 module step_count
 
   use mpi
@@ -159,6 +164,9 @@ contains
        ! Put the flag back the way the case file declared it.
        sim%unsteady = .true.
 
+       call check_root_time_keys(sim%neko_case%params, 'forward', failed, &
+            failure_message)
+
        ! Build the name the way `simulation_adjoint_joblimit_chkp` does, so
        ! this looks for the file it would actually write.
        call json_get_or_default(parameters, 'case.checkpoint_format', &
@@ -177,6 +185,9 @@ contains
        call neko_log%section('Step count test, adjoint run')
        call prob%compute_sensitivity(des, sim)
        call neko_log%end_section()
+
+       call check_root_time_keys(sim%neko_case%params, 'adjoint', failed, &
+            failure_message)
 
        inquire(file = trim(joblimit_fname), exist = joblimit_written)
        if (joblimit_written) then
@@ -211,6 +222,30 @@ contains
        name = 'steady'
     end if
   end function path_name
+
+  !> Record a failure if a run wrote time-step controller settings at the
+  !! root of the case document, instead of reading them from `case.time`.
+  !! @param params The case document.
+  !! @param run Name of the run checked, for the message.
+  !! @param failed Set if a setting is found at the root.
+  !! @param failure_message The first failure recorded.
+  subroutine check_root_time_keys(params, run, failed, failure_message)
+    type(json_file), intent(inout) :: params
+    character(len=*), intent(in) :: run
+    logical, intent(inout) :: failed
+    character(len=*), intent(inout) :: failure_message
+    character(len=17), parameter :: keys(2) = [character(len=17) :: &
+         'variable_timestep', 'exact_output_time']
+    integer :: i
+
+    do i = 1, size(keys)
+       if (params%valid_path(keys(i))) then
+          call record_failure(failed, failure_message, 'The ' // run // &
+               ' run wrote ' // keys(i) // ' at the root of the case ' // &
+               'document instead of reading case.time')
+       end if
+    end do
+  end subroutine check_root_time_keys
 
   !> Record a failure without stopping early, so resource cleanup and both
   !! forward-path checks still happen before pFUnit reports it.

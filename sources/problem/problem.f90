@@ -523,9 +523,11 @@ contains
     class(simulation_t), intent(inout) :: simulation
     class(design_t), intent(inout) :: design
     type(time_step_controller_t) :: dt_controller
+    type(json_file) :: dt_params
     real(kind=dp) :: loop_start
 
-    call dt_controller%init(simulation%neko_case%params)
+    call json_get(simulation%neko_case%params, 'case.time', dt_params)
+    call dt_controller%init(dt_params)
 
     call simulation%reset()
     call simulation_init(simulation%neko_case, dt_controller)
@@ -586,13 +588,15 @@ contains
     class(simulation_t), intent(inout) :: simulation
     class(design_t), intent(inout) :: design
     type(time_step_controller_t) :: dt_controller
+    type(json_file) :: dt_params
     real(kind=dp) :: loop_start
     real(kind=dp) :: cfl
     real(kind=dp) :: total_time
     integer :: i, j
     type(time_state_t) :: accumulation_time
 
-    call dt_controller%init(simulation%neko_case%params)
+    call json_get(simulation%neko_case%params, 'case.time', dt_params)
+    call dt_controller%init(dt_params)
 
     call simulation_adjoint_init(simulation%adjoint_case, dt_controller)
 

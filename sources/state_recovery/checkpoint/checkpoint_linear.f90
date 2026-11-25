@@ -101,6 +101,7 @@ contains
     class(state_recover_checkpoint_t), intent(inout) :: this
     integer, intent(in) :: tstep
     type(time_step_controller_t) :: dt_controller
+    type(json_file) :: dt_params
     real(kind=dp) :: loop_start
     integer :: k, previous_save, next_save, local_idx, counter
 
@@ -132,7 +133,8 @@ contains
        call simulation_restart(this%neko_case, this%neko_case%chkp)
 
        ! Initialize the time step controller and set the time step
-       call dt_controller%init(this%neko_case%params)
+       call json_get(this%neko_case%params, 'case.time', dt_params)
+       call dt_controller%init(dt_params)
        this%neko_case%time%tstep = previous_save
        this%loaded_checkpoint = this%neko_case%time%tstep
 
