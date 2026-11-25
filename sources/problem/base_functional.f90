@@ -51,6 +51,8 @@ module base_functional
   implicit none
   private
 
+  public :: sensitivity_statistics
+
   !> The base functional type
   !!
   !! This is the base class for objectives and constraints alike.
@@ -315,18 +317,10 @@ contains
     class(base_functional_t), intent(in) :: this
     real(kind=rp), intent(out) :: values(:)
     real(kind=rp) :: s_max, s_min, s_mean, scale
-    integer(kind=i8) :: n_local, n_global
 
     if (size(values) .lt. 3) return
-    values = 0.0_rp
 
-    n_local = int(this%sensitivity%size(), kind=i8)
-    call MPI_Allreduce(n_local, n_global, 1, MPI_INTEGER8, MPI_SUM, NEKO_COMM)
-    if (n_global .lt. 1) return
-
-    s_max = vector_glmax(this%sensitivity)
-    s_min = vector_glmin(this%sensitivity)
-    s_mean = vector_glsum(this%sensitivity) / real(n_global, kind=rp)
+    call sensitivity_statistics(this%sensitivity, s_max, s_min, s_mean)
 
     scale = this%get_sensitivity_scale()
     if (scale .gt. 0.0_rp) then
@@ -344,6 +338,32 @@ contains
        values(3) = s_mean
     end if
   end subroutine functional_get_sensitivity_log_values
+
+  !> Maximum, minimum and arithmetic mean of a sensitivity vector.
+  !!
+  !! Taken over all entries on all ranks, on the device when there is one.
+  !! All three are zero for a vector without entries. Collective.
+  !! @param[in] sensitivity The sensitivity.
+  !! @param[out] s_max The maximum.
+  !! @param[out] s_min The minimum.
+  !! @param[out] s_mean The arithmetic mean.
+  subroutine sensitivity_statistics(sensitivity, s_max, s_min, s_mean)
+    type(vector_t), intent(in) :: sensitivity
+    real(kind=rp), intent(out) :: s_max, s_min, s_mean
+    integer(kind=i8) :: n_local, n_global
+
+    s_max = 0.0_rp
+    s_min = 0.0_rp
+    s_mean = 0.0_rp
+
+    n_local = int(sensitivity%size(), kind=i8)
+    call MPI_Allreduce(n_local, n_global, 1, MPI_INTEGER8, MPI_SUM, NEKO_COMM)
+    if (n_global .lt. 1) return
+
+    s_max = vector_glmax(sensitivity)
+    s_min = vector_glmin(sensitivity)
+    s_mean = vector_glsum(sensitivity) / real(n_global, kind=rp)
+  end subroutine sensitivity_statistics
 
   !> Factor the stored sensitivity carries on top of the functional's own
   !! derivative. One for a functional without a weight.

@@ -67,6 +67,14 @@ the functional values in that row.
 - The mean is the arithmetic mean over all design entries on all ranks
   (for a field design, the GLL points), not a volume average.
 
+When there are objectives, three more columns follow:
+`Total objective function.sens_max`, `Total objective function.sens_min` and
+`Total objective function.sens_mean`. They are of the summed objective
+sensitivity the optimizer uses, adjoint part included, again before the
+design's mapping back to the design variable and with the same mean. Unlike
+the per-objective columns they are **weighted**, as the sum of the weighted
+objectives in `Total objective function` is.
+
 ### The Method of Moving Asymptotes (MMA) {#configuration-solver-mma}
 
 In a case file, MMA is configured in `optimization.solver`, with MMA-specific

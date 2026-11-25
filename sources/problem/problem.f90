@@ -41,7 +41,8 @@
 module problem
   use num_types, only: rp, dp, xp
   use design, only: design_t
-  use base_functional, only: base_functional_t
+  use base_functional, only: base_functional_t, sensitivity_statistics
+  use scratch_registry, only: neko_scratch_registry
   use objective, only: objective_t, objective_wrapper_t, objective_factory
   use constraint, only: constraint_t, constraint_wrapper_t, constraint_factory
   use augmented_lagrangian_objective, only: augmented_lagrangian_objective_t
@@ -1088,6 +1089,7 @@ contains
     do i = 1, this%get_n_objectives()
        n = n + this%objective_list(i)%objective%get_sensitivity_log_size()
     end do
+    if (this%get_n_objectives() .gt. 0) n = n + 3
 
     if (do_constraints) then
        do i = 1, this%get_n_constraints()
@@ -1126,6 +1128,13 @@ contains
        end do
     end if
 
+    if (this%get_n_objectives() .gt. 0) then
+       call problem_append_header(buff, &
+            "Total objective function.sens_max, " // &
+            "Total objective function.sens_min, " // &
+            "Total objective function.sens_mean")
+    end if
+
   end function problem_get_sensitivity_log_header
 
   !> Append a header to a comma-separated header list.
@@ -1146,7 +1155,10 @@ contains
   !! sensitivity, without its weight, before the design's backward map. An
   !! objective that reaches the design only through the adjoint stores none:
   !! the adjoint part of all objectives is held, weighted and summed, by the
-  !! augmented Lagrangian objective, which is not logged.
+  !! augmented Lagrangian objective, which is not logged on its own.
+  !! The last three entries are of the summed objective sensitivity the
+  !! optimizer uses, adjoint part included, before the design's backward
+  !! map. Being a sum of the stored sensitivities, it carries the weights.
   !! Collective over all ranks.
   !! @param[in] this The problem object.
   !! @param[out] values Array to populate with the log values.
@@ -1156,8 +1168,9 @@ contains
     class(problem_t), intent(in) :: this
     real(kind=rp), intent(out) :: values(:)
     logical, intent(in), optional :: include_constraints
-    integer :: i, n, offset
+    integer :: i, n, offset, idx
     logical :: do_constraints
+    type(vector_t), pointer :: total
 
     do_constraints = .true.
     if (present(include_constraints)) do_constraints = include_constraints
@@ -1186,6 +1199,16 @@ contains
             end if
           end associate
        end do
+    end if
+
+    ! The summed objective sensitivity, as compute_sensitivity builds it
+    if (this%n_objectives .gt. 0) then
+       call neko_scratch_registry%request(total, idx, this%n_design, .false.)
+       call this%get_objective_sensitivities(total)
+       call sensitivity_statistics(total, values(offset), &
+            values(offset + 1), values(offset + 2))
+       nullify(total)
+       call neko_scratch_registry%relinquish(idx)
     end if
   end subroutine problem_get_sensitivity_log_values
 end module problem
