@@ -76,11 +76,11 @@ end type
 
 ### 3.3 Global Instance
 A global instance of the continuation scheduler is provided as
-`nekotop_continuation`. It is initialized in the driver at the beginning of the
-simulation. Any other module that requires a continuation strategy for one or
-more of its parameters can register them through this global object. Note that
-`nekotop_continuation%update(iter)` is called at each iteration in the
-optimization loop.
+`nekotop_continuation`. It is initialized in the driver after the simulation has
+been initialised (see section 4). Any other module that requires a
+continuation strategy for one or more of its parameters can register them
+through this global object. Note that `nekotop_continuation%update(iter)` is
+called at each iteration in the optimization loop.
 
 ```fortran
 type(continuation_scheduler_t), public, target :: nekotop_continuation
@@ -93,17 +93,27 @@ call nekotop_continuation%init(json)
 ```
 Reads `optimization.solver.continuation_iterations` in the case file, an
 integer that defaults to `1`, as the default number of iterations for which each
-value of a registered parameter is held. Note that an individual number of
-iterations can be given in the case file, next to the parameter, as
-`{parameters_name}_iterations`. A number of iterations of `0` or below is not
+value of a registered parameter is held. It may be an integer literal or the
+name of an integer constant of `case.constants`. Note that an individual number
+of iterations can be given in the case file, next to the parameter, as
+`{parameters_name}_iterations`, which may likewise be an integer literal or the
+name of an integer constant. A number of iterations of `0` or below is not
 rejected: `update` then returns early for that parameter, which silently stays
 at its first value.
 
 The parameters that are registered from a case file are `r` of the PDE filter,
 `f_max` (linear, RAMP, Borrvall & Petersson, SIMP), `q` (RAMP, Borrvall &
 Petersson), `p` (SIMP) and `beta` (Heaviside) of the mappings, and the `weight`
-of the three objectives. Each is given in the case file either as a real, or as
-an array of reals; an integer is rejected, and so is any other type.
+of the three objectives. Each is given in the case file as a real, as an array
+of reals, or as the name of a real or vector constant of `case.constants`. A
+vector constant takes the array path, and so is registered for continuation; a
+real constant takes the scalar path. An integer literal is rejected, and so is
+any other type.
+
+The constants are looked up when the parameters are read, so
+`nekotop_continuation%init` has to be called after the simulation has been
+initialised (`sim%init`), which is what registers the constants. The drivers
+`sources/drivers/topopt.f90` and `sources/drivers/topopt-user.f90` do so.
 
 
 ## 5. Registering Parameters
@@ -111,10 +121,12 @@ an array of reals; an integer is rejected, and so is any other type.
 call nekotop_continuation%register_parameter(name, target, values, iterations)
 ```
 It is possible to use `json_get_or_register` function in the scheduler to read
-the parameter form the json file. Note that if the parameter in the json is an
-array, then it will automatically register in the scheduler as well. If a single
-scalar is given in the json, then this function will work as a single call of
-`json_get_or_default` (or `json_get`, when no default is given).
+the parameter from the json file. Note that if the parameter in the json is an
+array, or the name of a vector constant, then it will automatically register in
+the scheduler as well. If a single real, or the name of a real constant, is
+given in the json, then this function will work as a single call of
+`json_get_or_lookup_or_default` (or `json_get_or_lookup`, when no default is
+given).
 ```fortran
 call nekotop_continuation%json_get_or_register(json, name, target, value, default_value)
 ```
@@ -123,8 +135,19 @@ initial value (the scalar, or the first entry of the array), and
 `default_value` is optional: without it, a parameter that is absent from the
 case file stops the run with "`name` not found and no default provided". With
 an array the entries are read with Neko's constants lookup, and the optional
-`{name}_iterations` is read as an integer. An empty array is not rejected and
-its first entry is read out of bounds.
+`{name}_iterations` is read as an integer, or the name of an integer constant.
+An empty array is not rejected and its first entry is read out of bounds.
+
+A string value is resolved against `case.constants`: a vector constant is
+treated as an array, a real constant as a real. Otherwise the run stops with
+one of these errors:
+
+- `name: the constant 'X' is an integer. Give its value as a real, e.g. 2.0.`,
+  when `X` names an integer constant;
+- `name: no real or vector constant 'X' in case.constants.`, when no constant of
+  a real or vector type has that name;
+- `name can only be a real, a real array or the name of a constant!`, for any
+  other type, which includes an integer literal.
 
 ## 6. Update Mechanism
 ```fortran
@@ -136,8 +159,9 @@ call nekotop_continuation%update(iter)
 ## 7. JSON Integration
 The routine that reads a parameter with a continuation strategy from the case
 file is `json_get_or_register`, described in section 5. If the parameter is a
-single scalar, it is a constant parameter in the optimization loop and is not
-registered to `nekotop_continuation`. If it is an array, it is registered with
+single real, or the name of a real constant, it is a constant parameter in the
+optimization loop and is not registered to `nekotop_continuation`. If it is an
+array, or the name of a vector constant, it is registered with
 these values and `optimization.solver.continuation_iterations` as the default
 number of iterations per value, unless the individual number is given for that
 particular parameter as `{parameters_name}_iterations`.
@@ -168,6 +192,13 @@ call nekotop_continuation%free()
 "beta": [1.0, 5.0, 10.0],
 "beta_iterations": 50
 ```
+or, with the values taken from `case.constants`:
+```json
+"beta": "beta_schedule",
+"beta_iterations": "beta_steps"
+```
+where `beta_schedule` is a vector constant and `beta_steps` an integer
+constant.
 
 ## 11. Summary
 
