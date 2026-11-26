@@ -80,7 +80,7 @@ module steady_simcomp
 
      ! Old fields
      type(field_t) :: u_old, v_old, w_old, p_old, s_old
-     real(kind=dp) :: tol
+     real(kind=rp) :: tol
 
      !> If true, the fluid and scalar fields are considered to be coupled, and
      !! the simulation will only be considered converged if both the fluid and
@@ -128,7 +128,7 @@ contains
     class(steady_simcomp_t), intent(inout), target :: this
     type(json_file), intent(inout) :: json
     class(case_t), intent(inout), target :: case
-    real(kind=dp) :: tol
+    real(kind=rp) :: tol
     integer :: log_frequency
     character(len=:), allocatable :: output_filename
 
@@ -137,7 +137,7 @@ contains
     ! Read the name, which must be unique among the simulation components
     call json_get_or_default(json, "name", this%name, "steady")
     ! Read the tolerance
-    call json_get_or_default(json, "tol", tol, 1.0e-6_dp)
+    call json_get_or_default(json, "tol", tol, 1.0e-6_rp)
     ! Read the log frequency
     call json_get_or_default(json, "log_frequency", log_frequency, 50)
     call json_get_or_default(json, "scalar_coupled", this%scalar_coupled, .false.)
@@ -157,7 +157,7 @@ contains
   subroutine steady_simcomp_init_from_attributes(this, tol, log_frequency, &
        output_filename)
     class(steady_simcomp_t), intent(inout) :: this
-    real(kind=dp), intent(in) :: tol
+    real(kind=rp), intent(in) :: tol
     integer, intent(in) :: log_frequency
     character(len=*), intent(in), optional :: output_filename
 
@@ -225,8 +225,7 @@ contains
     class(steady_simcomp_t), intent(inout) :: this
     type(time_state_t), intent(in) :: time
     integer :: tstep
-    real(kind=rp) :: t
-    real(kind=rp) :: dt
+    real(kind=dp) :: t, dt
 
     real(kind=rp), dimension(4) :: normed_diff_fluid
     real(kind=rp), dimension(1) :: normed_diff_scalar
@@ -350,7 +349,8 @@ contains
     class(steady_simcomp_t), intent(inout) :: this
     type(time_state_t), intent(in) :: time
     real(kind=rp), dimension(4), parameter :: frozen_fluid = 0.0_rp
-    real(kind=rp) :: t, dt, residual
+    real(kind=dp) :: t, dt
+    real(kind=rp) :: residual
 
     t = time%t
     dt = this%case%time%dt
@@ -424,12 +424,12 @@ contains
   subroutine steady_simcomp_write_row(this, tstep, t, fluid, scalar)
     class(steady_simcomp_t), intent(inout) :: this
     integer, intent(in) :: tstep
-    real(kind=rp), intent(in) :: t
+    real(kind=dp), intent(in) :: t
     real(kind=rp), dimension(4), intent(in) :: fluid
     real(kind=rp), intent(in) :: scalar
 
     this%log_data%x(1) = real(tstep, kind=rp)
-    this%log_data%x(2) = t
+    this%log_data%x(2) = real(t, kind=rp)
     this%log_data%x(3:6) = fluid
     this%log_data%x(7) = scalar
     call this%logger%write(this%log_data)
@@ -456,7 +456,7 @@ contains
   function energy_norm(delta_fld, coef, dt)
     type(field_t), intent(in) :: delta_fld
     type(coef_t), intent(in) :: coef
-    real(kind=rp), intent(in) :: dt
+    real(kind=dp), intent(in) :: dt
     real(kind=rp) :: energy_norm, tmp
     integer :: n
 
@@ -466,7 +466,7 @@ contains
     else
        tmp = glsc3(delta_fld%x, delta_fld%x, coef%B, n)
     end if
-    energy_norm = sqrt(tmp) / dt / coef%volume
+    energy_norm = sqrt(tmp) / real(dt, kind=rp) / coef%volume
 
   end function energy_norm
 

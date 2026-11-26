@@ -103,5 +103,7 @@ file for all of them.
 ### Limitations
 
 - The component currently supports at most one scalar field.
-- For truly time-dependent optimization workflows, prefer the unsteady
-  configuration described in \subpage unsteady_simulation.
+- The component is for steady problems only. An unsteady problem
+  (`"unsteady": true`, see \subpage unsteady_simulation) that declares it
+  stops with an error at setup: the component drives the problem to a steady
+  state and freezes the fluid there, which an unsteady problem must not do.
