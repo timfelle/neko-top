@@ -175,8 +175,9 @@ ADJOINT_BC_ABORTING = {"symmetry", "shear_stress", "wall_model"}
 # Known, but the zone silently gets a natural condition: not accepted.
 ADJOINT_BC_NO_OP = {"user_velocity_pointwise"}
 # Factory cases that build Neko's dong_outflow_t as the adjoint pressure
-# condition, which binds the primal velocity: rejected on purpose.
-ADJOINT_BC_REJECTED = {"outflow+dong", "normal_outflow+dong"}
+# condition, which binds the primal velocity: the p_adj they set does not
+# depend on the objective, but the code runs, so they are accepted.
+ADJOINT_BC_REJECTED = set()
 
 
 def test_adjoint_fluid_bc_enum_equals_factory_labels(schemas):

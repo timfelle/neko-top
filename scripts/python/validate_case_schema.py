@@ -240,9 +240,21 @@ def load_registry(
     _load_dir(Path(top_dir), TOP_PREFIX, schemas)
     registry = Registry()
     for schema_id, schema in schemas.items():
+        # `Validator.evolve()` re-picks the validator class with
+        # `validator_for(schema, default=cls)` whenever a `$ref` descends into
+        # a whole resource, and an explicit `$schema` 2020-12 (Neko's schemas
+        # declare it) would swap in the stock `Draft202012Validator`,
+        # silently dropping `x-neko-real` and the strict integer type below
+        # that point. The registered copy therefore omits `$schema`, so the
+        # class chosen by the caller is kept for every resource. The dialect
+        # stays 2020-12 through `default_specification`; `schemas` itself
+        # keeps the files as read.
+        contents = {k: v for k, v in schema.items() if k != "$schema"}
         registry = registry.with_resource(
             schema_id,
-            Resource.from_contents(schema, default_specification=DRAFT202012),
+            Resource.from_contents(
+                contents, default_specification=DRAFT202012
+            ),
         )
     return registry, schemas
 

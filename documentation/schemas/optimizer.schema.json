@@ -142,20 +142,17 @@
           "type": "object",
           "properties": {
             "epsimin": {
-              "description": "Minimum subproblem tolerance; positive and below 1. Default 1.0e-9 * sqrt(m + n). The subproblem reduces its epsilon from 1 by factors of 10 while it exceeds `epsimin`, so from 1 up (for `pdip`: from 1/0.9 up) the loop never runs and every update ignores the sensitivities (dip returns the design unchanged, pdip the midpoint of the move box). Values above about 1.0e-2 give a coarse subproblem.",
-              "$comment": "mma_cpu.f90:917-919,930,941 (dip), :502-503,516,523 (pdip); mma_device.f90:867-869,882,893 and :421,436,443. mma.f90:501-503 checks only > 0. Run on min sum(x-0.2)^2 s.t. sum x >= 1.2 (optimum 0.4): epsimin 1 dip stays at 0.5, 1.2 pdip stays at 0.5.",
-              "$ref": "urn:neko:schema:common#/$defs/positiveRealNumber",
-              "exclusiveMaximum": 1
+              "description": "Minimum subproblem tolerance; positive (mma.f90:501-502 aborts otherwise). Default 1.0e-9 * sqrt(m + n).",
+              "$comment": "mma.f90:501-503 checks only > 0.",
+              "$ref": "urn:neko:schema:common#/$defs/positiveRealNumber"
             },
             "max_iter": {
-              "description": "Subsolver iterations; at least 1. Default 100.",
-              "$comment": "The Newton loops `do iter = 1, max_iter` (mma_cpu.f90:588,984; mma_device.f90:534,936) run zero times for a value <= 0, so the subproblem is never solved: pdip keeps its start point and dip returns the midpoint of the move box (mma_cpu.f90:503), both independent of the sensitivities. mma.f90:283 does not check it.",
-              "$ref": "urn:neko:schema:common#/$defs/positiveInteger"
+              "description": "Subsolver iterations. Default 100.",
+              "type": "integer"
             },
             "asyinit": {
-              "description": "Initial asymptote distance; positive. Default 0.2.",
-              "$comment": "Iterations 1 and 2 set low/upp = x -/+ asyinit*x_diff without a clamp (mma_cpu.f90:323-326): 0 gives upp = low and the `dip` subproblem divides by upp - low (:383,:385), so the design becomes NaN; a negative value swaps the asymptotes.",
-              "$ref": "urn:neko:schema:common#/$defs/positiveRealNumber"
+              "description": "Initial asymptote distance. Default 0.2.",
+              "$ref": "urn:neko:schema:common#/$defs/realNumber"
             },
             "asyincr": {
               "description": "Asymptote increase factor. Default 1.05.",
@@ -182,15 +179,15 @@
               ]
             },
             "xmin": {
-              "description": "Lower design bound. Default 0.0. With `xmax` absent it must not exceed the default 1.0.",
+              "description": "Lower design bound. Default 0.0.",
               "$ref": "urn:neko:schema:common#/$defs/realNumber"
             },
             "xmax": {
-              "description": "Upper design bound. Default 1.0. With `xmin` absent it must not be below the default 0.0.",
+              "description": "Upper design bound. Default 1.0.",
               "$ref": "urn:neko:schema:common#/$defs/realNumber"
             },
             "a0": {
-              "description": "MMA constant a0. Default 1.0. Not negative with `subsolver` `pdip` or with `a` above 0: with pdip a negative value freezes the design at the midpoint of the move box (the z-stationarity a0 - zeta - lambda.a = 0 needs zeta = a0 < 0), and with dip and a > 0 the variable z relaxes the constraints so that they end violated (mma_cpu.f90:542,609,779,966). With dip and a = 0 it is ignored.",
+              "description": "MMA constant a0. Default 1.0.",
               "$ref": "urn:neko:schema:common#/$defs/realNumber"
             },
             "a": {
@@ -198,7 +195,7 @@
               "$ref": "urn:neko:schema:common#/$defs/realNumber"
             },
             "c": {
-              "description": "MMA constant c, the cost of the artificial variable y. Default 1000.0. Above 0 with constraints present (rule in `optimization`), since c <= 0 leaves every constraint violated; not negative with `subsolver` `pdip`, which then freezes the design at its start (mma_cpu.f90:511,541,608,961). A small positive value does not enforce the constraints either, because c must exceed the constraint multiplier.",
+              "description": "MMA constant c, the cost of the artificial variable y. Default 1000.0.",
               "$ref": "urn:neko:schema:common#/$defs/realNumber"
             },
             "d": {
@@ -210,7 +207,7 @@
               "$ref": "urn:neko:schema:common#/$defs/realNumber"
             },
             "scale": {
-              "description": "Scaling of the constraints. Default 1.0. With constraints present it must be above 0 (or, with `auto_scale`, non-zero).",
+              "description": "Scaling of the constraints. Default 1.0.",
               "$ref": "urn:neko:schema:common#/$defs/realNumber"
             },
             "auto_scale": {
@@ -218,96 +215,7 @@
               "type": "boolean"
             }
           },
-          "additionalProperties": false,
-          "allOf": [
-            {
-              "$comment": "mma.f90:293-294,308-309 read the bounds and mma_cpu.f90:309-316,366-367 use them without an order check, so a lower bound above the effective upper one moves the design outside the box. Equal bounds run, hence the inclusive limits: the design stays fixed if it starts inside the box. A design that starts outside [xmin, xmax] is never projected into the box by MMA: with dip and xmin >= x0 + move_limit the move-limited box is empty and the design stays at x0, outside its bounds, for the whole run (mma_cpu.f90:309-316,323-326,366-367,978-979; run from x0 = 0 with xmin 1: 1.1e-4 against 0.4 for the default box), so a volume constraint may stay violated and the final validation abort (mma_optimizer.f90:411-414). A comparison of the bounds with the initial design cannot be expressed here.",
-              "if": {
-                "not": {
-                  "required": [
-                    "xmax"
-                  ]
-                }
-              },
-              "then": {
-                "properties": {
-                  "xmin": {
-                    "maximum": 1.0
-                  }
-                }
-              }
-            },
-            {
-              "if": {
-                "not": {
-                  "required": [
-                    "xmin"
-                  ]
-                }
-              },
-              "then": {
-                "properties": {
-                  "xmax": {
-                    "minimum": 0.0
-                  }
-                }
-              }
-            },
-            {
-              "$comment": "mma_cpu.f90:511,541,608 (pdip: c + d*y - lambda - mu = 0 has no root with lambda, mu >= 0 for c < 0).",
-              "if": {
-                "required": [
-                  "subsolver"
-                ],
-                "properties": {
-                  "subsolver": {
-                    "const": "pdip"
-                  }
-                }
-              },
-              "then": {
-                "properties": {
-                  "c": {
-                    "minimum": 0
-                  }
-                }
-              }
-            },
-            {
-              "$comment": "mma_cpu.f90:542,609,779 (pdip rez/delz) and :966 (dip z = max(0, 10*(lambda.a - a0))); a dip run with a = 0 ignores a0. Svanberg's MMA assumes a0 > 0.",
-              "if": {
-                "anyOf": [
-                  {
-                    "required": [
-                      "subsolver"
-                    ],
-                    "properties": {
-                      "subsolver": {
-                        "const": "pdip"
-                      }
-                    }
-                  },
-                  {
-                    "required": [
-                      "a"
-                    ],
-                    "properties": {
-                      "a": {
-                        "exclusiveMinimum": 0
-                      }
-                    }
-                  }
-                ]
-              },
-              "then": {
-                "properties": {
-                  "a0": {
-                    "minimum": 0
-                  }
-                }
-              }
-            }
-          ]
+          "additionalProperties": false
         },
         "max_iterations": {
           "$ref": "#/$defs/maxIterations"

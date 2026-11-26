@@ -17,10 +17,8 @@
               "const": "uniform"
             },
             "value": {
-              "description": "Uniform design value, in [0, 1]: the mapping rules (e.g. a non-integer SIMP `p`) assume a design inside that range, and the first forward map runs on this value at design initialisation (design_brinkman.f90:330,338), so a negative value gives a NaN Brinkman amplitude (SIMP_mapping_cpu.f90:93,110).",
-              "$ref": "urn:neko:schema:common#/$defs/realNumber",
-              "minimum": 0,
-              "maximum": 1
+              "description": "Uniform design value.",
+              "$ref": "urn:neko:schema:common#/$defs/realNumber"
             }
           },
           "additionalProperties": false
@@ -38,20 +36,16 @@
               "const": "point_zone"
             },
             "base_value": {
-              "description": "Value outside the zone, in [0, 1] (see `uniform`).",
-              "$ref": "urn:neko:schema:common#/$defs/realNumber",
-              "minimum": 0,
-              "maximum": 1
+              "description": "Value outside the zone.",
+              "$ref": "urn:neko:schema:common#/$defs/realNumber"
             },
             "zone_name": {
               "description": "Name of the point zone.",
               "$ref": "urn:neko:schema:common#/$defs/nonEmptyString"
             },
             "zone_value": {
-              "description": "Value inside the zone, in [0, 1] (see `uniform`).",
-              "$ref": "urn:neko:schema:common#/$defs/realNumber",
-              "minimum": 0,
-              "maximum": 1
+              "description": "Value inside the zone.",
+              "$ref": "urn:neko:schema:common#/$defs/realNumber"
             }
           },
           "additionalProperties": false
@@ -71,7 +65,7 @@
           "const": "brinkman"
         },
         "name": {
-          "description": "Identifier of the design checkpoint; it is not displayed and not part of any output file name. It is written to the HDF5 design checkpoint (design_hdf5_io.f90:160-164) and compared on every load (:355-358), so a resumed run aborts unless it equals the name stored in the checkpoint. Default `Brinkman Design`. At most 64 bytes (ASCII characters only) and not blank when a design checkpoint is written or read (see the rule in `optimization`).",
+          "description": "Identifier of the design checkpoint; it is not displayed and not part of any output file name. It is written to the HDF5 design checkpoint (design_hdf5_io.f90:160-164) and compared on every load (:355-358), so a resumed run aborts unless it equals the name stored in the checkpoint. Default `Brinkman Design`. At most 64 bytes (ASCII characters only) when a design checkpoint is written or read (see the rule in `optimization`).",
           "type": "string"
         },
         "domain": {

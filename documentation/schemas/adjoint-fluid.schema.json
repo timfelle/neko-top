@@ -4,7 +4,7 @@
   "$defs": {
     "boundaryCondition": {
       "description": "A boundary condition of the adjoint velocity and pressure. For `normal_outflow`, `value` or `file_name` is required syntactically (neko src/bc/non_normal_aligned.f90:122-158 aborts without one), but the adjoint never uses the tangential data: the BC object is not appended to the velocity conditions and only its constraint masks are used (adjoint_fluid_pnpn.f90:1050-1060), so the adjoint tangential velocity on the zone is 0 and `p_adj` is 0 there (adjoint_fluid_pnpn_bc_fctry.f90:90-91). A `file_name` is still imported and must exist.",
-      "$comment": "Factories: sources/adjoint/adjoint_fluid_pnpn_bc_fctry.f90:87-109 (pressure) and :149-191 (velocity); keys are read by Neko's boundary condition classes, so the Neko union is reused. `symmetry` (adjoint_fluid_pnpn.f90:1042), `shear_stress` (:1061-1064) and `wall_model` (:1065-1068) abort and are not listed. `user_velocity_pointwise` is a known type whose factory branch is commented out (adjoint_fluid_pnpn_bc_fctry.f90:178): the zone counts as assigned and gets a natural condition instead of the requested one (adjoint_fluid_pnpn.f90:1028,1037), so it is not accepted. `name` is read only in Neko's own fluid BC factory (neko src/fluid/fluid_pnpn_bc_fctry.f90:505,588), never by the adjoint factories, so it is rejected. `outflow+dong` and `normal_outflow+dong` build Neko's dong_outflow_t as the adjoint pressure condition, which binds the primal velocity registry fields u, v, w (neko src/bc/dong_outflow.f90:236-238) and sets p_adj = -0.5*|u|^2*S0 at the outlet (:124-133): an objective-independent pressure value, so the two types are not accepted. `moving` is read only by Neko's no_slip_t (neko src/bc/no_slip.f90:72), while the adjoint builds a zero_dirichlet_t that reads no key, so it is rejected like `name`.",
+      "$comment": "Factories: sources/adjoint/adjoint_fluid_pnpn_bc_fctry.f90:87-109 (pressure) and :149-191 (velocity); keys are read by Neko's boundary condition classes, so the Neko union is reused. `symmetry` (adjoint_fluid_pnpn.f90:1042), `shear_stress` (:1061-1064) and `wall_model` (:1065-1068) abort and are not listed. `user_velocity_pointwise` is a known type whose factory branch is commented out (adjoint_fluid_pnpn_bc_fctry.f90:178): the zone counts as assigned and gets a natural condition instead of the requested one (adjoint_fluid_pnpn.f90:1028,1037), so it is not accepted. `name` is read only in Neko's own fluid BC factory (neko src/fluid/fluid_pnpn_bc_fctry.f90:505,588), never by the adjoint factories, so it is rejected. `moving` is read only by Neko's no_slip_t (neko src/bc/no_slip.f90:72), while the adjoint builds a zero_dirichlet_t that reads no key, so it is rejected like `name`.",
       "oneOf": [
         {
           "allOf": [
@@ -23,6 +23,8 @@
                     "no_slip",
                     "outflow",
                     "normal_outflow",
+                    "outflow+dong",
+                    "normal_outflow+dong",
                     "user_velocity",
                     "user_pressure",
                     "blasius_profile"
@@ -144,7 +146,7 @@
           "type": "boolean"
         },
         "source_term": {
-          "description": "Source terms of the adjoint momentum equation (note the singular key). The state-dependent Neko types `brinkman`, `coriolis`, `boussinesq`, `sponge`, `translation`, `gradient_jump_penalty` and `hpfrt` are not accepted: they read the primal `u`, `v`, `w` (or the primal scalar) from the registry, so on the adjoint right-hand side they add a forcing built from the primal state instead of acting on the adjoint (`brinkman` adds -chi*u, not -chi*u_adj, and re-registers the permeability fields of the forward run).",
+          "description": "Source terms of the adjoint momentum equation (note the singular key).",
           "type": "array",
           "items": {
             "allOf": [
@@ -153,30 +155,10 @@
               },
               {
                 "$ref": "urn:neko-top:schema:source-terms#/$defs/registeredSourceTerm"
-              },
-              {
-                "not": {
-                  "required": [
-                    "type"
-                  ],
-                  "properties": {
-                    "type": {
-                      "enum": [
-                        "brinkman",
-                        "coriolis",
-                        "boussinesq",
-                        "sponge",
-                        "translation",
-                        "gradient_jump_penalty",
-                        "hpfrt"
-                      ]
-                    }
-                  }
-                }
               }
             ]
           },
-          "$comment": "sources/adjoint/adjoint_fluid_scheme_incompressible.f90:368-370 -> neko src/source_terms/source_term_handler.f90:286-301; neko src/source_terms/coriolis_source_term.f90:180-182; brinkman_source_term.f90:176-179,316-318; translation_source_term.f90:155-157; sponge_source_term.f90:446-448; gradient_jump_penalty.f90:217-219,225-229; hpfrt_source_term.f90:163-166; boussinesq_source_term.f90:151. constant, field and centrifugal do not depend on the flow and stay; `user` receives the primal scheme name and unnamed scratch fields (user_source_term.f90:117-122,162), so a user routine cannot tell the adjoint from the forward call (not checked here)."
+          "$comment": "sources/adjoint/adjoint_fluid_scheme_incompressible.f90:368-370 -> neko src/source_terms/source_term_handler.f90:286-301. The state-dependent Neko types read the primal `u`, `v`, `w` (or the primal scalar) from the registry; they run on the adjoint right-hand side without an abort."
         },
         "output_filename": {
           "description": "Base name of the adjoint output. Default `adjoint`.",

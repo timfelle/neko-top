@@ -97,11 +97,11 @@
           "type": "boolean"
         },
         "primal_name": {
-          "description": "Name of the primal scalar field; must equal `case.scalar.name`. Default `s`. With `name` absent the default adjoint name `<primal_name>_adj` must not be a velocity or pressure adjoint field, so `primal_name` must not be `u`, `v`, `w` or `p`, and it is at most 62 characters.",
+          "description": "Name of the primal scalar field; must equal `case.scalar.name`. Default `s`. With `name` absent the default adjoint name `<primal_name>_adj` must fit the same limit as `name`, so `primal_name` is at most 62 characters.",
           "$ref": "urn:neko:schema:common#/$defs/nonEmptyString"
         },
         "name": {
-          "description": "Name of the adjoint scalar. Default `<primal_name>_adj`. At most 66 characters and without `/` or blank (the log line and the checkpoint payload name abort otherwise: adjoint_scalar_scheme.f90:321, adjoint_scalar_pnpn.f90:263-265). It must not name a field that exists already: the adjoint then reuses and overwrites that field (adjoint_scalar_scheme.f90:284-285,333-337). While the adjoint scalar is enabled the schema rejects `u`, `v`, `w`, `p`, `u_adj`, `v_adj`, `w_adj`, `p_adj`, `u_e`, `v_e`, `w_e`, `u_adj_e`, `v_adj_e`, `w_adj_e`, `abx1` (its own work field), `abx2`, and the design fields `design_indicator`, `brinkman_amplitude` and `sensitivity`; further `s`, `s_lambda`, `s_lambda_tot` and `s_cp` when the primal scalar is named `s`, and `fluid_mu`, `fluid_mu_tot` and `fluid_rho` when the fluid is named `fluid` (rules under `case` in the case-file schema).",
+          "description": "Name of the adjoint scalar. Default `<primal_name>_adj`. At most 66 characters and without `/` or blank (the log line and the checkpoint payload name abort otherwise: adjoint_scalar_scheme.f90:321, adjoint_scalar_pnpn.f90:263-265). While the adjoint scalar is enabled the schema rejects `abx1` and `abx2`, the scheme's own work fields, which the checkpoint payload registered under the adjoint name would list twice (a rule under `case` in the case-file schema).",
           "$ref": "urn:neko:schema:common#/$defs/nonEmptyString"
         },
         "solver": {

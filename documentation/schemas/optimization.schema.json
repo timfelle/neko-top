@@ -135,118 +135,7 @@
           }
         },
         {
-          "$comment": "mma_optimizer.f90:194,328-336 multiplies the constraint values and sensitivities by the scaling factor (`scale`, or abs(scale / g1) with auto_scale) before every MMA update. A negative factor reverses each inequality and 0 removes the constraints; the final validation of the unscaled constraints then aborts (mma_optimizer.f90:411-414). Without constraints only the dummy constraint is scaled and no harm was found.",
-          "if": {
-            "required": [
-              "constraints",
-              "solver"
-            ],
-            "properties": {
-              "constraints": {
-                "minItems": 1
-              },
-              "solver": {
-                "required": [
-                  "type",
-                  "mma"
-                ],
-                "properties": {
-                  "type": {
-                    "const": "mma"
-                  },
-                  "mma": {
-                    "required": [
-                      "scale"
-                    ]
-                  }
-                }
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "solver": {
-                "properties": {
-                  "mma": {
-                    "if": {
-                      "required": [
-                        "auto_scale"
-                      ],
-                      "properties": {
-                        "auto_scale": {
-                          "const": true
-                        }
-                      }
-                    },
-                    "then": {
-                      "properties": {
-                        "scale": {
-                          "not": {
-                            "const": 0
-                          }
-                        }
-                      }
-                    },
-                    "else": {
-                      "properties": {
-                        "scale": {
-                          "exclusiveMinimum": 0
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        },
-        {
-          "$comment": "The MMA artificial variable y costs c (mma.f90:297; mma_cpu.f90:961 dip y = max(0, lambda - c)); with c <= 0 and constraints present the subproblem relaxes every constraint at no first-order cost, each active constraint ends violated and the final validation aborts after the whole run (mma_optimizer.f90:411-414). A small positive c does not enforce them either, because c must exceed the constraint multiplier; this only excludes the values that are certainly wrong. Without constraints only the dummy constraint sees c. The pdip-only rule on negative c is in the mma object.",
-          "if": {
-            "required": [
-              "constraints",
-              "solver"
-            ],
-            "properties": {
-              "constraints": {
-                "minItems": 1
-              },
-              "solver": {
-                "required": [
-                  "type",
-                  "mma"
-                ],
-                "properties": {
-                  "type": {
-                    "const": "mma"
-                  },
-                  "mma": {
-                    "required": [
-                      "c"
-                    ]
-                  }
-                }
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "solver": {
-                "properties": {
-                  "mma": {
-                    "properties": {
-                      "c": {
-                        "exclusiveMinimum": 0
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        },
-        {
-          "$comment": "design_hdf5_io.f90:155-168,256,311-315,355-358: the design name is stored in the HDF5 design checkpoint and read back into character(len=64); a longer name is cut and the resumed run aborts with 'design: mismatch in name during HDF5 read'. An empty or blank name fails too (h5tset_size_f rejects size 0). An all-blank max_runtime reads as no limit (neko src/common/utils.f90:499), like the empty string, so it does not count as set. Only runs that write or read a design checkpoint are affected: restart_file, a max_runtime, or checkpoint.interval >= 1 (the automatic lookup of earlier checkpoint files also reads one).",
+          "$comment": "design_hdf5_io.f90:256,311-313,355-358: the design name is stored in the HDF5 design checkpoint and read back into character(len=64); a longer name does not fit and the resumed run aborts with 'design: mismatch in name during HDF5 read'. An all-blank max_runtime reads as no limit (neko src/common/utils.f90:499), like the empty string, so it does not count as set. Only runs that write or read a design checkpoint are affected: restart_file, a max_runtime, or checkpoint.interval >= 1 (the automatic lookup of earlier checkpoint files also reads one). A blank name is not rejected: design_hdf5_io.f90:160-164 ignores the status of h5tset_size_f, so no abort is proven.",
           "if": {
             "required": [
               "solver"
@@ -302,8 +191,7 @@
                   "name": {
                     "allOf": [
                       {
-                        "maxLength": 64,
-                        "pattern": "[^ ]"
+                        "maxLength": 64
                       },
                       {
                         "$comment": "The name is held as bytes (json-fortran returns the UTF-8 bytes; design_hdf5_io.f90:160 sizes the attribute with len_trim), so maxLength, which counts code points, bounds the bytes only for ASCII.",

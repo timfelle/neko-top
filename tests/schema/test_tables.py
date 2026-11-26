@@ -383,20 +383,6 @@ REJECTED_AS_THE_CODE_ABORTS = [
     ("bp_f_max_scalar_with_iterations", S,
      {"optimization.design.mapping[2].type": "Borrvall_Petersson",
       "optimization.design.mapping[2].f_max_iterations": 2}, "mapping[2]"),
-    # set_optimization_ic.f90:104,108-110 + design_brinkman.f90:330,338: the
-    # first forward map runs on the initial value, which must lie in [0, 1].
-    ("ic_uniform_negative_with_simp", S,
-     {"optimization.design.initial_distribution.value": -0.5,
-      "optimization.design.mapping[2].type": "SIMP",
-      "optimization.design.mapping[2].q": DEL,
-      "optimization.design.mapping[2].p": 2.5}, "initial_distribution"),
-    ("ic_uniform_above_one", S,
-     {"optimization.design.initial_distribution.value": 1.5},
-     "initial_distribution"),
-    ("ic_point_zone_zone_value_negative", S,
-     {"optimization.design.initial_distribution":
-      {"type": "point_zone", "base_value": 0.0, "zone_value": -0.5,
-       "zone_name": "optimization_domain"}}, "initial_distribution"),
     # design_hdf5_io.f90:160,256,355-358: the name is held as bytes.
     ("design_name_40_two_byte_characters", S,
      {"optimization.design.name": "\u00e9" * 40,
@@ -414,29 +400,6 @@ REJECTED_AS_THE_CODE_ABORTS = [
     ("time_window_tolerance_negative", U,
      {"optimization.time_window_test": {"tolerance": -1.0e-6}},
      "time_window_test"),
-    # mma_cpu.f90:917-919,930,941: epsi starts at 1 and loops while it
-    # exceeds epsimin, so the subproblem is never solved.
-    ("mma_epsimin_one", S,
-     {"optimization.solver.mma.epsimin": 1.0}, "mma.epsimin"),
-    ("mma_epsimin_above_one_pdip", S,
-     {"optimization.solver.mma.epsimin": 1.2,
-      "optimization.solver.mma.subsolver": "pdip"}, "mma.epsimin"),
-    # mma_cpu.f90:961 and :511,541,608: c <= 0 relaxes the constraints.
-    ("mma_c_zero_with_constraints", S,
-     {"optimization.solver.mma.c": 0.0}, "mma.c"),
-    ("mma_c_negative_with_constraints", S,
-     {"optimization.solver.mma.c": -1.0}, "mma.c"),
-    ("mma_c_negative_pdip_unconstrained", S,
-     {"optimization.constraints": [],
-      "optimization.solver.mma.subsolver": "pdip",
-      "optimization.solver.mma.c": -1.0}, "mma.c"),
-    # mma_cpu.f90:542,609,779,966: a0 < 0.
-    ("mma_a0_negative_pdip", S,
-     {"optimization.solver.mma.subsolver": "pdip",
-      "optimization.solver.mma.a0": -0.001}, "mma.a0"),
-    ("mma_a0_negative_dip_with_a", S,
-     {"optimization.solver.mma.a": 1.0,
-      "optimization.solver.mma.a0": -1.0}, "mma.a0"),
     # optimizer.f90:826-861: the file name is built in character(len=256).
     ("checkpoint_base_234_default_path", S,
      {"optimization.solver.checkpoint.base": "b" * 234}, "checkpoint.base"),
@@ -457,48 +420,6 @@ REJECTED_AS_THE_CODE_ABORTS = [
     # later beta of 0.0 aborts when the continuation reaches it.
     ("heaviside_later_beta_zero", S,
      {"optimization.design.mapping[1].beta": [1.0, 0.0]}, "mapping[1]"),
-    # PDE_filter_mapping.f90:138,290-296: max_iter <= 0 filters nothing.
-    ("pde_filter_max_iter_zero", S,
-     {"optimization.design.mapping[0].max_iter": 0}, "mapping[0]"),
-    ("pde_filter_max_iter_negative", S,
-     {"optimization.design.mapping[0].max_iter": -5}, "mapping[0]"),
-    # RAMP_mapping_cpu.f90:96,113: 1 + q(1 - x) vanishes for q <= -1.
-    ("ramp_q_minus_one", S,
-     {"optimization.design.mapping[2].q": -1.0}, "mapping[2]"),
-    ("ramp_q_below_minus_one", S,
-     {"optimization.design.mapping[2].q": -2.0}, "mapping[2]"),
-    ("ramp_q_array_with_minus_one", S,
-     {"optimization.design.mapping[2].q": [1.0, -1.0],
-      "optimization.design.mapping[2].q_iterations": 2}, "mapping[2]"),
-    # Borrvall_Petersson_mapping_cpu.f90:97,114: x + q vanishes for q in
-    # [-1, 0].
-    ("bp_q_zero", S,
-     {"optimization.design.mapping[2].type": "Borrvall_Petersson",
-      "optimization.design.mapping[2].q": 0.0}, "mapping[2]"),
-    ("bp_q_minus_half", S,
-     {"optimization.design.mapping[2].type": "Borrvall_Petersson",
-      "optimization.design.mapping[2].q": -0.5}, "mapping[2]"),
-    ("bp_q_minus_one", S,
-     {"optimization.design.mapping[2].type": "Borrvall_Petersson",
-      "optimization.design.mapping[2].q": -1.0}, "mapping[2]"),
-    ("bp_q_array_with_zero", S,
-     {"optimization.design.mapping[2].type": "Borrvall_Petersson",
-      "optimization.design.mapping[2].q": [1.0, 0.0],
-      "optimization.design.mapping[2].q_iterations": 2}, "mapping[2]"),
-    # SIMP_mapping_cpu.f90:93,110: X_in**p and X_in**(p-1) at X_in = 0.
-    ("simp_p_half", S,
-     {"optimization.design.mapping[2].type": "SIMP",
-      "optimization.design.mapping[2].q": DEL,
-      "optimization.design.mapping[2].p": 0.5}, "mapping[2]"),
-    ("simp_p_negative", S,
-     {"optimization.design.mapping[2].type": "SIMP",
-      "optimization.design.mapping[2].q": DEL,
-      "optimization.design.mapping[2].p": -1.0}, "mapping[2]"),
-    ("simp_p_array_below_one", S,
-     {"optimization.design.mapping[2].type": "SIMP",
-      "optimization.design.mapping[2].q": DEL,
-      "optimization.design.mapping[2].p": [2.0, 0.5],
-      "optimization.design.mapping[2].p_iterations": 2}, "mapping[2]"),
     # the per-type "iterations only for an array" rule, for every type
     ("simp_p_iterations_with_scalar", S,
      {"optimization.design.mapping[2].type": "SIMP",
@@ -803,14 +724,6 @@ REJECTED_AS_THE_CODE_ABORTS = [
     ("norm_tolerance_integer", S, {"norm_tolerance": 1}, "norm_tolerance"),
     ("state_recovery_extra_fields_integer", U,
      {"state_recovery.extra_fields": [1]}, "state_recovery"),
-    # checkpoint.f90:164,266,474: restore() resets an incrementally advanced
-    # adjoint velocity to a stale value before every adjoint step.
-    ("state_recovery_extra_fields_u_adj", U,
-     {"state_recovery.extra_fields": ["u_adj"]}, "extra_fields"),
-    ("state_recovery_extra_fields_v_adj", U,
-     {"state_recovery.extra_fields": ["v_adj"]}, "extra_fields"),
-    ("state_recovery_extra_fields_w_adj", U,
-     {"state_recovery.extra_fields": ["w_adj"]}, "extra_fields"),
     # checkpoint.f90:154-160: typed readers abort on a wrong JSON type.
     ("state_recovery_path_integer", U,
      {"state_recovery.path": 5}, "state_recovery"),
@@ -1327,23 +1240,6 @@ OPTIMIZING_RESTRICTIONS = [
     ("scalar_cp_integer", S,
      {"case.scalar.Pe": DEL, "case.scalar.lambda": 1.0,
       "case.scalar.cp": "c0"}, "scalar.cp"),
-    # adjoint_scalar_scheme.f90:370-373: the primal source terms are built
-    # again on the adjoint's right-hand side.
-    ("scalar_constant_source_with_adjoint_scalar", S,
-     {"case.scalar.source_terms": [{"type": "constant", "values": [1.0]}]},
-     "case.scalar"),
-    ("scalar_field_source_with_adjoint_scalar", S,
-     {"case.scalar.source_terms": [{"type": "field", "field_names": ["f"]}]},
-     "case.scalar"),
-    # adjoint_scalar_scheme.f90:284-285,333-337: a name of an existing field.
-    ("adjoint_scalar_name_primal", S, {"case.adjoint_scalar.name": "s"},
-     "adjoint_scalar.name"),
-    ("adjoint_scalar_name_velocity", S, {"case.adjoint_scalar.name": "u"},
-     "adjoint_scalar.name"),
-    ("adjoint_scalar_name_adjoint_velocity", S,
-     {"case.adjoint_scalar.name": "u_adj"}, "adjoint_scalar.name"),
-    ("adjoint_scalar_name_adjoint_pressure", S,
-     {"case.adjoint_scalar.name": "p_adj"}, "adjoint_scalar.name"),
     # scalar_mixing_objective_function.f90:171
     ("scalar_mixing_without_adjoint_scalar", S,
      {"case.scalar.enabled": False, "case.adjoint_scalar.enabled": False},
@@ -1515,11 +1411,17 @@ ACCEPTED_BY_THE_CODE += [
 
 REJECTED_AS_THE_CODE_ABORTS += [
     # ---- mapping ----------------------------------------------------------
-    # cg.f90:189,255,267: `rnorm < abs_tol` is never met by tol <= 0.
-    ("pde_filter_tol_zero", S,
-     {"optimization.design.mapping[0].tol": 0.0}, "mapping[0]"),
-    ("pde_filter_tol_negative", S,
-     {"optimization.design.mapping[0].tol": -1.0e-10}, "mapping[0]"),
+    # cg.f90:189,255,267: `rnorm < abs_tol` is never met by tol <= 0, which
+    # aborts with strict_convergence (PDE_filter_mapping.f90:412,425-430) and
+    # only logs without it.
+    ("pde_filter_tol_zero_strict", S,
+     {"optimization.design.mapping[0].tol": 0.0,
+      "optimization.design.mapping[0].strict_convergence": True},
+     "mapping[0]"),
+    ("pde_filter_tol_negative_strict", S,
+     {"optimization.design.mapping[0].tol": -1.0e-10,
+      "optimization.design.mapping[0].strict_convergence": True},
+     "mapping[0]"),
     ("pde_filter_preconditioner_hsmg", S,
      {"optimization.design.mapping[0].preconditioner": "hsmg"}, "mapping[0]"),
     # PDE_filter_mapping.f90:136: r is required (r_iterations goes too, so
@@ -1543,9 +1445,6 @@ REJECTED_AS_THE_CODE_ABORTS += [
     ("design_long_name_with_max_runtime", S,
      {"optimization.design.name": "a" * 70,
       "optimization.solver.max_runtime": "1:00:00"}, "design.name"),
-    ("design_blank_name_with_checkpoint_interval", S,
-     {"optimization.design.name": "",
-      "optimization.solver.checkpoint.interval": 1}, "design.name"),
     # ---- problem ----------------------------------------------------------
     # time_window_tester.f90:199-202: nothing freezes the fluid.
     ("time_window_require_steady_without_freeze_flow", U,
@@ -1605,31 +1504,6 @@ REJECTED_AS_THE_CODE_ABORTS += [
      {"optimization.solver.checkpoint.path": 1}, "optimization.solver"),
     ("checkpoint_base_integer", S,
      {"optimization.solver.checkpoint.base": 1}, "optimization.solver"),
-    # mma_cpu.f90:588,984: the subproblem loops run zero times.
-    ("mma_max_iter_zero", S, {"optimization.solver.mma.max_iter": 0},
-     "max_iter"),
-    ("mma_max_iter_negative", S, {"optimization.solver.mma.max_iter": -5},
-     "max_iter"),
-    # mma_cpu.f90:323-326: unclamped asymptotes in iterations 1 and 2.
-    ("mma_asyinit_zero", S, {"optimization.solver.mma.asyinit": 0.0},
-     "asyinit"),
-    ("mma_asyinit_negative", S, {"optimization.solver.mma.asyinit": -0.2},
-     "asyinit"),
-    # mma.f90:293-294: no order check of the bounds.
-    ("mma_xmin_above_default_xmax", S,
-     {"optimization.solver.mma.xmin": 1.5,
-      "optimization.solver.mma.xmax": DEL}, "mma"),
-    ("mma_xmax_below_default_xmin", S,
-     {"optimization.solver.mma.xmax": -0.5,
-      "optimization.solver.mma.xmin": DEL}, "mma"),
-    # mma_optimizer.f90:328-336,411-414: a scale that flips or drops the
-    # constraints ends in the validation abort.
-    ("mma_scale_negative", S, {"optimization.solver.mma.scale": -1000.0},
-     "scale"),
-    ("mma_scale_zero", S, {"optimization.solver.mma.scale": 0.0}, "scale"),
-    ("mma_scale_zero_with_auto_scale", S,
-     {"optimization.solver.mma.scale": 0.0,
-      "optimization.solver.mma.auto_scale": True}, "scale"),
     # steepest_descent_optimizer.f90:214-217,226-235: boundaries of the rules.
     ("sd_xmax_zero_alone", U,
      {"optimization.solver.steepest_descent.xmax": 0.0,
@@ -1645,21 +1519,6 @@ REJECTED_AS_THE_CODE_ABORTS += [
     ("state_recovery_extra_fields_mapping", U,
      {"state_recovery.extra_fields": ["PDE_filter_mapping_2"]},
      "extra_fields"),
-    # checkpoint.f90:70,72: character(len=256).
-    ("state_recovery_path_300_characters", U,
-     {"state_recovery.path": "a" * 300}, "state_recovery.path"),
-    ("state_recovery_filename_300_characters", U,
-     {"state_recovery.filename": "a" * 300}, "state_recovery.filename"),
-    # ---- adjoint fluid ----------------------------------------------------
-    # dong_outflow.f90:236-238,124-133: the primal velocity drives p_adj.
-    ("adjoint_bc_outflow_dong", S,
-     {"case.adjoint_fluid.boundary_conditions[1]":
-      {"type": "outflow+dong", "zone_indices": [2]}}, "boundary_conditions"),
-    ("adjoint_bc_normal_outflow_dong", S,
-     {"case.adjoint_fluid.boundary_conditions[1]":
-      {"type": "normal_outflow+dong", "zone_indices": [2],
-       "value": [1.0, 0.0, 0.0]}},
-     "boundary_conditions"),
     # zero_dirichlet.f90:73-79 reads no key.
     ("adjoint_bc_no_slip_moving", S,
      {"case.adjoint_fluid.boundary_conditions[0]":
@@ -1681,33 +1540,6 @@ REJECTED_AS_THE_CODE_ABORTS += [
      S, {"case.fluid.advection": False,
          "case.numerics.dealiased_polynomial_order": "lxd"},
      "dealiased_polynomial_order"),
-    # adjoint_scalar_scheme.f90:284-285,333-337: existing fields.
-    ("adjoint_scalar_name_u_e", S, {"case.adjoint_scalar.name": "u_e"},
-     "adjoint_scalar.name"),
-    ("adjoint_scalar_name_u_adj_e", S, {"case.adjoint_scalar.name": "u_adj_e"},
-     "adjoint_scalar.name"),
-    ("adjoint_scalar_name_fluid_rho", S,
-     {"case.adjoint_scalar.name": "fluid_rho"}, "adjoint_scalar.name"),
-    ("adjoint_scalar_name_s_cp", S, {"case.adjoint_scalar.name": "s_cp"},
-     "adjoint_scalar.name"),
-    ("adjoint_scalar_name_s_lambda_tot", S,
-     {"case.adjoint_scalar.name": "s_lambda_tot"}, "adjoint_scalar.name"),
-    # :281-285: the default name is primal_name//'_adj'.
-    ("adjoint_scalar_primal_name_u_default_name", S,
-     {"case.scalar.name": "u", "case.adjoint_scalar.primal_name": "u"},
-     "adjoint_scalar.primal_name"),
-    ("adjoint_scalar_primal_name_p_default_name", S,
-     {"case.scalar.name": "p", "case.adjoint_scalar.primal_name": "p"},
-     "adjoint_scalar.primal_name"),
-    # neko_ext.f90:216-217: the scalar of the array form is never reset.
-    # (base S minus case.scalar: next to case.scalar, Neko never reads
-    # case.scalars, neko src/case.f90:319-353, so those rows are accepted.)
-    ("scalars_item_enabled", S,
-     dict(_NO_SCALAR, **{"case.scalars": [dict(SCALAR_ITEM, enabled=True)]}),
-     "case.scalars"),
-    ("scalars_item_without_enabled", S,
-     dict(_NO_SCALAR, **{"case.scalars": [dict(SCALAR_ITEM)]}),
-     "case.scalars"),
     # adjoint_case.f90:180-183,260: case.adjoint_scalars alone reads
     # case.scalars without `found`; a missing path leaves json-fortran in an
     # exception state and `case.time` is then reported missing.
@@ -1717,27 +1549,9 @@ REJECTED_AS_THE_CODE_ABORTS += [
      {"case.scalar.enabled": False, "case.adjoint_scalar": DEL,
       "optimization.objectives[0]": {"type": "viscous_dissipation"},
       "case.adjoint_scalars": []}, "$.case"),
-    # neko_ext.f90:216-217: the default of case.scalar.enabled is false there.
-    ("scalar_enabled_implicit", S, {"case.scalar.enabled": DEL},
-     "case.scalar"),
-    # adjoint_case.f90:209-230, adjoint_scalar_pnpn.f90:194,248-253: the
-    # adjoint ignores these keys of the primal.
-    ("scalar_advection_false", S, {"case.scalar.advection": False},
-     "case.scalar"),
-    ("scalar_alphat", S, {"case.scalar.alphat": {"nut_dependency": False,
-                           "alphat_field": "at"}},
-     "case.scalar"),
-    ("scalar_svv_enabled", S, {"case.scalar.svv": {"enabled": True,
-      "kernel": {"type": "power", "power_coefficient": 1.0},
-      "nu": {"type": "value", "value": 1.0}}},
-     "case.scalar"),
-    ("scalar_freeze", S, {"case.scalar.freeze": True}, "case.scalar"),
 ]
 
 OPTIMIZING_RESTRICTIONS += [
-    # problem.f90:615-626: the forward run is assumed to start at t = 0.
-    ("start_time_in_unsteady_run", U, {"case.time.start_time": 1.0},
-     "start_time"),
     # pc_hsmg.f90:224-225 through the adjoint's own precon_factory call.
     ("hsmg_adjoint_velocity_order_one", S,
      {"case.numerics.polynomial_order": 1,
@@ -1848,15 +1662,6 @@ REJECTED_AS_THE_CODE_ABORTS += [
      {"case.adjoint_scalar.name": "abx1"}, "adjoint_scalar.name"),
     ("adjoint_scalar_name_abx2", S,
      {"case.adjoint_scalar.name": "abx2"}, "adjoint_scalar.name"),
-    ("adjoint_scalar_name_design_indicator", S,
-     {"case.adjoint_scalar.name": "design_indicator"},
-     "adjoint_scalar.name"),
-    ("adjoint_scalar_name_sensitivity", S,
-     {"case.adjoint_scalar.name": "sensitivity"}, "adjoint_scalar.name"),
-    ("scalar_name_brinkman_amplitude", S,
-     {"case.scalar.name": "brinkman_amplitude",
-      "case.adjoint_scalar.primal_name": "brinkman_amplitude"},
-     "scalar.name"),
     # adjoint_scalar_scheme.f90:321 ('End of record'), checkpoint_payload.f90.
     ("adjoint_scalar_name_67_characters", S,
      {"case.adjoint_scalar.name": _LONG + "x"}, "adjoint_scalar.name"),
@@ -1867,18 +1672,6 @@ REJECTED_AS_THE_CODE_ABORTS += [
     ("adjoint_scalar_default_name_from_63_characters", S,
      {"case.scalar.name": "y" * 63,
       "case.adjoint_scalar.primal_name": "y" * 63}, "primal_name"),
-    # reserved-name rules, each condition on its own
-    ("adjoint_scalar_name_fluid_rho_default_fluid", S,
-     {"case.adjoint_scalar.name": "fluid_rho"}, "adjoint_scalar.name"),
-    ("adjoint_scalar_name_fluid_rho_explicit_fluid_name", S,
-     {"case.fluid.name": "fluid", "case.adjoint_scalar.name": "fluid_rho"},
-     "adjoint_scalar.name"),
-    ("adjoint_scalar_name_s_cp_explicit_scalar_name", S,
-     {"case.scalar.name": "s", "case.adjoint_scalar.name": "s_cp"},
-     "adjoint_scalar.name"),
-    ("adjoint_scalar_name_u_implicitly_enabled", S,
-     {"case.adjoint_scalar.enabled": DEL, "case.adjoint_scalar.name": "u"},
-     "adjoint_scalar.name"),
     ("adjoint_scalar_implicitly_enabled_without_scalar", S,
      {"case.scalar": DEL, "case.adjoint_scalar": {
          "boundary_conditions": [], "initial_condition":
@@ -1893,13 +1686,6 @@ REJECTED_AS_THE_CODE_ABORTS += [
     ("unsteady_with_steady_is_user_false", U,
      {"case.simulation_components": [{"type": "steady", "is_user": False}]},
      "simulation_components"),
-    # problem.f90:533,553,625: restart clock vs windowed objective.
-    ("unsteady_restart_with_objective_window", U,
-     {"case.restart_file": "restart.chkp",
-      "optimization.objectives[0].start_time": 0.01}, "objectives"),
-    ("unsteady_restart_with_objective_end_time", U,
-     {"case.restart_file": "restart.chkp",
-      "optimization.objectives[0].end_time": 0.02}, "objectives"),
     # scalar_mixing_objective_function.f90:171: needs an enabled adjoint
     # scalar, so also an absent one.
     ("scalar_mixing_without_adjoint_scalar", S,
@@ -1910,10 +1696,6 @@ REJECTED_AS_THE_CODE_ABORTS += [
     ("time_window_require_steady_state_with_freeze_flow_absent", U,
      {"optimization.time_window_test": {"require_steady_state": True}},
      "fluid"),
-    # mma_optimizer.f90:194,328-336: scale <= 0 without auto_scale.
-    ("scale_negative_auto_scale_false", S,
-     {"optimization.solver.mma.scale": -1.0,
-      "optimization.solver.mma.auto_scale": False}, "mma.scale"),
     # adjoint_fluid_pnpn_bc_fctry.f90:87,149: `type` is read with no default.
     ("adjoint_bc_split_form_without_type", S,
      {"case.adjoint_fluid.boundary_conditions[0]":
@@ -1958,22 +1740,6 @@ ACCEPTED_BY_THE_CODE += [
 ]
 
 REJECTED_AS_THE_CODE_ABORTS += [
-    # fluid_pnpn.f90:590-604 vs adjoint_fluid_pnpn.f90:329: the adjoint never
-    # builds the SVV operator.
-    ("fluid_svv_enabled_with_optimization", S,
-     {"case.fluid.svv": {"enabled": True,
-                         "kernel": {"type": "power",
-                                    "power_coefficient": 1.0},
-                         "nu": {"type": "value", "value": 0.1}}},
-     "fluid.svv.enabled"),
-    # neko src/fluid/fluid_scheme_incompressible.f90:359 vs the adjoint,
-    # which builds only case.adjoint_fluid.source_term.
-    ("fluid_coriolis_source_term_with_optimization", S,
-     {"case.fluid.source_terms": [_CORIOLIS]}, "fluid.source_terms"),
-    # the adjoint hands these to Neko's factory, which reads the primal u/v/w.
-    ("adjoint_coriolis_source_term", S,
-     {"case.adjoint_fluid.source_term": [_CORIOLIS]},
-     "adjoint_fluid.source_term"),
 ]
 
 # Edits that need a Neko-valid case without `optimization` to compare with.
@@ -1992,6 +1758,215 @@ def _without_optimization(base, edits, name):
     return build(base, edits)
 
 
+# --------------------------------------------------------------------------- #
+# Inputs of rules that were removed when the schemas were cut back to
+# structure and aborts: the code accepts them and runs to completion (the
+# result may be degenerate or wrong). See removed-rules.md for each one.
+# (id, base, edits, where it used to be rejected)
+# --------------------------------------------------------------------------- #
+ACCEPTED_AFTER_THE_TRIM = [
+    ("ic_uniform_negative_with_simp", S,
+     {"optimization.design.initial_distribution.value": -0.5,
+      "optimization.design.mapping[2].type": "SIMP",
+      "optimization.design.mapping[2].q": DEL,
+      "optimization.design.mapping[2].p": 2.5}, "initial_distribution"),
+    ("ic_uniform_above_one", S,
+     {"optimization.design.initial_distribution.value": 1.5},
+     "initial_distribution"),
+    ("ic_point_zone_zone_value_negative", S,
+     {"optimization.design.initial_distribution":
+      {"type": "point_zone", "base_value": 0.0, "zone_value": -0.5,
+       "zone_name": "optimization_domain"}}, "initial_distribution"),
+    ("mma_epsimin_one", S,
+     {"optimization.solver.mma.epsimin": 1.0}, "mma.epsimin"),
+    ("mma_epsimin_above_one_pdip", S,
+     {"optimization.solver.mma.epsimin": 1.2,
+      "optimization.solver.mma.subsolver": "pdip"}, "mma.epsimin"),
+    ("mma_c_zero_with_constraints", S,
+     {"optimization.solver.mma.c": 0.0}, "mma.c"),
+    ("mma_c_negative_with_constraints", S,
+     {"optimization.solver.mma.c": -1.0}, "mma.c"),
+    ("mma_c_negative_pdip_unconstrained", S,
+     {"optimization.constraints": [],
+      "optimization.solver.mma.subsolver": "pdip",
+      "optimization.solver.mma.c": -1.0}, "mma.c"),
+    ("mma_a0_negative_pdip", S,
+     {"optimization.solver.mma.subsolver": "pdip",
+      "optimization.solver.mma.a0": -0.001}, "mma.a0"),
+    ("mma_a0_negative_dip_with_a", S,
+     {"optimization.solver.mma.a": 1.0,
+      "optimization.solver.mma.a0": -1.0}, "mma.a0"),
+    ("pde_filter_max_iter_zero", S,
+     {"optimization.design.mapping[0].max_iter": 0}, "mapping[0]"),
+    ("pde_filter_max_iter_negative", S,
+     {"optimization.design.mapping[0].max_iter": -5}, "mapping[0]"),
+    ("ramp_q_minus_one", S,
+     {"optimization.design.mapping[2].q": -1.0}, "mapping[2]"),
+    ("ramp_q_below_minus_one", S,
+     {"optimization.design.mapping[2].q": -2.0}, "mapping[2]"),
+    ("ramp_q_array_with_minus_one", S,
+     {"optimization.design.mapping[2].q": [1.0, -1.0],
+      "optimization.design.mapping[2].q_iterations": 2}, "mapping[2]"),
+    ("bp_q_zero", S,
+     {"optimization.design.mapping[2].type": "Borrvall_Petersson",
+      "optimization.design.mapping[2].q": 0.0}, "mapping[2]"),
+    ("bp_q_minus_half", S,
+     {"optimization.design.mapping[2].type": "Borrvall_Petersson",
+      "optimization.design.mapping[2].q": -0.5}, "mapping[2]"),
+    ("bp_q_minus_one", S,
+     {"optimization.design.mapping[2].type": "Borrvall_Petersson",
+      "optimization.design.mapping[2].q": -1.0}, "mapping[2]"),
+    ("bp_q_array_with_zero", S,
+     {"optimization.design.mapping[2].type": "Borrvall_Petersson",
+      "optimization.design.mapping[2].q": [1.0, 0.0],
+      "optimization.design.mapping[2].q_iterations": 2}, "mapping[2]"),
+    ("simp_p_half", S,
+     {"optimization.design.mapping[2].type": "SIMP",
+      "optimization.design.mapping[2].q": DEL,
+      "optimization.design.mapping[2].p": 0.5}, "mapping[2]"),
+    ("simp_p_negative", S,
+     {"optimization.design.mapping[2].type": "SIMP",
+      "optimization.design.mapping[2].q": DEL,
+      "optimization.design.mapping[2].p": -1.0}, "mapping[2]"),
+    ("simp_p_array_below_one", S,
+     {"optimization.design.mapping[2].type": "SIMP",
+      "optimization.design.mapping[2].q": DEL,
+      "optimization.design.mapping[2].p": [2.0, 0.5],
+      "optimization.design.mapping[2].p_iterations": 2}, "mapping[2]"),
+    ("state_recovery_extra_fields_u_adj", U,
+     {"state_recovery.extra_fields": ["u_adj"]}, "extra_fields"),
+    ("state_recovery_extra_fields_v_adj", U,
+     {"state_recovery.extra_fields": ["v_adj"]}, "extra_fields"),
+    ("state_recovery_extra_fields_w_adj", U,
+     {"state_recovery.extra_fields": ["w_adj"]}, "extra_fields"),
+    ("scalar_constant_source_with_adjoint_scalar", S,
+     {"case.scalar.source_terms": [{"type": "constant", "values": [1.0]}]},
+     "case.scalar"),
+    ("scalar_field_source_with_adjoint_scalar", S,
+     {"case.scalar.source_terms": [{"type": "field", "field_names": ["f"]}]},
+     "case.scalar"),
+    ("adjoint_scalar_name_primal", S, {"case.adjoint_scalar.name": "s"},
+     "adjoint_scalar.name"),
+    ("adjoint_scalar_name_velocity", S, {"case.adjoint_scalar.name": "u"},
+     "adjoint_scalar.name"),
+    ("adjoint_scalar_name_adjoint_velocity", S,
+     {"case.adjoint_scalar.name": "u_adj"}, "adjoint_scalar.name"),
+    ("adjoint_scalar_name_adjoint_pressure", S,
+     {"case.adjoint_scalar.name": "p_adj"}, "adjoint_scalar.name"),
+    ("design_blank_name_with_checkpoint_interval", S,
+     {"optimization.design.name": "",
+      "optimization.solver.checkpoint.interval": 1}, "design.name"),
+    ("mma_max_iter_zero", S, {"optimization.solver.mma.max_iter": 0},
+     "max_iter"),
+    ("mma_max_iter_negative", S, {"optimization.solver.mma.max_iter": -5},
+     "max_iter"),
+    ("mma_asyinit_zero", S, {"optimization.solver.mma.asyinit": 0.0},
+     "asyinit"),
+    ("mma_asyinit_negative", S, {"optimization.solver.mma.asyinit": -0.2},
+     "asyinit"),
+    ("mma_xmin_above_default_xmax", S,
+     {"optimization.solver.mma.xmin": 1.5,
+      "optimization.solver.mma.xmax": DEL}, "mma"),
+    ("mma_xmax_below_default_xmin", S,
+     {"optimization.solver.mma.xmax": -0.5,
+      "optimization.solver.mma.xmin": DEL}, "mma"),
+    ("mma_scale_negative", S, {"optimization.solver.mma.scale": -1000.0},
+     "scale"),
+    ("mma_scale_zero", S, {"optimization.solver.mma.scale": 0.0}, "scale"),
+    ("mma_scale_zero_with_auto_scale", S,
+     {"optimization.solver.mma.scale": 0.0,
+      "optimization.solver.mma.auto_scale": True}, "scale"),
+    ("state_recovery_path_300_characters", U,
+     {"state_recovery.path": "a" * 300}, "state_recovery.path"),
+    ("state_recovery_filename_300_characters", U,
+     {"state_recovery.filename": "a" * 300}, "state_recovery.filename"),
+    ("adjoint_bc_outflow_dong", S,
+     {"case.adjoint_fluid.boundary_conditions[1]":
+      {"type": "outflow+dong", "zone_indices": [2]}}, "boundary_conditions"),
+    ("adjoint_bc_normal_outflow_dong", S,
+     {"case.adjoint_fluid.boundary_conditions[1]":
+      {"type": "normal_outflow+dong", "zone_indices": [2],
+       "value": [1.0, 0.0, 0.0]}},
+     "boundary_conditions"),
+    ("adjoint_scalar_name_u_e", S, {"case.adjoint_scalar.name": "u_e"},
+     "adjoint_scalar.name"),
+    ("adjoint_scalar_name_u_adj_e", S, {"case.adjoint_scalar.name": "u_adj_e"},
+     "adjoint_scalar.name"),
+    ("adjoint_scalar_name_fluid_rho", S,
+     {"case.adjoint_scalar.name": "fluid_rho"}, "adjoint_scalar.name"),
+    ("adjoint_scalar_name_s_cp", S, {"case.adjoint_scalar.name": "s_cp"},
+     "adjoint_scalar.name"),
+    ("adjoint_scalar_name_s_lambda_tot", S,
+     {"case.adjoint_scalar.name": "s_lambda_tot"}, "adjoint_scalar.name"),
+    ("adjoint_scalar_primal_name_u_default_name", S,
+     {"case.scalar.name": "u", "case.adjoint_scalar.primal_name": "u"},
+     "adjoint_scalar.primal_name"),
+    ("adjoint_scalar_primal_name_p_default_name", S,
+     {"case.scalar.name": "p", "case.adjoint_scalar.primal_name": "p"},
+     "adjoint_scalar.primal_name"),
+    ("scalars_item_enabled", S,
+     dict(_NO_SCALAR, **{"case.scalars": [dict(SCALAR_ITEM, enabled=True)]}),
+     "case.scalars"),
+    ("scalars_item_without_enabled", S,
+     dict(_NO_SCALAR, **{"case.scalars": [dict(SCALAR_ITEM)]}),
+     "case.scalars"),
+    ("scalar_enabled_implicit", S, {"case.scalar.enabled": DEL},
+     "case.scalar"),
+    ("scalar_advection_false", S, {"case.scalar.advection": False},
+     "case.scalar"),
+    ("scalar_alphat", S, {"case.scalar.alphat": {"nut_dependency": False,
+                           "alphat_field": "at"}},
+     "case.scalar"),
+    ("scalar_svv_enabled", S, {"case.scalar.svv": {"enabled": True,
+      "kernel": {"type": "power", "power_coefficient": 1.0},
+      "nu": {"type": "value", "value": 1.0}}},
+     "case.scalar"),
+    ("scalar_freeze", S, {"case.scalar.freeze": True}, "case.scalar"),
+    ("start_time_in_unsteady_run", U, {"case.time.start_time": 1.0},
+     "start_time"),
+    ("adjoint_scalar_name_design_indicator", S,
+     {"case.adjoint_scalar.name": "design_indicator"},
+     "adjoint_scalar.name"),
+    ("adjoint_scalar_name_sensitivity", S,
+     {"case.adjoint_scalar.name": "sensitivity"}, "adjoint_scalar.name"),
+    ("scalar_name_brinkman_amplitude", S,
+     {"case.scalar.name": "brinkman_amplitude",
+      "case.adjoint_scalar.primal_name": "brinkman_amplitude"},
+     "scalar.name"),
+    ("adjoint_scalar_name_fluid_rho_default_fluid", S,
+     {"case.adjoint_scalar.name": "fluid_rho"}, "adjoint_scalar.name"),
+    ("adjoint_scalar_name_fluid_rho_explicit_fluid_name", S,
+     {"case.fluid.name": "fluid", "case.adjoint_scalar.name": "fluid_rho"},
+     "adjoint_scalar.name"),
+    ("adjoint_scalar_name_s_cp_explicit_scalar_name", S,
+     {"case.scalar.name": "s", "case.adjoint_scalar.name": "s_cp"},
+     "adjoint_scalar.name"),
+    ("adjoint_scalar_name_u_implicitly_enabled", S,
+     {"case.adjoint_scalar.enabled": DEL, "case.adjoint_scalar.name": "u"},
+     "adjoint_scalar.name"),
+    ("unsteady_restart_with_objective_window", U,
+     {"case.restart_file": "restart.chkp",
+      "optimization.objectives[0].start_time": 0.01}, "objectives"),
+    ("unsteady_restart_with_objective_end_time", U,
+     {"case.restart_file": "restart.chkp",
+      "optimization.objectives[0].end_time": 0.02}, "objectives"),
+    ("scale_negative_auto_scale_false", S,
+     {"optimization.solver.mma.scale": -1.0,
+      "optimization.solver.mma.auto_scale": False}, "mma.scale"),
+    ("fluid_svv_enabled_with_optimization", S,
+     {"case.fluid.svv": {"enabled": True,
+                         "kernel": {"type": "power",
+                                    "power_coefficient": 1.0},
+                         "nu": {"type": "value", "value": 0.1}}},
+     "fluid.svv.enabled"),
+    ("fluid_coriolis_source_term_with_optimization", S,
+     {"case.fluid.source_terms": [_CORIOLIS]}, "fluid.source_terms"),
+    ("adjoint_coriolis_source_term", S,
+     {"case.adjoint_fluid.source_term": [_CORIOLIS]},
+     "adjoint_fluid.source_term"),
+]
+
+
 def ids(table):
     return [row[0] for row in table]
 
@@ -2000,6 +1975,16 @@ def ids(table):
 @pytest.mark.parametrize("name, base, edits", ACCEPTED_BY_THE_CODE,
                          ids=ids(ACCEPTED_BY_THE_CODE))
 def test_accepted_by_the_code(validator, name, base, edits):
+    found = errors(validator, build(base, edits))
+    assert not found, short(found)
+
+
+@pytest.mark.parametrize("name, base, edits, where",
+                         ACCEPTED_AFTER_THE_TRIM,
+                         ids=ids(ACCEPTED_AFTER_THE_TRIM))
+def test_accepted_after_the_trim(validator, name, base, edits, where):
+    """The code accepts these and runs to completion, so the schemas do not
+    reject them any more (removed-rules.md lists each rule)."""
     found = errors(validator, build(base, edits))
     assert not found, short(found)
 
@@ -2103,6 +2088,8 @@ def _accepted_instances():
             yield name, build(base, edits)
     for name, base, edits in NEKO_REGISTERED_TYPES:
         yield name, build(base, edits)
+    for name, base, edits, _ in ACCEPTED_AFTER_THE_TRIM:
+        yield name, build(base, edits)
     for base in (S, U, N):
         yield f"fixture_{base}", load_base(base)
 
@@ -2119,6 +2106,37 @@ def test_what_the_neko_top_root_accepts_neko_accepts(validator,
             assert not found, f"{name}: {short(found)}"
             count += 1
     assert count > 40
+
+
+@pytest.mark.parametrize("path, value", [
+    ("case.fluid.Re", 100),            # a real, written as an integer
+    ("case.time.timestep", 1),         # likewise
+    ("case.time.end_time", 2),
+    ("case.numerics.polynomial_order", 5.0),   # an integer, written as a real
+    ("case.numerics.time_order", 2.0),
+])
+def test_neko_typed_keys_stay_strict_below_the_neko_reference(
+        validator, neko_validator, path, value):
+    """The root reaches Neko's case-file schema through a `$ref` to the whole
+    resource, which declares `$schema` 2020-12. Without care the validator
+    class is swapped there for the stock Draft202012Validator, which accepts
+    100 for a real and 5.0 for an integer, where Neko's reader rejects both.
+    Neko's own root is the control: it must reject the same inputs."""
+    instance = build(N, {path: value})
+    assert error_paths(neko_validator, instance), "control: Neko accepts it"
+    found = error_paths(validator, instance)
+    assert any(p.endswith(path.split(".", 1)[1]) or path in p
+               for p in found), f"{path}={value!r} accepted: {found}"
+
+
+def test_strict_class_survives_a_whole_resource_ref(registry, schemas):
+    """Direct check of the cause: descending into Neko's case-file resource
+    must keep the strict class (x-neko-real and the strict integer type)."""
+    root = vcs.make_validator(registry, schemas, "neko-top")
+    resolved = registry.get_or_retrieve(vcs.ROOT_IDS["neko"]).value.contents
+    inner = root.evolve(schema=resolved)
+    assert "x-neko-real" in type(inner).VALIDATORS
+    assert not inner.is_type(5.0, "integer")
 
 
 # --------------------------------------------------------------------------- #

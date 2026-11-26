@@ -16,7 +16,7 @@
     },
     "scalarOptimizing": {
       "description": "Restrictions on `case.scalar` while the adjoint scalar is enabled.",
-      "$comment": "adjoint_scalar_scheme.f90:355-358 aborts when `variable_material_properties` is present; without a user material_properties routine :610-637 read Pe, or lambda and cp, as JSON reals without a constants lookup. The adjoint momentum always gets the u.grad(s) coupling term and the adjoint scalar never reads `advection`, `alphat`, `svv` or `freeze` of the primal: a primal without advection, with an eddy diffusivity, with spectral vanishing viscosity or frozen gives an adjoint that is not its transpose (adjoint_case.f90:209-230, adjoint_scalar_pnpn.f90:194,248-253, adjoint_scalar_scheme.f90:149,353-358; neko src/scalar/scalar_scheme.f90:370,419-443). `variable_material_properties` is what the adjoint guards, and Neko no longer reads it.",
+      "$comment": "adjoint_scalar_scheme.f90:355-358 aborts when `variable_material_properties` is present; without a user material_properties routine :610-637 read Pe, or lambda and cp, as JSON reals without a constants lookup. `variable_material_properties` is what the adjoint guards, and Neko no longer reads it.",
       "type": "object",
       "properties": {
         "variable_material_properties": false,
@@ -28,51 +28,15 @@
         },
         "cp": {
           "$ref": "urn:neko:schema:common#/$defs/realNumber"
-        },
-        "source_terms": {
-          "description": "The adjoint scalar builds the primal source terms again on its own right-hand side (adjoint_scalar_scheme.f90:370-373), so a forcing that does not depend on the scalar is added to the adjoint equation too. `constant` and `field` are therefore not accepted; `user` is (the user routine receives the adjoint scheme name).",
-          "$comment": "adjoint_scalar_scheme.f90:370-373 ('We should ONLY read the adjoint' in the code), computed into the adjoint right-hand side at adjoint_scalar_pnpn.f90:404,448.",
-          "type": "array",
-          "items": {
-            "not": {
-              "required": [
-                "type"
-              ],
-              "properties": {
-                "type": {
-                  "enum": [
-                    "constant",
-                    "field"
-                  ]
-                }
-              }
-            }
-          }
-        },
-        "advection": {
-          "const": true
-        },
-        "alphat": false,
-        "freeze": {
-          "const": false
-        },
-        "svv": {
-          "type": "object",
-          "properties": {
-            "enabled": {
-              "const": false
-            }
-          }
         }
       }
     },
     "scalarForward": {
-      "description": "Restrictions on an enabled `case.scalar` of a case with an `optimization` object. The key `enabled` has to be written out.",
-      "$comment": "neko_ext.f90:236-238 reads the scalar initial condition type at every design iteration, with no default and even with `restart_file`. neko_ext.f90:216-217 and :399-400 read case.scalar.enabled with the default .false. (Neko's own default is true), so an implicitly enabled scalar is built by Neko but neither it nor its adjoint is reset after the first design iteration.",
+      "description": "Restrictions on an enabled `case.scalar` of a case with an `optimization` object.",
+      "$comment": "neko_ext.f90:236-238 reads the scalar initial condition type at every design iteration, with no default and even with `restart_file`.",
       "type": "object",
       "required": [
-        "initial_condition",
-        "enabled"
+        "initial_condition"
       ]
     }
   }
