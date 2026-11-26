@@ -172,7 +172,11 @@ def test_state_recovery_type_is_a_property_not_a_oneof(schemas):
 # accepted and do nothing.
 ADJOINT_BC_SOURCE = "sources/adjoint/adjoint_fluid_pnpn_bc_fctry.f90"
 ADJOINT_BC_ABORTING = {"symmetry", "shear_stress", "wall_model"}
+# Known, but the zone silently gets a natural condition: not accepted.
 ADJOINT_BC_NO_OP = {"user_velocity_pointwise"}
+# Factory cases that build Neko's dong_outflow_t as the adjoint pressure
+# condition, which binds the primal velocity: rejected on purpose.
+ADJOINT_BC_REJECTED = {"outflow+dong", "normal_outflow+dong"}
 
 
 def test_adjoint_fluid_bc_enum_equals_factory_labels(schemas):
@@ -181,7 +185,8 @@ def test_adjoint_fluid_bc_enum_equals_factory_labels(schemas):
     known = known_list(ADJOINT_BC_SOURCE, "ADJOINT_FLUID_PNPN_KNOWN_BCS")
     assert known - labels == ADJOINT_BC_NO_OP, (
         f"known types without a factory case: {sorted(known - labels)}")
-    expected = (labels | known) - ADJOINT_BC_ABORTING
+    expected = ((labels | known) - ADJOINT_BC_ABORTING - ADJOINT_BC_NO_OP
+                - ADJOINT_BC_REJECTED)
     accepted = collect(schemas, "adjoint-fluid",
                        top_def(schemas, "adjoint-fluid", "boundaryCondition"))
     accepted_in_oneof = set()
@@ -212,7 +217,7 @@ def test_registered_simcomps_equal_register_calls(schemas):
     assert calls
     overlay = top_def(schemas, "simulation-components",
                       "simulationComponentAdditions")
-    assert {overlay["if"]["properties"]["type"]["const"]} == calls
+    assert {overlay["if"]["allOf"][0]["properties"]["type"]["const"]} == calls
     steady = schemas[vcs.TOP_PREFIX + "simcomps:steady"]["$defs"]["keys"]
     assert {steady["properties"]["type"]["const"]} == calls
 
@@ -222,8 +227,9 @@ def test_registered_source_terms_equal_register_calls(schemas):
                        "register_source_term")
     assert len(calls) == 5
     overlay = top_def(schemas, "source-terms", "registeredSourceTerm")
-    assert set(overlay["if"]["properties"]["type"]["enum"]) == calls
-    assert set(overlay["then"]["properties"]["type"]["enum"]) == calls
+    # None of the registered types works from a case file: all are rejected.
+    rejected = overlay["not"]["properties"]["type"]["enum"]
+    assert set(rejected) == calls
 
 
 # ------------------------------------------------- the check can go red --- #

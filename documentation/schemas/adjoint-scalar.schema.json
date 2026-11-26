@@ -4,7 +4,7 @@
   "$defs": {
     "boundaryCondition": {
       "description": "A boundary condition of the adjoint scalar.",
-      "$comment": "Factory: sources/adjoint/adjoint_scalar_pnpn_bc_fctry.f90:73-91 (no fallback). `dirichlet` and `neumann` are read by Neko's classes, so Neko's union is reused; its `user_dirichlet` and the other types are not factory cases here. The adjoint's `user` type is not in Neko's union and is a branch of its own (the factory fills in `field_name`).",
+      "$comment": "Factory: sources/adjoint/adjoint_scalar_pnpn_bc_fctry.f90:73-91 (no fallback). `dirichlet` and `neumann` are read by Neko's classes, so Neko's union is reused; its `user_dirichlet` and the other types are not factory cases here. Neko's union admits `user` only through its open fallback for registered types (any type outside its six built-ins, with `zone_indices`); the adjoint factory handles `user` itself, not through Neko's registry, so it is a branch of its own: that fallback shape narrowed to `user` and without `name` (the factory fills in `field_name`). Neko reads `name` only in its own scalar BC factory (neko src/scalar/scalar_pnpn_bc_fctry.f90:192), which the adjoint does not call, so the key is rejected on the Neko-reused branch (adjoint_scalar_pnpn_bc_fctry.f90:65-99 reads only `type` and `zone_indices`). The `user` branch is open, like Neko's user_dirichlet and user_neumann.",
       "oneOf": [
         {
           "allOf": [
@@ -26,7 +26,8 @@
                 "zone_indices": {
                   "description": "Zone indices, a literal array of JSON integers.",
                   "$ref": "urn:neko:schema:common#/$defs/integerArray"
-                }
+                },
+                "name": false
               }
             }
           ]
@@ -46,7 +47,7 @@
               "$ref": "urn:neko:schema:common#/$defs/integerArray"
             }
           },
-          "additionalProperties": false
+          "additionalProperties": true
         }
       ]
     },
@@ -72,15 +73,15 @@
           "$ref": "urn:neko:schema:common#/$defs/positiveInteger"
         },
         "monitor": {
-          "description": "Monitor the solve. Default false.",
+          "description": "Monitor the solve. Default `case.scalar.solver.monitor`, else false.",
           "type": "boolean"
         },
         "projection_space_size": {
-          "description": "Projection space size, a JSON integer (no constants name). Default 0.",
+          "description": "Projection space size, a JSON integer (no constants name). Default `case.scalar.solver.projection_space_size`, else 0.",
           "type": "integer"
         },
         "projection_hold_steps": {
-          "description": "Projection hold steps, a JSON integer (no constants name). Default 5.",
+          "description": "Projection hold steps, a JSON integer (no constants name). Default `case.scalar.solver.projection_hold_steps`, else 5.",
           "type": "integer"
         }
       },
@@ -96,11 +97,11 @@
           "type": "boolean"
         },
         "primal_name": {
-          "description": "Name of the primal scalar field; must equal `case.scalar.name`. Default `s`.",
+          "description": "Name of the primal scalar field; must equal `case.scalar.name`. Default `s`. With `name` absent the default adjoint name `<primal_name>_adj` must not be a velocity or pressure adjoint field, so `primal_name` must not be `u`, `v`, `w` or `p`, and it is at most 62 characters.",
           "$ref": "urn:neko:schema:common#/$defs/nonEmptyString"
         },
         "name": {
-          "description": "Name of the adjoint scalar. Default `<primal_name>_adj`.",
+          "description": "Name of the adjoint scalar. Default `<primal_name>_adj`. At most 66 characters and without `/` or blank (the log line and the checkpoint payload name abort otherwise: adjoint_scalar_scheme.f90:321, adjoint_scalar_pnpn.f90:263-265). It must not name a field that exists already: the adjoint then reuses and overwrites that field (adjoint_scalar_scheme.f90:284-285,333-337). While the adjoint scalar is enabled the schema rejects `u`, `v`, `w`, `p`, `u_adj`, `v_adj`, `w_adj`, `p_adj`, `u_e`, `v_e`, `w_e`, `u_adj_e`, `v_adj_e`, `w_adj_e`, `abx1` (its own work field), `abx2`, and the design fields `design_indicator`, `brinkman_amplitude` and `sensitivity`; further `s`, `s_lambda`, `s_lambda_tot` and `s_cp` when the primal scalar is named `s`, and `fluid_mu`, `fluid_mu_tot` and `fluid_rho` when the fluid is named `fluid` (rules under `case` in the case-file schema).",
           "$ref": "urn:neko:schema:common#/$defs/nonEmptyString"
         },
         "solver": {
@@ -147,13 +148,65 @@
           ]
         }
       },
+      "additionalProperties": false,
       "allOf": [
         {
-          "$comment": "adjoint_case.f90:309-312 and neko_ext.f90:420-423 read initial_condition.type of an enabled adjoint scalar without a default.",
-          "$ref": "urn:neko:schema:scalar#/$defs/scalarInitialConditionRequired"
+          "$comment": "adjoint_scalar_scheme.f90:321 writes 'Name       : ' (13 characters) // name into the 79-character log buffer (neko src/common/log.f90:46): a name over 66 characters gives 'End of record'; from 76 characters on, field_series lag names also collide. checkpoint_payload_validate_name aborts for a '/' in the name or a blank one (adjoint_scalar_pnpn.f90:263-267; neko src/common/checkpoint_payload.f90:165-170,600-605).",
+          "if": {
+            "not": {
+              "required": [
+                "enabled"
+              ],
+              "properties": {
+                "enabled": {
+                  "const": false
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "name": {
+                "maxLength": 66,
+                "pattern": "^[^/]*[^ /][^/]*$"
+              }
+            }
+          }
+        },
+        {
+          "$comment": "The default name is primal_name//'_adj' (adjoint_scalar_scheme.f90:281-285), which must also fit in 66 characters.",
+          "if": {
+            "allOf": [
+              {
+                "not": {
+                  "required": [
+                    "enabled"
+                  ],
+                  "properties": {
+                    "enabled": {
+                      "const": false
+                    }
+                  }
+                }
+              },
+              {
+                "not": {
+                  "required": [
+                    "name"
+                  ]
+                }
+              }
+            ]
+          },
+          "then": {
+            "properties": {
+              "primal_name": {
+                "maxLength": 62
+              }
+            }
+          }
         }
-      ],
-      "additionalProperties": false
+      ]
     }
   }
 }

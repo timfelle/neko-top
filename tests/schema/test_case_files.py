@@ -70,6 +70,10 @@ STEADY_UNSTEADY = (
     "a `steady` simulation component in an `unsteady: true` case, which the "
     "owner ruled invalid on 2026-11-16 (the rejection is in the code only on "
     "an unmerged branch)")
+FREEZE = (
+    "`optimization.time_window_test.require_steady_state` is set without "
+    "`case.fluid.freeze_flow: true`, so the fluid is never frozen and the "
+    "tester aborts after its first run (time_window_tester.f90:199-202)")
 PHMG = (
     "the phmg preconditioner has `coarse_grid.solver` and "
     "`pcoarsening_schedule`, which Neko's own schema rejects as well "
@@ -127,6 +131,11 @@ KNOWN_FAILURES.update(known(
      "tests/unit/objectives/steady_unsteady_final_step.case"],
     ["$.case.simulation_components[0]", "$.state_recovery"],
     STEADY_UNSTEADY, ENABLED))
+for _name in ("steady_scalar_unconverged", "steady_scalar_unconverged_simtime",
+              "steady_unsteady_converged"):
+    _file = f"tests/unit/objectives/{_name}.case"
+    KNOWN_FAILURES[_file] = (KNOWN_FAILURES[_file][0] | {"$.case.fluid"},
+                             KNOWN_FAILURES[_file][1] + "; " + FREEZE)
 KNOWN_FAILURES.update(known(
     ["tests/regression/sensitivity/cases/passive_scalar.case",
      "tests/regression/sensitivity/cases/passive_scalar_smallP.case",

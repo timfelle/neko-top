@@ -23,7 +23,7 @@
           "$ref": "urn:neko-top:schema:common#/$defs/continuationReal"
         },
         "f_max_iterations": {
-          "description": "Iterations per step of the `f_max` array. Read only when `f_max` is an array; defaults to `optimization.solver.continuation_iterations`.",
+          "description": "Iterations per step of the `f_max` array. Read only when `f_max` is an array; defaults to `optimization.solver.continuation_iterations`. A value <= 0 disables the schedule: the parameter is never updated from the array and keeps its first value (continuation_scheduler.f90:153,248), so the other elements are unused.",
           "$ref": "urn:neko-top:schema:common#/$defs/continuationIterations"
         }
       },
@@ -70,15 +70,20 @@
           "$ref": "urn:neko-top:schema:common#/$defs/continuationReal"
         },
         "f_max_iterations": {
-          "description": "Iterations per step of the `f_max` array. Read only when `f_max` is an array; defaults to `optimization.solver.continuation_iterations`.",
+          "description": "Iterations per step of the `f_max` array. Read only when `f_max` is an array; defaults to `optimization.solver.continuation_iterations`. A value <= 0 disables the schedule: the parameter is never updated from the array and keeps its first value (continuation_scheduler.f90:153,248), so the other elements are unused.",
           "$ref": "urn:neko-top:schema:common#/$defs/continuationIterations"
         },
         "p": {
-          "description": "SIMP penalisation exponent. Default 1.0. A real, or an array of reals that the continuation scheduler steps through.",
-          "$ref": "urn:neko-top:schema:common#/$defs/continuationReal"
+          "description": "SIMP penalisation exponent, at least 1. Default 1.0. A real, or an array of reals that the continuation scheduler steps through.",
+          "$ref": "urn:neko-top:schema:common#/$defs/continuationReal",
+          "$comment": "X_in**p and p*X_in**(p-1) are evaluated at X_in = 0, which is Inf or NaN for p < 1 (SIMP_mapping_cpu.f90:93, :110).",
+          "minimum": 1,
+          "items": {
+            "minimum": 1
+          }
         },
         "p_iterations": {
-          "description": "Iterations per step of the `p` array. Read only when `p` is an array; defaults to `optimization.solver.continuation_iterations`.",
+          "description": "Iterations per step of the `p` array. Read only when `p` is an array; defaults to `optimization.solver.continuation_iterations`. A value <= 0 disables the schedule: the parameter is never updated from the array and keeps its first value (continuation_scheduler.f90:153,248), so the other elements are unused.",
           "$ref": "urn:neko-top:schema:common#/$defs/continuationIterations"
         }
       },
@@ -143,15 +148,20 @@
           "$ref": "urn:neko-top:schema:common#/$defs/continuationReal"
         },
         "f_max_iterations": {
-          "description": "Iterations per step of the `f_max` array. Read only when `f_max` is an array; defaults to `optimization.solver.continuation_iterations`.",
+          "description": "Iterations per step of the `f_max` array. Read only when `f_max` is an array; defaults to `optimization.solver.continuation_iterations`. A value <= 0 disables the schedule: the parameter is never updated from the array and keeps its first value (continuation_scheduler.f90:153,248), so the other elements are unused.",
           "$ref": "urn:neko-top:schema:common#/$defs/continuationIterations"
         },
         "q": {
-          "description": "RAMP penalisation parameter. Default 1.0. A real, or an array of reals that the continuation scheduler steps through.",
-          "$ref": "urn:neko-top:schema:common#/$defs/continuationReal"
+          "description": "RAMP penalisation parameter, above -1. Default 1.0. A real, or an array of reals that the continuation scheduler steps through.",
+          "$ref": "urn:neko-top:schema:common#/$defs/continuationReal",
+          "$comment": "The denominator 1 + q(1 - x) vanishes inside the design range [0, 1] for q <= -1 (RAMP_mapping_cpu.f90:96, :113-114).",
+          "exclusiveMinimum": -1,
+          "items": {
+            "exclusiveMinimum": -1
+          }
         },
         "q_iterations": {
-          "description": "Iterations per step of the `q` array. Read only when `q` is an array; defaults to `optimization.solver.continuation_iterations`.",
+          "description": "Iterations per step of the `q` array. Read only when `q` is an array; defaults to `optimization.solver.continuation_iterations`. A value <= 0 disables the schedule: the parameter is never updated from the array and keeps its first value (continuation_scheduler.f90:153,248), so the other elements are unused.",
           "$ref": "urn:neko-top:schema:common#/$defs/continuationIterations"
         }
       },
@@ -216,15 +226,34 @@
           "$ref": "urn:neko-top:schema:common#/$defs/continuationReal"
         },
         "f_max_iterations": {
-          "description": "Iterations per step of the `f_max` array. Read only when `f_max` is an array; defaults to `optimization.solver.continuation_iterations`.",
+          "description": "Iterations per step of the `f_max` array. Read only when `f_max` is an array; defaults to `optimization.solver.continuation_iterations`. A value <= 0 disables the schedule: the parameter is never updated from the array and keeps its first value (continuation_scheduler.f90:153,248), so the other elements are unused.",
           "$ref": "urn:neko-top:schema:common#/$defs/continuationIterations"
         },
         "q": {
-          "description": "Borrvall-Petersson penalisation parameter. Default 1.0. A real, or an array of reals that the continuation scheduler steps through.",
-          "$ref": "urn:neko-top:schema:common#/$defs/continuationReal"
+          "description": "Borrvall-Petersson penalisation parameter, outside [-1, 0]. Default 1.0. A real, or an array of reals that the continuation scheduler steps through.",
+          "$ref": "urn:neko-top:schema:common#/$defs/continuationReal",
+          "$comment": "The denominator x + q vanishes inside the design range [0, 1] for -1 < q < 0, and q = 0 or q = -1 gives 0/0 at an end of it (Borrvall_Petersson_mapping_cpu.f90:97, :114).",
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0
+            },
+            {
+              "exclusiveMaximum": -1
+            }
+          ],
+          "items": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0
+              },
+              {
+                "exclusiveMaximum": -1
+              }
+            ]
+          }
         },
         "q_iterations": {
-          "description": "Iterations per step of the `q` array. Read only when `q` is an array; defaults to `optimization.solver.continuation_iterations`.",
+          "description": "Iterations per step of the `q` array. Read only when `q` is an array; defaults to `optimization.solver.continuation_iterations`. A value <= 0 disables the schedule: the parameter is never updated from the array and keeps its first value (continuation_scheduler.f90:153,248), so the other elements are unused.",
           "$ref": "urn:neko-top:schema:common#/$defs/continuationIterations"
         }
       },
@@ -269,7 +298,7 @@
       "additionalProperties": false
     },
     "heavisideMapping": {
-      "$comment": "heaviside_mapping.f90:94-96 reads eta, beta; :112 aborts for an initial beta <= 0 (only the first element of an array is checked, which the schema cannot express), :116 aborts for eta outside [0, 1]. mapping_fctry.f90 accepts both type names.",
+      "$comment": "heaviside_mapping.f90:94-96 reads eta, beta; :112 aborts for an initial beta <= 0 (only the first element of an array is checked there; a later 0.0 aborts when the continuation reaches it, heaviside_mapping.f90:162-164, and is rejected by the schema), :116 aborts for eta outside [0, 1]. mapping_fctry.f90 accepts both type names. The first element of an array beta is the initial value (continuation_scheduler.f90:151-153), so [-1.0, 2.0] aborts at :111-112 like a scalar beta <= 0; this cannot be expressed here, because the whitelisted keywords have no prefixItems and `exclusiveMinimum: 0` on every element would also reject a later negative element, which runs as its absolute value.",
       "description": "Smoothed Heaviside projection; `heaviside_projection` is an alias of `heaviside_mapping`.",
       "type": "object",
       "required": [
@@ -291,18 +320,24 @@
           "maximum": 1
         },
         "beta": {
-          "description": "Projection sharpness (required). The first value must be > 0. A real, or an array of reals that the continuation scheduler steps through.",
+          "description": "Projection sharpness (required). The first value must be > 0 (a first array element <= 0 aborts, but the schema cannot check the first element alone), and no later value may be 0.0. A real, or an array of reals that the continuation scheduler steps through.",
           "oneOf": [
             {
               "$ref": "urn:neko:schema:common#/$defs/positiveRealNumber"
             },
             {
-              "$ref": "urn:neko:schema:common#/$defs/numberArray"
+              "$comment": "A later element of 0.0 sets beta to 0.0 at the continuation step, where the forward map divides by tanh(0) + tanh(0) and aborts (continuation_scheduler.f90:250-253, heaviside_mapping.f90:162-164, :195-196). A negative element gives the same map as its absolute value, so it is accepted.",
+              "$ref": "urn:neko:schema:common#/$defs/numberArray",
+              "items": {
+                "not": {
+                  "const": 0
+                }
+              }
             }
           ]
         },
         "beta_iterations": {
-          "description": "Iterations per step of the `beta` array. Read only when `beta` is an array; defaults to `optimization.solver.continuation_iterations`.",
+          "description": "Iterations per step of the `beta` array. Read only when `beta` is an array; defaults to `optimization.solver.continuation_iterations`. A value <= 0 disables the schedule: the parameter is never updated from the array and keeps its first value (continuation_scheduler.f90:153,248), so the other elements are unused.",
           "$ref": "urn:neko-top:schema:common#/$defs/continuationIterations"
         }
       },
@@ -345,20 +380,22 @@
           "$ref": "urn:neko-top:schema:common#/$defs/continuationReal"
         },
         "r_iterations": {
-          "description": "Iterations per step of the `r` array. Read only when `r` is an array; defaults to `optimization.solver.continuation_iterations`.",
+          "description": "Iterations per step of the `r` array. Read only when `r` is an array; defaults to `optimization.solver.continuation_iterations`. A value <= 0 disables the schedule: the parameter is never updated from the array and keeps its first value (continuation_scheduler.f90:153,248), so the other elements are unused.",
           "$ref": "urn:neko-top:schema:common#/$defs/continuationIterations"
         },
         "tol": {
-          "description": "Tolerance of the filter solve. Default 1.0e-10.",
-          "$ref": "urn:neko:schema:common#/$defs/realNumber"
+          "description": "Tolerance of the filter solve, above 0. Default 1.0e-10.",
+          "$comment": "Every Krylov exit test is `rnorm < abs_tol` (neko src/krylov/bcknd/cpu/cg.f90:189,255,267), so a tolerance <= 0 is never met by a non-zero residual: the solve runs max_iter iterations and reports 'did not converge', which aborts with strict_convergence (PDE_filter_mapping.f90:289-291,412,425-430). Neko's PDE filter types its `tolerance` the same way.",
+          "$ref": "urn:neko:schema:common#/$defs/positiveRealNumber"
         },
         "max_iter": {
-          "description": "Maximum iterations of the filter solve. Default 200.",
-          "type": "integer"
+          "description": "Maximum iterations of the filter solve; at least 1 (at least 2 with `strict_convergence`). Default 200.",
+          "$comment": "A value <= 0 runs the Krylov loop zero times: the filter then passes the design through unchanged and every application reports 'did not converge' (PDE_filter_mapping.f90:290-296, neko src/krylov/bcknd/cpu/cg.f90:199).",
+          "$ref": "urn:neko:schema:common#/$defs/positiveInteger"
         },
         "solver": {
           "description": "Krylov solver of the filter. Default `cg`.",
-          "$comment": "The coupled solvers are accepted by the factory and then abort on the first single-field solve (neko src/krylov/bcknd/cpu/cg_coupled.f90:178, via PDE_filter_mapping.f90:290). `fused_cg` aborts on a CPU build only (krylov_fctry.f90:168), so it is accepted here.",
+          "$comment": "The coupled solvers abort: coupled_cg, and fused_coupled_cg on a device build, are accepted by the factory and then abort on the first single-field solve (neko src/krylov/bcknd/cpu/cg_coupled.f90:178, via PDE_filter_mapping.f90:290); fused_coupled_cg on a CPU build and coupled_bicgstab on a device build abort inside the factory (krylov_fctry.f90:178,209), and coupled_bicgstab on CPU aborts in its single-field solve (bicgstab_coupled.f90:163). `fused_cg` aborts on a CPU build only (krylov_fctry.f90:168), so it is accepted here.",
           "$ref": "urn:neko:schema:common#/$defs/nonEmptyString",
           "not": {
             "enum": [
@@ -370,14 +407,11 @@
         },
         "preconditioner": {
           "description": "Preconditioner of the filter solve. Default `jacobi`.",
-          "$comment": "filter_precon_factory initialises only the Jacobi preconditioner (PDE_filter_mapping.f90:436-460); `hsmg` and `phmg` would be allocated without being initialised.",
-          "enum": [
-            "jacobi",
-            "ident"
-          ]
+          "$comment": "filter_precon_factory initialises only the Jacobi preconditioner (PDE_filter_mapping.f90:436-463); `hsmg` and `phmg` would be allocated without being initialised. Neko's hsmg coarse grid has the same limitation (neko src/krylov/pc_hsmg.f90:361-371), hence the shared def.",
+          "$ref": "urn:neko:schema:common#/$defs/coarseGridPreconditionerType"
         },
         "strict_convergence": {
-          "description": "Abort if a filter solve does not converge. Default false.",
+          "description": "Abort if a filter solve does not converge. Default false. Not combinable with `solver` `cheby`, which is never reported as converged, nor with `max_iter` 1.",
           "type": "boolean"
         }
       },
@@ -397,6 +431,31 @@
           "else": {
             "properties": {
               "r_iterations": false
+            }
+          }
+        },
+        {
+          "$comment": "krylov_is_converged returns false whenever iter >= max_iter (neko src/krylov/krylov.f90:464). cheby_solve always completes its loop and passes iter = max_iter + 1 (neko src/krylov/bcknd/cpu/cheby.f90:283,314), so a Chebyshev solve is never converged; with max_iter 1, cg and gmres end at iter >= 1 as well (only the zero right-hand side returns early, cg.f90:189-190). With strict_convergence the first filter application therefore aborts (PDE_filter_mapping.f90:310,412,425-430). Without it the run continues and only logs 'did not converge', so max_iter 1 and cheby stay accepted there.",
+          "if": {
+            "required": [
+              "strict_convergence"
+            ],
+            "properties": {
+              "strict_convergence": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "solver": {
+                "not": {
+                  "const": "cheby"
+                }
+              },
+              "max_iter": {
+                "minimum": 2
+              }
             }
           }
         }

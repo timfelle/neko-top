@@ -14,10 +14,16 @@ import copy
 
 import pytest
 
+import validate_case_schema as vcs
 from schema_helpers import (DEL, build, ensure_object, error_paths, errors,
                             load_base, short)
 
 S, U, N = "steady", "unsteady", "neko"
+
+SCALAR_ITEM = {"Pe": 1.0,
+               "initial_condition": {"type": "uniform", "value": 0.0},
+               "solver": {"type": "cg", "preconditioner": {"type": "jacobi"},
+                          "absolute_tolerance": 1e-6}}
 
 # --------------------------------------------------------------------------- #
 # Accepted: odd-looking values the code reads without complaint.
@@ -52,6 +58,53 @@ ACCEPTED_BY_THE_CODE = [
     # krylov_fctry.f90: fused_cg is only an error on a CPU build.
     ("pde_filter_fused_cg", S,
      {"optimization.design.mapping[0].solver": "fused_cg"}),
+    # cg.f90:189-267: max_iter 1 runs (with a warning) unless strict, and a
+    # strict Krylov solver other than cheby can converge.
+    ("pde_filter_max_iter_one_nonstrict", S,
+     {"optimization.design.mapping[0].max_iter": 1}),
+    ("pde_filter_cheby_nonstrict", S,
+     {"optimization.design.mapping[0].solver": "cheby"}),
+    ("pde_filter_cheby_strict_false", S,
+     {"optimization.design.mapping[0].solver": "cheby",
+      "optimization.design.mapping[0].strict_convergence": False}),
+    ("pde_filter_gmres_strict_max_iter_two", S,
+     {"optimization.design.mapping[0].solver": "gmres",
+      "optimization.design.mapping[0].max_iter": 2,
+      "optimization.design.mapping[0].strict_convergence": True}),
+    # utils.f90:499: an all-blank max_runtime is no limit, like ''.
+    ("design_name_long_with_blank_max_runtime", S,
+     {"optimization.design.name": "a" * 70,
+      "optimization.solver.max_runtime": " ",
+      "optimization.solver.checkpoint.interval": 0}),
+    ("design_name_long_with_empty_restart_and_runtime", S,
+     {"optimization.design.name": "a" * 70,
+      "optimization.solver.restart_file": "",
+      "optimization.solver.max_runtime": "",
+      "optimization.solver.checkpoint.interval": 0}),
+    # mma_cpu.f90:917-919: below 1 the subproblem runs.
+    ("mma_epsimin_half", S, {"optimization.solver.mma.epsimin": 0.5}),
+    # mma_cpu.f90:966: dip with a = 0 ignores a0.
+    ("mma_a0_negative_dip_a_zero", S,
+     {"optimization.solver.mma.a0": -1.0}),
+    ("mma_a0_zero_pdip", S,
+     {"optimization.solver.mma.subsolver": "pdip",
+      "optimization.solver.mma.a0": 0.0}),
+    ("mma_c_negative_dip_unconstrained", S,
+     {"optimization.constraints": [], "optimization.solver.mma.c": -1.0}),
+    # optimizer.f90:826-861: the longest names that still fit in 256.
+    ("checkpoint_base_233_default_path", S,
+     {"optimization.solver.checkpoint.base": "b" * 233}),
+    ("checkpoint_path_226_default_base", S,
+     {"optimization.solver.checkpoint.path": "p" * 226}),
+    ("checkpoint_path_227_slash_default_base", S,
+     {"optimization.solver.checkpoint.path": "p" * 226 + "/"}),
+    ("checkpoint_path_and_base_given", S,
+     {"optimization.solver.checkpoint.path": "p" * 200,
+      "optimization.solver.checkpoint.base": "b" * 40}),
+    ("fd_test_tolerance_positive", S,
+     {"optimization.fd_test_tolerance": 1.0e-3}),
+    ("time_window_tolerance_zero", U,
+     {"optimization.time_window_test": {"tolerance": 0.0}}),
     # PDE_filter_mapping.f90:436: ident is initialised by its constructor.
     ("pde_filter_ident", S,
      {"optimization.design.mapping[0].preconditioner": "ident"}),
@@ -61,11 +114,6 @@ ACCEPTED_BY_THE_CODE = [
     # design_brinkman.f90:302: point_zone domain with its zone.
     ("design_domain_full", S,
      {"optimization.design.domain": {"type": "full"}}),
-    # set_optimization_ic.f90:262-270: `field` is accepted (the abort found
-    # while reading was inferred, not run).
-    ("initial_distribution_field", S,
-     {"optimization.design.initial_distribution":
-      {"type": "field", "file_name": "mean0.f00001"}}),
     # set_optimization_ic.f90:108-110
     ("initial_distribution_point_zone", S,
      {"optimization.design.initial_distribution":
@@ -81,11 +129,6 @@ ACCEPTED_BY_THE_CODE = [
     ("volume_constraint_is_max", S,
      {"optimization.constraints[0].is_max": True,
       "optimization.constraints[0].name": "V"}),
-    # adjoint_fluid_pnpn_bc_fctry.f90:178: known type, factory branch
-    # commented out: the BC is accepted and does nothing.
-    ("adjoint_bc_user_velocity_pointwise", S,
-     {"case.adjoint_fluid.boundary_conditions[0]":
-      {"type": "user_velocity_pointwise", "zone_indices": [1, 3, 4, 5, 6]}}),
     # adjoint_fluid_pnpn_bc_fctry.f90:149-195: types of the pressure factory.
     ("adjoint_bc_user_pressure", S,
      {"case.adjoint_fluid.boundary_conditions[1]":
@@ -120,9 +163,11 @@ ACCEPTED_BY_THE_CODE = [
     # simulation.f90:271-287
     ("unsteady_with_variable_timestep_false", U,
      {"case.time.variable_timestep": False}),
-    # checkpoint.f90:161: extra fields are looked up by name.
+    # checkpoint.f90:161: extra fields are looked up by name, and the
+    # unsteady fixture has no scalar, so it registers `u` but not `s`. `u` is
+    # harmless at run time (the finite-difference error equals the control).
     ("state_recovery_extra_fields", U,
-     {"state_recovery.extra_fields": ["s"]}),
+     {"state_recovery.extra_fields": ["u"]}),
     ("state_recovery_alias_and_case", U,
      {"state_recovery.type": "simulation_checkpoint",
       "state_recovery.algorithm": "LINEAR"}),
@@ -132,6 +177,116 @@ ACCEPTED_BY_THE_CODE = [
     # neko_ext.f90: freeze_flow is a boolean read at every iteration.
     ("freeze_flow", S, {"case.fluid.freeze_flow": True,
                          "case.adjoint_fluid.freeze_flow": True}),
+    # --- round 1 of the code audit ---------------------------------------
+    # neko src/common/utils.f90:598,662: read_duration trims the string and
+    # does a list-directed read of the seconds.
+    ("max_runtime_exponent", S, {"optimization.solver.max_runtime": "1e3"}),
+    ("max_runtime_fortran_d", S, {"optimization.solver.max_runtime": "1d3"}),
+    ("max_runtime_trailing_point", S,
+     {"optimization.solver.max_runtime": "5."}),
+    ("max_runtime_leading_point", S, {"optimization.solver.max_runtime": ".5"}),
+    ("max_runtime_sign", S, {"optimization.solver.max_runtime": "+5"}),
+    ("max_runtime_hms_point", S, {"optimization.solver.max_runtime": "1:2:3."}),
+    ("max_runtime_padded", S, {"optimization.solver.max_runtime": " 3600"}),
+    ("steepest_descent_max_runtime_exponent", U,
+     {"optimization.solver.max_runtime": "1e3"}),
+    # heaviside_mapping.f90:162-164: only a later 0.0 aborts; a negative beta
+    # gives the same map as its absolute value.
+    ("heaviside_later_negative_beta", S,
+     {"optimization.design.mapping[1].beta": [1.0, -2.0],
+      "optimization.design.mapping[1].beta_iterations": 2}),
+    # PDE_filter_mapping.f90:138
+    ("pde_filter_max_iter_one", S,
+     {"optimization.design.mapping[0].max_iter": 1}),
+    # RAMP_mapping_cpu.f90:96: well defined for -1 < q < 0.
+    ("ramp_q_minus_half", S, {"optimization.design.mapping[2].q": -0.5}),
+    # Borrvall_Petersson_mapping_cpu.f90:97: monotone for q > 0 and q < -1.
+    ("bp_q_positive", S,
+     {"optimization.design.mapping[2].type": "Borrvall_Petersson",
+      "optimization.design.mapping[2].q": 0.5}),
+    ("bp_q_below_minus_one", S,
+     {"optimization.design.mapping[2].type": "Borrvall_Petersson",
+      "optimization.design.mapping[2].q": -2.0}),
+    # SIMP_mapping_cpu.f90:93,110: finite for p >= 1.
+    ("simp_p_one", S,
+     {"optimization.design.mapping[2].type": "SIMP",
+      "optimization.design.mapping[2].q": DEL,
+      "optimization.design.mapping[2].p": 1.0}),
+    # design_brinkman.f90:284: `bp` is the same file as `adios2`.
+    ("design_output_format_bp", S,
+     {"optimization.design.output_format": "bp"}),
+    # steepest_descent_optimizer.f90:194-235: a key against the default of
+    # its sibling that is absent.
+    ("sd_xmin_below_default_xmax", U,
+     {"optimization.solver.steepest_descent.xmin": 0.5,
+      "optimization.solver.steepest_descent.xmax": DEL}),
+    ("sd_xmax_above_default_xmin", U,
+     {"optimization.solver.steepest_descent.xmax": 0.5,
+      "optimization.solver.steepest_descent.xmin": DEL}),
+    ("sd_move_limit_initial_alone", U,
+     {"optimization.solver.steepest_descent.move_limit": {"initial": 0.05}}),
+    # optimizer.f90:86: 256 characters is the length of the variable.
+    ("restart_file_256_characters", S,
+     {"optimization.solver.restart_file": "a" * 253 + ".h5"}),
+    # steady_simcomp.f90:276,335: only 0 is a division by zero.
+    ("steady_log_frequency_negative", S,
+     {"case.simulation_components[0]":
+      {"type": "steady", "log_frequency": -10}}),
+    # adjoint_case.f90:473-481: a csv file and a tsteps interval of 1 or more.
+    ("adjoint_norm_file_csv", S,
+     {"case.adjoint_fluid.norm_output_control": "tsteps",
+      "case.adjoint_fluid.norm_output_file": "norm.csv"}),
+    ("adjoint_norm_tsteps_one", S,
+     {"case.adjoint_fluid.norm_output_control": "tsteps",
+      "case.adjoint_fluid.norm_output_value": 1.0}),
+    # adjoint_case.f90:443-445: `org` reads case.nsamples.
+    ("adjoint_output_control_org_with_nsamples", S,
+     {"case.adjoint_fluid.output_control": "org", "case.nsamples": 10}),
+    # adjoint_fluid_scheme_incompressible.f90:215-229: the adjoint key wins,
+    # and Neko resolves the primal constant.
+    ("pressure_projection_space_constant_with_adjoint_key", S,
+     {"case.fluid.pressure_solver.projection_space_size": "nproj",
+      "case.adjoint_fluid.pressure_solver": {"projection_space_size": 20}}),
+    ("pressure_projection_hold_constant_with_adjoint_key", S,
+     {"case.fluid.pressure_solver.projection_hold_steps": "nhold",
+      "case.adjoint_fluid.pressure_solver": {"projection_hold_steps": 5}}),
+    # advection_adjoint_fctry.f90:85-101: the order is read only after the
+    # dummy-advection return, and U has no scalar.
+    ("dealiased_order_constant_without_advection", U,
+     {"case.fluid.advection": False,
+      "case.numerics.dealiased_polynomial_order": "lxd"}),
+    # adjoint_scalar_scheme.f90:301-316,376-380: the adjoint's own key wins,
+    # and Neko resolves the primal constant.
+    ("scalar_tolerance_constant_with_adjoint_key", S,
+     {"case.scalar.solver.absolute_tolerance": "stol",
+      "case.adjoint_scalar.solver": {"absolute_tolerance": 1.0e-6}}),
+    ("scalar_max_iterations_constant_with_adjoint_key", S,
+     {"case.scalar.solver.max_iterations": "smax",
+      "case.adjoint_scalar.solver": {"max_iterations": 100}}),
+    ("scalar_projection_space_constant_with_adjoint_key", S,
+     {"case.scalar.solver.projection_space_size": "sps",
+      "case.adjoint_scalar.solver": {"projection_space_size": 5}}),
+    ("scalar_projection_hold_constant_with_adjoint_key", S,
+     {"case.scalar.solver.projection_hold_steps": "sph",
+      "case.adjoint_scalar.solver": {"projection_hold_steps": 5}}),
+    # adjoint_scalar_pnpn_bc_fctry.f90:76-84: user-extensible, as in Neko.
+    ("adjoint_scalar_bc_user_extra_key", S,
+     {"case.adjoint_scalar.boundary_conditions[0]":
+      {"type": "user", "zone_indices": [1], "comment": "free"}}),
+    # adjoint_scalar_scheme.f90:284-337: a name that is not a field yet.
+    ("adjoint_scalar_name_phi", S, {"case.adjoint_scalar.name": "phi"}),
+    # adjoint_scalar_scheme.f90:370-373: `user` sources are fine.
+    ("scalar_user_source_with_adjoint_scalar", S,
+     {"case.scalar.source_terms": [{"type": "user"}]}),
+    # adjoint_fluid_pnpn.f90:468-491 and simulation.f90:271,299: the topology
+    # optimisation drivers read these; without `optimization` nothing does.
+    ("neko_case_with_unsteady", N, {"unsteady": True}),
+    ("neko_case_with_state_recovery", N, {"state_recovery": {}}),
+    ("neko_case_with_output_file", N, {"output_file": "pw.txt"}),
+    ("neko_case_with_integer_norm_scaling", N, {"norm_scaling": 1}),
+    # time_window_tester.f90:128,137
+    ("time_window_test_unsteady", U,
+     {"optimization.time_window_test": {"tolerance": 1.0e-10}}),
 ]
 
 # --------------------------------------------------------------------------- #
@@ -192,6 +347,104 @@ REJECTED_AS_THE_CODE_ABORTS = [
     # PDE_filter_mapping.f90:290: coupled solvers abort on the first solve.
     ("pde_filter_coupled_cg", S,
      {"optimization.design.mapping[0].solver": "coupled_cg"}, "mapping[0]"),
+    # krylov_fctry.f90:178,209 (aborts in the factory) and cg_coupled-style
+    # single-field solves: each excluded coupled solver has its own row.
+    ("pde_filter_fused_coupled_cg", S,
+     {"optimization.design.mapping[0].solver": "fused_coupled_cg"},
+     "mapping[0]"),
+    ("pde_filter_coupled_bicgstab", S,
+     {"optimization.design.mapping[0].solver": "coupled_bicgstab"},
+     "mapping[0]"),
+    # neko src/krylov/bcknd/cpu/cheby.f90:283,314 and krylov.f90:464: a
+    # Chebyshev solve is never reported as converged, so the strict check
+    # (PDE_filter_mapping.f90:412,425-430) aborts at the first application.
+    ("pde_filter_cheby_strict", S,
+     {"optimization.design.mapping[0].solver": "cheby",
+      "optimization.design.mapping[0].strict_convergence": True},
+     "mapping[0]"),
+    # krylov.f90:464: iter >= max_iter is never converged, and one iteration
+    # always reaches it; only strict_convergence turns that into an abort.
+    ("pde_filter_max_iter_one_strict", S,
+     {"optimization.design.mapping[0].max_iter": 1,
+      "optimization.design.mapping[0].strict_convergence": True},
+     "mapping[0]"),
+    # the per-type "iterations only for an array" rule, scalar p / f_max
+    # (continuation_scheduler.f90:144-158)
+    ("simp_p_scalar_with_p_iterations", S,
+     {"optimization.design.mapping[2].type": "SIMP",
+      "optimization.design.mapping[2].q": DEL,
+      "optimization.design.mapping[2].p": 3.0,
+      "optimization.design.mapping[2].p_iterations": 2}, "mapping[2]"),
+    ("simp_f_max_scalar_with_iterations", S,
+     {"optimization.design.mapping[2].type": "SIMP",
+      "optimization.design.mapping[2].q": DEL,
+      "optimization.design.mapping[2].p": 3.0,
+      "optimization.design.mapping[2].f_max_iterations": 2}, "mapping[2]"),
+    ("bp_f_max_scalar_with_iterations", S,
+     {"optimization.design.mapping[2].type": "Borrvall_Petersson",
+      "optimization.design.mapping[2].f_max_iterations": 2}, "mapping[2]"),
+    # set_optimization_ic.f90:104,108-110 + design_brinkman.f90:330,338: the
+    # first forward map runs on the initial value, which must lie in [0, 1].
+    ("ic_uniform_negative_with_simp", S,
+     {"optimization.design.initial_distribution.value": -0.5,
+      "optimization.design.mapping[2].type": "SIMP",
+      "optimization.design.mapping[2].q": DEL,
+      "optimization.design.mapping[2].p": 2.5}, "initial_distribution"),
+    ("ic_uniform_above_one", S,
+     {"optimization.design.initial_distribution.value": 1.5},
+     "initial_distribution"),
+    ("ic_point_zone_zone_value_negative", S,
+     {"optimization.design.initial_distribution":
+      {"type": "point_zone", "base_value": 0.0, "zone_value": -0.5,
+       "zone_name": "optimization_domain"}}, "initial_distribution"),
+    # design_hdf5_io.f90:160,256,355-358: the name is held as bytes.
+    ("design_name_40_two_byte_characters", S,
+     {"optimization.design.name": "\u00e9" * 40,
+      "optimization.solver.checkpoint.interval": 1}, "design.name"),
+    # optimizer.f90:86,435: restart_file is character(len=256), in bytes.
+    ("restart_file_non_ascii_over_256_bytes", S,
+     {"optimization.solver.restart_file": "\u00e9" * 130 + ".h5"},
+     "restart_file"),
+    # tests/shared/sensitivity.f90:199: abs(error) > tolerance aborts.
+    ("fd_test_tolerance_negative", S,
+     {"optimization.fd_test_tolerance": -1.0e-3}, "fd_test_tolerance"),
+    ("fd_test_tolerance_zero", S,
+     {"optimization.fd_test_tolerance": 0.0}, "fd_test_tolerance"),
+    # time_window_tester.f90:233,260,272: `difference <= tolerance`.
+    ("time_window_tolerance_negative", U,
+     {"optimization.time_window_test": {"tolerance": -1.0e-6}},
+     "time_window_test"),
+    # mma_cpu.f90:917-919,930,941: epsi starts at 1 and loops while it
+    # exceeds epsimin, so the subproblem is never solved.
+    ("mma_epsimin_one", S,
+     {"optimization.solver.mma.epsimin": 1.0}, "mma.epsimin"),
+    ("mma_epsimin_above_one_pdip", S,
+     {"optimization.solver.mma.epsimin": 1.2,
+      "optimization.solver.mma.subsolver": "pdip"}, "mma.epsimin"),
+    # mma_cpu.f90:961 and :511,541,608: c <= 0 relaxes the constraints.
+    ("mma_c_zero_with_constraints", S,
+     {"optimization.solver.mma.c": 0.0}, "mma.c"),
+    ("mma_c_negative_with_constraints", S,
+     {"optimization.solver.mma.c": -1.0}, "mma.c"),
+    ("mma_c_negative_pdip_unconstrained", S,
+     {"optimization.constraints": [],
+      "optimization.solver.mma.subsolver": "pdip",
+      "optimization.solver.mma.c": -1.0}, "mma.c"),
+    # mma_cpu.f90:542,609,779,966: a0 < 0.
+    ("mma_a0_negative_pdip", S,
+     {"optimization.solver.mma.subsolver": "pdip",
+      "optimization.solver.mma.a0": -0.001}, "mma.a0"),
+    ("mma_a0_negative_dip_with_a", S,
+     {"optimization.solver.mma.a": 1.0,
+      "optimization.solver.mma.a0": -1.0}, "mma.a0"),
+    # optimizer.f90:826-861: the file name is built in character(len=256).
+    ("checkpoint_base_234_default_path", S,
+     {"optimization.solver.checkpoint.base": "b" * 234}, "checkpoint.base"),
+    ("checkpoint_path_227_default_base", S,
+     {"optimization.solver.checkpoint.path": "p" * 227}, "checkpoint.path"),
+    ("checkpoint_path_228_slash_default_base", S,
+     {"optimization.solver.checkpoint.path": "p" * 227 + "/"},
+     "checkpoint.path"),
     ("pde_filter_tol_integer", S,
      {"optimization.design.mapping[0].tol": 1}, "mapping[0]"),
     ("pde_filter_max_iter_real", S,
@@ -200,6 +453,77 @@ REJECTED_AS_THE_CODE_ABORTS = [
      {"optimization.design.mapping[0].eta": 0.5}, "mapping[0]"),
     ("linear_mapping_p_key", S,
      {"optimization.constraints[0].mapping[0].p": 3.0}, "mapping[0]"),
+    # heaviside_mapping.f90:162-164, continuation_scheduler.f90:250-253: a
+    # later beta of 0.0 aborts when the continuation reaches it.
+    ("heaviside_later_beta_zero", S,
+     {"optimization.design.mapping[1].beta": [1.0, 0.0]}, "mapping[1]"),
+    # PDE_filter_mapping.f90:138,290-296: max_iter <= 0 filters nothing.
+    ("pde_filter_max_iter_zero", S,
+     {"optimization.design.mapping[0].max_iter": 0}, "mapping[0]"),
+    ("pde_filter_max_iter_negative", S,
+     {"optimization.design.mapping[0].max_iter": -5}, "mapping[0]"),
+    # RAMP_mapping_cpu.f90:96,113: 1 + q(1 - x) vanishes for q <= -1.
+    ("ramp_q_minus_one", S,
+     {"optimization.design.mapping[2].q": -1.0}, "mapping[2]"),
+    ("ramp_q_below_minus_one", S,
+     {"optimization.design.mapping[2].q": -2.0}, "mapping[2]"),
+    ("ramp_q_array_with_minus_one", S,
+     {"optimization.design.mapping[2].q": [1.0, -1.0],
+      "optimization.design.mapping[2].q_iterations": 2}, "mapping[2]"),
+    # Borrvall_Petersson_mapping_cpu.f90:97,114: x + q vanishes for q in
+    # [-1, 0].
+    ("bp_q_zero", S,
+     {"optimization.design.mapping[2].type": "Borrvall_Petersson",
+      "optimization.design.mapping[2].q": 0.0}, "mapping[2]"),
+    ("bp_q_minus_half", S,
+     {"optimization.design.mapping[2].type": "Borrvall_Petersson",
+      "optimization.design.mapping[2].q": -0.5}, "mapping[2]"),
+    ("bp_q_minus_one", S,
+     {"optimization.design.mapping[2].type": "Borrvall_Petersson",
+      "optimization.design.mapping[2].q": -1.0}, "mapping[2]"),
+    ("bp_q_array_with_zero", S,
+     {"optimization.design.mapping[2].type": "Borrvall_Petersson",
+      "optimization.design.mapping[2].q": [1.0, 0.0],
+      "optimization.design.mapping[2].q_iterations": 2}, "mapping[2]"),
+    # SIMP_mapping_cpu.f90:93,110: X_in**p and X_in**(p-1) at X_in = 0.
+    ("simp_p_half", S,
+     {"optimization.design.mapping[2].type": "SIMP",
+      "optimization.design.mapping[2].q": DEL,
+      "optimization.design.mapping[2].p": 0.5}, "mapping[2]"),
+    ("simp_p_negative", S,
+     {"optimization.design.mapping[2].type": "SIMP",
+      "optimization.design.mapping[2].q": DEL,
+      "optimization.design.mapping[2].p": -1.0}, "mapping[2]"),
+    ("simp_p_array_below_one", S,
+     {"optimization.design.mapping[2].type": "SIMP",
+      "optimization.design.mapping[2].q": DEL,
+      "optimization.design.mapping[2].p": [2.0, 0.5],
+      "optimization.design.mapping[2].p_iterations": 2}, "mapping[2]"),
+    # the per-type "iterations only for an array" rule, for every type
+    ("simp_p_iterations_with_scalar", S,
+     {"optimization.design.mapping[2].type": "SIMP",
+      "optimization.design.mapping[2].q": DEL,
+      "optimization.design.mapping[2].p_iterations": 2}, "mapping[2]"),
+    ("bp_q_iterations_with_scalar", S,
+     {"optimization.design.mapping[2].type": "Borrvall_Petersson",
+      "optimization.design.mapping[2].q_iterations": 2}, "mapping[2]"),
+    ("ramp_q_iterations_with_scalar", S,
+     {"optimization.design.mapping[2].q_iterations": 2}, "mapping[2]"),
+    ("pde_r_iterations_with_scalar", S,
+     {"optimization.design.mapping[0].r": 0.1}, "mapping[0]"),
+    ("heaviside_beta_iterations_with_scalar", S,
+     {"optimization.design.mapping[1].beta": 2.0,
+      "optimization.design.mapping[1].beta_iterations": 2}, "mapping[1]"),
+    ("linear_f_max_iterations_with_scalar", S,
+     {"optimization.constraints[0].mapping[0].f_max_iterations": 2},
+     "mapping[0]"),
+    ("simp_unknown_key", S,
+     {"optimization.design.mapping[2].type": "SIMP",
+      "optimization.design.mapping[2].q": DEL,
+      "optimization.design.mapping[2].eta": 0.5}, "mapping[2]"),
+    ("bp_unknown_key", S,
+     {"optimization.design.mapping[2].type": "Borrvall_Petersson",
+      "optimization.design.mapping[2].eta": 0.5}, "mapping[2]"),
     # ---- objectives -------------------------------------------------------
     # objective_factory.f90:81
     ("objective_unknown_type", S,
@@ -213,6 +537,22 @@ REJECTED_AS_THE_CODE_ABORTS = [
      "objectives[1]"),
     ("objective_target_integer", S,
      {"optimization.objectives[0].target_concentration": 1}, "objectives[0]"),
+    # continuation_scheduler.f90:132-138,155: without `weight` the key
+    # weight_iterations is never read.
+    ("objective_weight_iterations_without_weight", S,
+     {"optimization.objectives[0].weight": DEL,
+      "optimization.objectives[0].weight_iterations": 2}, "objectives[0]"),
+    ("viscous_weight_iterations_with_scalar", S,
+     {"optimization.objectives[1].weight": 1.0,
+      "optimization.objectives[1].weight_iterations": 2}, "objectives[1]"),
+    ("brinkman_weight_iterations_with_scalar", U,
+     {"optimization.objectives[0].weight_iterations": 2}, "objectives[0]"),
+    ("viscous_start_time_integer", S,
+     {"optimization.objectives[1].start_time": 1}, "objectives[1]"),
+    ("constraint_without_type", S,
+     {"optimization.constraints[0].type": DEL}, "constraints[0]"),
+    ("objective_without_type", S,
+     {"optimization.objectives[1].type": DEL}, "objectives[1]"),
     # brinkman_dissipation_objective.f90:162: the two flags must agree.
     ("brinkman_dealias_flags_differ", U,
      {"optimization.objectives[0].dealias_sensitivity": True,
@@ -250,7 +590,8 @@ REJECTED_AS_THE_CODE_ABORTS = [
     # design_brinkman.f90:293
     ("design_output_precision", S,
      {"optimization.design.output_precision": "quad"}, "optimization.design"),
-    # design_brinkman.f90:284 and neko src/io/file.f90:133
+    # design_brinkman.f90:284: the design is written every iteration, and
+    # csv_file.f90:96 aborts on it.
     ("design_output_format", S,
      {"optimization.design.output_format": "csv"}, "optimization.design"),
     # the Brinkman design reads domain.* itself: not under `optimization`.
@@ -270,6 +611,18 @@ REJECTED_AS_THE_CODE_ABORTS = [
     ("initial_distribution_point_zone_without_value", S,
      {"optimization.design.initial_distribution":
       {"type": "point_zone", "base_value": 0.0, "zone_name": "z"}},
+     "initial_distribution"),
+    # set_optimization_ic.f90:259-270: every `field` aborts, either at :262
+    # (no .fNNNNN suffix) or at :270, where filename_chsuffix got a temporary
+    # for its output argument (:267) and the suffix reaches neko
+    # src/io/file.f90:133.
+    ("initial_distribution_field", S,
+     {"optimization.design.initial_distribution":
+      {"type": "field", "file_name": "mean0.f00001"}}, "initial_distribution"),
+    ("initial_distribution_field_interpolated", S,
+     {"optimization.design.initial_distribution":
+      {"type": "field", "file_name": "mean0.f00001", "interpolate": True,
+       "tolerance": 1.0e-6, "mesh_file_name": "none"}},
      "initial_distribution"),
     # set_optimization_ic.f90:262: a .fNNNNN file name.
     ("initial_distribution_field_name", S,
@@ -291,9 +644,63 @@ REJECTED_AS_THE_CODE_ABORTS = [
      {"optimization.solver.max_runtime": "1:2:3:4"}, "optimization.solver"),
     ("max_runtime_hours_with_days", S,
      {"optimization.solver.max_runtime": "1-25:00:00"}, "optimization.solver"),
+    # read_duration (neko src/common/utils.f90:662): a `/` is read with ierr 0
+    # and an undefined value.
+    ("max_runtime_slash", S,
+     {"optimization.solver.max_runtime": "1/2"}, "optimization.solver"),
     # optimizer.f90:1012
     ("restart_file_suffix", S,
      {"optimization.solver.restart_file": "state.txt"}, "optimization.solver"),
+    # optimizer.f90:86,435: a character(len=256) variable cuts the name.
+    ("restart_file_too_long", S,
+     {"optimization.solver.restart_file": "a" * 254 + ".h5"},
+     "optimization.solver"),
+    ("checkpoint_path_too_long", S,
+     {"optimization.solver.checkpoint.path": "p" * 257}, "checkpoint"),
+    ("checkpoint_base_too_long", S,
+     {"optimization.solver.checkpoint.base": "b" * 257}, "checkpoint"),
+    # The keys that both solvers read through optimizer_read_base_settings
+    # (optimizer.f90:415-449), on the steepest descent solver.
+    ("sd_max_runtime_format", U,
+     {"optimization.solver.max_runtime": "1:2:3:4"}, "optimization.solver"),
+    ("sd_restart_file_suffix", U,
+     {"optimization.solver.restart_file": "state.txt"}, "optimization.solver"),
+    ("sd_checkpoint_format", U,
+     {"optimization.solver.checkpoint.format": "json"}, "checkpoint"),
+    ("sd_checkpoint_unknown_key", U,
+     {"optimization.solver.checkpoint": {"verbose": True}}, "checkpoint"),
+    ("sd_continuation_iterations_real", U,
+     {"optimization.solver.continuation_iterations": 2.0},
+     "optimization.solver"),
+    ("sd_max_iterations_real", U,
+     {"optimization.solver.max_iterations": 10.0}, "optimization.solver"),
+    # steepest_descent_optimizer.f90:194-217: xmin >= xmax, with the default
+    # of the key that is absent.
+    ("sd_xmin_at_default_xmax", U,
+     {"optimization.solver.steepest_descent.xmin": 1.0,
+      "optimization.solver.steepest_descent.xmax": DEL}, "steepest_descent"),
+    ("sd_xmax_at_default_xmin", U,
+     {"optimization.solver.steepest_descent.xmax": -0.5,
+      "optimization.solver.steepest_descent.xmin": DEL}, "steepest_descent"),
+    # steepest_descent_optimizer.f90:200-235: move limits against the
+    # defaults (initial 0.1, min 0.001, max 0.1) of the keys that are absent.
+    ("sd_move_limit_initial_above_default_max", U,
+     {"optimization.solver.steepest_descent.move_limit": {"initial": 0.2}},
+     "move_limit"),
+    ("sd_move_limit_initial_below_default_min", U,
+     {"optimization.solver.steepest_descent.move_limit": {"initial": 0.0005}},
+     "move_limit"),
+    ("sd_move_limit_max_below_default_initial", U,
+     {"optimization.solver.steepest_descent.move_limit": {"max": 0.05}},
+     "move_limit"),
+    ("sd_move_limit_min_above_default_initial", U,
+     {"optimization.solver.steepest_descent.move_limit": {"min": 0.2}},
+     "move_limit"),
+    ("sd_decrease_integer", U,
+     {"optimization.solver.steepest_descent.move_limit.decrease": 1},
+     "move_limit"),
+    ("sd_xmin_integer", U,
+     {"optimization.solver.steepest_descent.xmin": 0}, "steepest_descent"),
     # optimizer.f90:851
     ("checkpoint_format", S,
      {"optimization.solver.checkpoint.format": "json"}, "checkpoint"),
@@ -351,6 +758,9 @@ REJECTED_AS_THE_CODE_ABORTS = [
     # state_recover_fctry.f90:75
     ("state_recovery_type", U, {"state_recovery.type": "memory"},
      "state_recovery"),
+    # No abort: checkpoint.f90:156 hands the string to chkp_output, which maps
+    # anything but `hdf5` to `.chkp` (neko src/io/chkp_output.f90:69-74), so
+    # `h5` would silently run as `chkp`; rejected as Neko's enum does.
     ("state_recovery_format", U, {"state_recovery.format": "h5"},
      "state_recovery"),
     # `enabled` is not read.
@@ -367,7 +777,63 @@ REJECTED_AS_THE_CODE_ABORTS = [
     ("unsteady_with_variable_timestep", U,
      {"case.time.variable_timestep": True, "case.time.max_timestep": 1.0e-2},
      "variable_timestep"),
+    # simulation.f90:289-297: an unsteady run aborts for exact_output_time
+    # (the same input is rejected by Neko's own time rule; the pure
+    # Neko-TOP rule is tested in test_exact_output_time_rule_is_ours).
     # ---- optimization object ---------------------------------------------
+    # time_window_tester.f90:128,137: the only reader aborts for a steady run
+    # and for an empty objective list.
+    ("time_window_test_in_steady_case", S,
+     {"optimization.time_window_test": {"tolerance": 1.0e-10}}, "$"),
+    ("time_window_test_without_objectives", U,
+     {"optimization.time_window_test": {"tolerance": 1.0e-10},
+      "optimization.objectives": []}, "objectives"),
+    # problem.f90:358-364: only dealias_sensitivity is read.
+    ("augmented_lagrangian_weight", S,
+     {"optimization.augmented_lagrangian": {"weight": 1.0}},
+     "augmented_lagrangian"),
+    ("time_window_test_end_times_string", U,
+     {"optimization.time_window_test": {"end_times": "1.0"}},
+     "time_window_test"),
+    ("fd_test_tolerance_integer", S, {"optimization.fd_test_tolerance": 1},
+     "fd_test_tolerance"),
+    # adjoint_fluid_pnpn.f90:468-491 (root keys of the power iteration)
+    ("output_file_suffix", S, {"output_file": "power.dat"}, "output_file"),
+    ("norm_target_integer", S, {"norm_target": 1}, "norm_target"),
+    ("norm_tolerance_integer", S, {"norm_tolerance": 1}, "norm_tolerance"),
+    ("state_recovery_extra_fields_integer", U,
+     {"state_recovery.extra_fields": [1]}, "state_recovery"),
+    # checkpoint.f90:164,266,474: restore() resets an incrementally advanced
+    # adjoint velocity to a stale value before every adjoint step.
+    ("state_recovery_extra_fields_u_adj", U,
+     {"state_recovery.extra_fields": ["u_adj"]}, "extra_fields"),
+    ("state_recovery_extra_fields_v_adj", U,
+     {"state_recovery.extra_fields": ["v_adj"]}, "extra_fields"),
+    ("state_recovery_extra_fields_w_adj", U,
+     {"state_recovery.extra_fields": ["w_adj"]}, "extra_fields"),
+    # checkpoint.f90:154-160: typed readers abort on a wrong JSON type.
+    ("state_recovery_path_integer", U,
+     {"state_recovery.path": 5}, "state_recovery"),
+    ("state_recovery_filename_integer", U,
+     {"state_recovery.filename": 5}, "state_recovery"),
+    ("state_recovery_keep_checkpoints_string", U,
+     {"state_recovery.keep_checkpoints": "yes"}, "state_recovery"),
+    ("state_recovery_extra_fields_string", U,
+     {"state_recovery.extra_fields": "u"}, "state_recovery"),
+    # steady_simcomp.f90:148-151 for every driver: a steady component and
+    # more than one scalar, without an `optimization` object.
+    # (base S minus its case.scalar and the adjoint scalar: next to
+    # case.scalar, Neko never reads case.scalars, case.f90:319-353.)
+    ("steady_with_two_scalars", S,
+     {"case.scalar": DEL, "case.adjoint_scalar": DEL,
+      "optimization.objectives[0]": {"type": "viscous_dissipation"},
+      "case.scalars": [dict(SCALAR_ITEM, name="a", enabled=False),
+                       dict(SCALAR_ITEM, name="b", enabled=False)]},
+     "scalars"),
+    ("steady_with_two_scalars_without_optimization", N,
+     {"case.simulation_components": [{"type": "steady"}],
+      "case.scalars": [dict(SCALAR_ITEM, name="a"),
+                       dict(SCALAR_ITEM, name="b")]}, "scalars"),
     ("optimization_unknown_key", S, {"optimization.cost": 1.0},
      "$.optimization"),
     ("augmented_lagrangian_integer", S,
@@ -449,8 +915,72 @@ REJECTED_AS_THE_CODE_ABORTS = [
     ("adjoint_velocity_solver_max_iterations_constant", S,
      {"case.adjoint_fluid.velocity_solver": {"max_iterations": "n"}},
      "adjoint_fluid.velocity_solver"),
-    ("adjoint_pressure_solver_unknown_key", S,
-     {"case.adjoint_fluid.pressure_solver": {"type": "cg"}},
+    # adjoint_fluid_pnpn_bc_fctry.f90:178: a known type that builds no BC;
+    # the zone gets a natural condition. (Owner decision pending.)
+    ("adjoint_bc_user_velocity_pointwise", S,
+     {"case.adjoint_fluid.boundary_conditions[0]":
+      {"type": "user_velocity_pointwise", "zone_indices": [1, 3, 4, 5, 6]}},
+     "boundary_conditions[0]"),
+    # neko src/fluid/fluid_pnpn_bc_fctry.f90:505,588: only Neko's own factory
+    # reads `name`.
+    ("adjoint_bc_name", S,
+     {"case.adjoint_fluid.boundary_conditions[0].name": "inlet"},
+     "boundary_conditions[0]"),
+    ("adjoint_scalar_bc_name", S,
+     {"case.adjoint_scalar.boundary_conditions[0].name": "inlet"},
+     "adjoint_scalar.boundary_conditions[0]"),
+    ("adjoint_scalar_bc_neumann_name", S,
+     {"case.adjoint_scalar.boundary_conditions[1].name": "walls"},
+     "adjoint_scalar.boundary_conditions[1]"),
+    # adjoint_case.f90:118,427,432: `layout` is never assigned.
+    ("adjoint_output_format_adios2", S,
+     {"case.adjoint_fluid.output_format": "adios2"}, "adjoint_fluid"),
+    # adjoint_case.f90:473-478: the norm is a vector_t, only csv writes it.
+    ("adjoint_norm_file_fld", S,
+     {"case.adjoint_fluid.norm_output_control": "tsteps",
+      "case.adjoint_fluid.norm_output_file": "n.fld"}, "adjoint_fluid"),
+    # neko src/common/time_based_controller.f90:232-235
+    ("adjoint_norm_tsteps_below_one", S,
+     {"case.adjoint_fluid.norm_output_control": "tsteps",
+      "case.adjoint_fluid.norm_output_value": 0.5}, "adjoint_fluid"),
+    # adjoint_case.f90:443-445: case.nsamples has no default.
+    ("adjoint_output_control_org_without_nsamples", S,
+     {"case.adjoint_fluid.output_control": "org"}, "$.case"),
+    # adjoint_scalar_scheme.f90:301-316: literal reads of the adjoint's own
+    # keys.
+    ("adjoint_scalar_solver_max_iterations_constant", S,
+     {"case.adjoint_scalar.solver": {"max_iterations": "n"}},
+     "adjoint_scalar.solver"),
+    ("adjoint_scalar_solver_projection_space_constant", S,
+     {"case.adjoint_scalar.solver": {"projection_space_size": "n"}},
+     "adjoint_scalar.solver"),
+    ("adjoint_scalar_solver_projection_hold_constant", S,
+     {"case.adjoint_scalar.solver": {"projection_hold_steps": "n"}},
+     "adjoint_scalar.solver"),
+    ("adjoint_scalar_solver_monitor_string", S,
+     {"case.adjoint_scalar.solver": {"monitor": "yes"}},
+     "adjoint_scalar.solver"),
+    ("adjoint_scalar_enabled_string", S,
+     {"case.adjoint_scalar.enabled": "yes"}, "adjoint_scalar.enabled"),
+    ("adjoint_scalar_advection_string", S,
+     {"case.adjoint_scalar.advection": "yes"}, "adjoint_scalar.advection"),
+    ("adjoint_scalar_dealias_coupling_string", S,
+     {"case.adjoint_scalar.dealias_coupling_term": "yes"},
+     "adjoint_scalar.dealias_coupling_term"),
+    # adjoint_case.f90:452-480 and neko src/common/json_utils.f90:599
+    ("adjoint_output_value_simulationtime_without_value", S,
+     {"case.adjoint_fluid.output_control": "simulationtime"}, "adjoint_fluid"),
+    ("adjoint_output_value_without_control", S,
+     {"case.adjoint_fluid.output_value": 5}, "adjoint_fluid"),
+    ("adjoint_norm_output_control_unknown", S,
+     {"case.adjoint_fluid.norm_output_control": "always"}, "adjoint_fluid"),
+    ("adjoint_freeze_string", S, {"case.adjoint_fluid.freeze": "yes"},
+     "adjoint_fluid"),
+    ("adjoint_velocity_solver_monitor_string", S,
+     {"case.adjoint_fluid.velocity_solver": {"monitor": "yes"}},
+     "adjoint_fluid.velocity_solver"),
+    ("adjoint_pressure_solver_projection_space_real", S,
+     {"case.adjoint_fluid.pressure_solver": {"projection_space_size": 5.0}},
      "adjoint_fluid.pressure_solver"),
     ("adjoint_pressure_solver_projection_constant", S,
      {"case.adjoint_fluid.pressure_solver":
@@ -489,6 +1019,11 @@ REJECTED_AS_THE_CODE_ABORTS = [
     ("adjoint_scalar_primal_name_missing_for_named_scalar", S,
      {"case.scalar.name": "temperature"}, "adjoint_scalar"),
     # adjoint_case.f90:252
+    # adjoint_case.f90:180-185: an object is counted by its members.
+    ("adjoint_scalars_object", S,
+     {"case.adjoint_scalar": DEL, "case.scalar.enabled": False,
+      "case.adjoint_scalars": {"a": {"primal_name": "s"}}},
+     "adjoint_scalars"),
     ("adjoint_scalars_array", S,
      {"case.adjoint_scalar": DEL, "case.scalar.enabled": False,
       "case.adjoint_scalars": [{"primal_name": "s"}]}, "adjoint_scalars"),
@@ -551,6 +1086,9 @@ REGISTERED_BY_NEKO_TOP = [
      {"case.simulation_components[0]":
       {"type": "steady", "compute_control": "tsteps", "compute_value": 5,
        "tol": 1e-8}}, True),
+    ("simcomp_steady_log_frequency_negative", S,
+     {"case.simulation_components[0]":
+      {"type": "steady", "log_frequency": -1}}, True),
     ("simcomp_steady_log_frequency_zero", S,
      {"case.simulation_components[0]":
       {"type": "steady", "log_frequency": 0}}, False),
@@ -567,22 +1105,17 @@ for _name in ("simple_brinkman", "adjoint_brinkman_dissipation",
               "adjoint_viscous_dissipation", "adjoint_scalar_convection",
               "adjoint_mixing_scalar"):
     REGISTERED_BY_NEKO_TOP += [
+        # Their init_from_json is empty (simple_brinkman_source_term.f90:
+        # 110-123 and siblings): the first compute_ dereferences unset
+        # pointers, so a case file cannot use them anywhere.
         (f"fluid_source_term_{_name}", S,
-         {"case.fluid.source_terms": [{"type": _name}]}, True),
+         {"case.fluid.source_terms": [{"type": _name}]}, False),
         (f"scalar_source_term_{_name}", S,
-         {"case.scalar.source_terms": [{"type": _name}]}, True),
+         {"case.scalar.source_terms": [{"type": _name}]}, False),
         (f"adjoint_source_term_{_name}", S,
-         {"case.adjoint_fluid.source_term": [{"type": _name}]}, True),
+         {"case.adjoint_fluid.source_term": [{"type": _name}]}, False),
     ]
 REGISTERED_BY_NEKO_TOP += [
-    # No key of theirs is read (empty init_from_json): extra keys are
-    # rejected, as for any closed built-in object.
-    ("fluid_source_term_simple_brinkman_extra_key", S,
-     {"case.fluid.source_terms": [{"type": "simple_brinkman",
-                                    "start_time": 0.0}]}, False),
-    ("adjoint_source_term_extra_key", S,
-     {"case.adjoint_fluid.source_term": [{"type": "adjoint_mixing_scalar",
-                                           "value": 1.0}]}, False),
     # An unknown type is a registered one, as far as Neko can tell.
     ("fluid_source_term_unknown_type", S,
      {"case.fluid.source_terms": [{"type": "my_source", "my_key": 1}]}, True),
@@ -635,6 +1168,7 @@ NEKO_TOP_OBJECTS_STAY_CLOSED = [
     ("solver_move_limit", U,
      "optimization.solver.steepest_descent.move_limit"),
     ("state_recovery", U, "state_recovery"),
+    ("augmented_lagrangian", S, "optimization.augmented_lagrangian"),
     ("adjoint_fluid", S, "case.adjoint_fluid"),
     ("adjoint_fluid_ic", S, "case.adjoint_fluid.initial_condition"),
     ("adjoint_scalar", S, "case.adjoint_scalar"),
@@ -647,6 +1181,9 @@ NEKO_TOP_OBJECTS_STAY_OPEN = [
     ("steady_simcomp", S, "case.simulation_components[0]"),
     ("adjoint_velocity_solver", S, "case.adjoint_fluid.velocity_solver"),
     ("adjoint_scalar_solver", S, "case.adjoint_scalar.solver"),
+    # Only the two projection keys are read; the object is a linear-solver
+    # object, which Neko keeps open.
+    ("adjoint_pressure_solver", S, "case.adjoint_fluid.pressure_solver"),
 ]
 
 # --------------------------------------------------------------------------- #
@@ -655,10 +1192,6 @@ NEKO_TOP_OBJECTS_STAY_OPEN = [
 # optimisation drivers abort on. (id, base, edits, path fragment)
 # --------------------------------------------------------------------------- #
 RESTART = {"case.restart_file": "restart.chkp"}
-SCALAR_ITEM = {"Pe": 1.0,
-               "initial_condition": {"type": "uniform", "value": 0.0},
-               "solver": {"type": "cg", "preconditioner": {"type": "jacobi"},
-                          "absolute_tolerance": 1e-6}}
 OPTIMIZING_RESTRICTIONS = [
     # adjoint_fluid_fctry.f90:60
     ("fluid_scheme_compressible", S, {"case.fluid.scheme": "compressible",
@@ -707,6 +1240,20 @@ OPTIMIZING_RESTRICTIONS = [
     ("pressure_solver_projection_constant", S,
      {"case.fluid.pressure_solver.projection_space_size": "k"},
      "pressure_solver"),
+    ("pressure_solver_projection_hold_constant", S,
+     {"case.fluid.pressure_solver.projection_hold_steps": "h"},
+     "pressure_solver"),
+    ("velocity_solver_projection_space_constant", S,
+     {"case.fluid.velocity_solver.projection_space_size": "k"},
+     "velocity_solver"),
+    ("velocity_solver_projection_hold_constant", S,
+     {"case.fluid.velocity_solver.projection_hold_steps": "h"},
+     "velocity_solver"),
+    # advection_adjoint_fctry.f90:100-101 with the advection on (U has no
+    # scalar, so the adjoint scalar does not matter there).
+    ("dealiased_order_constant_with_advection", U,
+     {"case.numerics.dealiased_polynomial_order": "lxd"},
+     "dealiased_polynomial_order"),
     # adjoint_fluid_scheme_incompressible.f90:211-336: read from the primal
     # solver while the adjoint's own block has no such key.
     ("velocity_solver_tolerance_constant", S,
@@ -756,17 +1303,47 @@ OPTIMIZING_RESTRICTIONS = [
      {"case.fluid.boundary_conditions[2]":
       {"velocity": {"type": "symmetry"}, "pressure": {"type": "outflow"},
        "zone_indices": [7]}}, "boundary_conditions"),
+    # adjoint_case.f90:180-185: an object is counted by its members.
+    ("adjoint_scalars_object", S,
+     {"case.scalar.enabled": False, "case.adjoint_scalar": DEL,
+      "case.adjoint_scalars": {"a": {"primal_name": "s"}},
+      "optimization.objectives[0]": {"type": "viscous_dissipation"}},
+     "adjoint_scalars"),
     # adjoint_case.f90:252
     ("adjoint_scalars", S,
      {"case.scalar.enabled": False, "case.adjoint_scalar": DEL,
       "case.adjoint_scalars": [{"primal_name": "s"}],
       "optimization.objectives[0]": {"type": "viscous_dissipation"}},
      "adjoint_scalars"),
-    # steady_simcomp.f90:149
-    ("steady_with_two_scalars", S,
-     {"case.scalars": [dict(SCALAR_ITEM, name="a"),
-                       dict(SCALAR_ITEM, name="b")]},
-     "scalars"),
+    # adjoint_scalar_scheme.f90:301-316,376-380: the primal scalar solver is
+    # read when the adjoint's own has no such key.
+    ("scalar_solver_max_iterations_constant", S,
+     {"case.scalar.solver.max_iterations": "smax"}, "scalar.solver"),
+    ("scalar_solver_projection_space_constant", S,
+     {"case.scalar.solver.projection_space_size": "sps"}, "scalar.solver"),
+    ("scalar_solver_projection_hold_constant", S,
+     {"case.scalar.solver.projection_hold_steps": "sph"}, "scalar.solver"),
+    # adjoint_scalar_scheme.f90:616-637: cp and the others are literal reals.
+    ("scalar_cp_integer", S,
+     {"case.scalar.Pe": DEL, "case.scalar.lambda": 1.0,
+      "case.scalar.cp": "c0"}, "scalar.cp"),
+    # adjoint_scalar_scheme.f90:370-373: the primal source terms are built
+    # again on the adjoint's right-hand side.
+    ("scalar_constant_source_with_adjoint_scalar", S,
+     {"case.scalar.source_terms": [{"type": "constant", "values": [1.0]}]},
+     "case.scalar"),
+    ("scalar_field_source_with_adjoint_scalar", S,
+     {"case.scalar.source_terms": [{"type": "field", "field_names": ["f"]}]},
+     "case.scalar"),
+    # adjoint_scalar_scheme.f90:284-285,333-337: a name of an existing field.
+    ("adjoint_scalar_name_primal", S, {"case.adjoint_scalar.name": "s"},
+     "adjoint_scalar.name"),
+    ("adjoint_scalar_name_velocity", S, {"case.adjoint_scalar.name": "u"},
+     "adjoint_scalar.name"),
+    ("adjoint_scalar_name_adjoint_velocity", S,
+     {"case.adjoint_scalar.name": "u_adj"}, "adjoint_scalar.name"),
+    ("adjoint_scalar_name_adjoint_pressure", S,
+     {"case.adjoint_scalar.name": "p_adj"}, "adjoint_scalar.name"),
     # scalar_mixing_objective_function.f90:171
     ("scalar_mixing_without_adjoint_scalar", S,
      {"case.scalar.enabled": False, "case.adjoint_scalar.enabled": False},
@@ -775,6 +1352,12 @@ OPTIMIZING_RESTRICTIONS = [
     # case.numerics.dealias, which it defaults the other to.
     ("brinkman_single_dealias_flag", U,
      {"optimization.objectives[0].dealias_sensitivity": False,
+      "optimization.objectives[0].dealias_forcing": DEL}, "objectives[0]"),
+    # brinkman_dissipation_objective.f90:150-164: with case.numerics.dealias
+    # false, a single flag that is true leaves the other at false.
+    ("brinkman_single_dealias_flag_true", U,
+     {"case.numerics.dealias": False,
+      "optimization.objectives[0].dealias_sensitivity": True,
       "optimization.objectives[0].dealias_forcing": DEL}, "objectives[0]"),
     # simulation.f90:283
     ("unsteady_variable_timestep", U,
@@ -785,6 +1368,614 @@ OPTIMIZING_RESTRICTIONS = [
      {"case.simulation_components": [{"type": "steady"}]},
      "simulation_components"),
 ]
+# --------------------------------------------------------------------------- #
+# Round 2 of the code audit.
+# --------------------------------------------------------------------------- #
+_VOLUME = {"type": "volume", "mask_name": "optimization_domain",
+           "limit": 0.1, "mapping": [{"type": "linear", "f_max": 1.0}]}
+_NO_SCALAR = {"case.scalar": DEL, "case.adjoint_scalar": DEL,
+              "optimization.objectives[0]": {"type": "viscous_dissipation"}}
+_NO_ADJOINT_SCALAR_OBJECTIVE = {"optimization.objectives[0]":
+                                {"type": "viscous_dissipation"}}
+ACCEPTED_BY_THE_CODE += [
+    # continuation_scheduler.f90:144-150, heaviside_mapping.f90:96-101: a
+    # scalar beta is read with json_get.
+    ("heaviside_scalar_beta", S,
+     {"optimization.design.mapping[1].beta": 8.0,
+      "optimization.design.mapping[1].beta_iterations": DEL}),
+    # mapping_handler.f90:443-457,299-312: an empty cascade is the identity.
+    ("design_empty_mapping", S, {"optimization.design.mapping": []}),
+    # design_hdf5_io.f90:256: the name is only stored when a design checkpoint
+    # is written (default interval -1: none).
+    ("design_long_name_without_checkpoint", S,
+     {"optimization.design.name": "a" * 70}),
+    ("design_long_name_checkpoint_disabled", S,
+     {"optimization.design.name": "a" * 70,
+      "optimization.solver.checkpoint.interval": 0}),
+    ("design_name_64_characters_with_checkpoint", S,
+     {"optimization.design.name": "a" * 64,
+      "optimization.solver.checkpoint.interval": 1}),
+    # mma.f90:293-294: equal bounds leave the design fixed but run. These
+    # three rows start from the fixture's uniform 0.0, which lies outside
+    # the box, and MMA never projects it in (mma_cpu.f90:309-326,366-367,
+    # 978-979): with dip the design stays near 0 and the volume constraint
+    # is violated. They record only that the bound order itself is not
+    # checked by the code; the schema cannot compare them with the design.
+    ("mma_xmin_at_default_xmax", S,
+     {"optimization.solver.mma.xmin": 1.0,
+      "optimization.solver.mma.xmax": DEL}),
+    ("mma_xmax_at_default_xmin", S,
+     {"optimization.solver.mma.xmax": 0.0,
+      "optimization.solver.mma.xmin": DEL}),
+    ("mma_xmin_xmax_both_above_one", S,
+     {"optimization.solver.mma.xmin": 1.5,
+      "optimization.solver.mma.xmax": 2.0}),
+    # mma_optimizer.f90:194,328-336: only the constraints are scaled.
+    ("mma_negative_scale_without_constraints", S,
+     {"optimization.solver.mma.scale": -1.0,
+      "optimization.constraints": []}),
+    # mma_optimizer.f90:328-331: abs(scale / g1) with auto_scale.
+    ("mma_negative_scale_with_auto_scale", S,
+     {"optimization.solver.mma.scale": -1000.0,
+      "optimization.solver.mma.auto_scale": True}),
+    ("mma_move_limit_zero", S, {"optimization.solver.mma.move_limit": 0.0}),
+    # steepest_descent_optimizer.f90:214-235: equality is accepted, and keys
+    # that are both given are not compared with the defaults.
+    ("sd_move_limit_min_at_default_initial", U,
+     {"optimization.solver.steepest_descent.move_limit": {"min": 0.1}}),
+    ("sd_move_limit_max_at_default_initial", U,
+     {"optimization.solver.steepest_descent.move_limit": {"max": 0.1}}),
+    ("sd_move_limit_initial_at_default_max", U,
+     {"optimization.solver.steepest_descent.move_limit": {"initial": 0.1}}),
+    ("sd_move_limit_initial_at_default_min", U,
+     {"optimization.solver.steepest_descent.move_limit": {"initial": 0.001}}),
+    ("sd_move_limit_initial_and_max_raised", U,
+     {"optimization.solver.steepest_descent.move_limit":
+      {"initial": 0.2, "max": 0.3}}),
+    ("sd_move_limit_initial_and_min_lowered", U,
+     {"optimization.solver.steepest_descent.move_limit":
+      {"initial": 0.0005, "min": 0.0001}}),
+    ("sd_move_limit_initial_and_max_below_default_max", U,
+     {"optimization.solver.steepest_descent.move_limit":
+      {"initial": 0.05, "max": 0.07}}),
+    ("sd_xmin_xmax_both_above_one", U,
+     {"optimization.solver.steepest_descent.xmin": 1.5,
+      "optimization.solver.steepest_descent.xmax": 2.0}),
+    ("sd_xmin_xmax_both_negative", U,
+     {"optimization.solver.steepest_descent.xmin": -2.0,
+      "optimization.solver.steepest_descent.xmax": -1.0}),
+    # continuation_scheduler.f90:151-158: array q with its iterations.
+    ("bp_q_array_positive", S,
+     {"optimization.design.mapping[2].type": "Borrvall_Petersson",
+      "optimization.design.mapping[2].q": [1.0, 3.0],
+      "optimization.design.mapping[2].q_iterations": 2}),
+    ("bp_q_array_below_minus_one", S,
+     {"optimization.design.mapping[2].type": "Borrvall_Petersson",
+      "optimization.design.mapping[2].q": [-2.0, -3.0],
+      "optimization.design.mapping[2].q_iterations": 2}),
+    # time_based_controller.f90:210-235: simulationtime needs a positive
+    # interval only.
+    ("adjoint_norm_simulationtime_half", S,
+     {"case.adjoint_fluid.norm_output_control": "simulationtime",
+      "case.adjoint_fluid.norm_output_value": 0.5}),
+    # advection_adjoint_fctry.f90:85-101: no advection anywhere, so the order
+    # is never read as an integer.
+    ("dealiased_order_constant_without_any_advection", S,
+     {"case.fluid.advection": False,
+      "case.adjoint_scalar.advection": False,
+      "case.numerics.dealiased_polynomial_order": "lxd"}),
+    # adjoint_scalar_scheme.f90:333-337: a name that is no field yet.
+    ("adjoint_scalar_name_s_with_scalar_T", S,
+     {"case.scalar.name": "T", "case.adjoint_scalar.primal_name": "T",
+      "case.adjoint_scalar.name": "s"}),
+    ("adjoint_scalar_disabled_named_s", S,
+     dict(_NO_ADJOINT_SCALAR_OBJECTIVE,
+          **{"case.scalar.enabled": False,
+             "case.adjoint_scalar": {"enabled": False, "name": "s"}})),
+    # adjoint_case.f90:175-196: a disabled adjoint scalar reads no primal_name.
+    ("adjoint_scalar_disabled_with_named_scalar", S,
+     dict(_NO_ADJOINT_SCALAR_OBJECTIVE,
+          **{"case.scalar.name": "phi", "case.scalar.enabled": False,
+             "case.adjoint_scalar": {"enabled": False}})),
+    ("adjoint_scalar_primal_p_with_own_name", S,
+     {"case.scalar.name": "p", "case.adjoint_scalar.primal_name": "p",
+      "case.adjoint_scalar.name": "phi_adj"}),
+    # neko_ext.f90:216-217: a disabled entry of the array form is not built.
+    ("scalars_item_disabled", S,
+     {"case.scalars": [dict(SCALAR_ITEM, enabled=False)]}),
+    # time_window_tester.f90:199-202: a frozen fluid reaches a steady state.
+    ("time_window_require_steady_with_freeze_flow", U,
+     {"optimization.time_window_test": {"require_steady_state": True},
+      "case.fluid.freeze_flow": True}),
+    # checkpoint.f90:164: a name that exists at simulation init.
+    ("state_recovery_extra_fields_adjoint_pressure", U,
+     {"state_recovery.extra_fields": ["p_adj"]}),
+    # Without `optimization` no driver builds the adjoint or reads these
+    # (sources/drivers/neko.f90:42-45).
+    ("neko_case_adjoint_fluid_freeze_only", N,
+     {"case.adjoint_fluid": {"freeze_flow": True}}),
+    ("neko_case_adjoint_fluid_without_initial_condition", N,
+     {"case.adjoint_fluid": {"output_control": "tsteps"}}),
+    ("neko_case_adjoint_scalar_without_initial_condition", N,
+     {"case.adjoint_scalar": {"enabled": True}}),
+    # neko src/case.f90:319-353: case.scalars is not read next to case.scalar.
+    ("steady_with_scalar_and_two_scalars", N,
+     {"case.simulation_components": [{"type": "steady"}],
+      "case.scalar": dict(SCALAR_ITEM, enabled=True),
+      "case.scalars": [dict(SCALAR_ITEM, name="s1"),
+                       dict(SCALAR_ITEM, name="s2")]}),
+    # simulation_component_fctry.f90:108-109: is_user entries are skipped.
+    ("steady_type_with_is_user", N,
+     {"case.simulation_components": [{"type": "steady", "is_user": True,
+                                      "tol": "free"}]}),
+    # cg.f90:189: any positive tolerance is a valid exit test.
+    ("pde_filter_tol_tiny", S,
+     {"optimization.design.mapping[0].tol": 1.0e-30}),
+]
+
+REJECTED_AS_THE_CODE_ABORTS += [
+    # ---- mapping ----------------------------------------------------------
+    # cg.f90:189,255,267: `rnorm < abs_tol` is never met by tol <= 0.
+    ("pde_filter_tol_zero", S,
+     {"optimization.design.mapping[0].tol": 0.0}, "mapping[0]"),
+    ("pde_filter_tol_negative", S,
+     {"optimization.design.mapping[0].tol": -1.0e-10}, "mapping[0]"),
+    ("pde_filter_preconditioner_hsmg", S,
+     {"optimization.design.mapping[0].preconditioner": "hsmg"}, "mapping[0]"),
+    # PDE_filter_mapping.f90:136: r is required (r_iterations goes too, so
+    # that the rule of the required keys is what rejects the row).
+    ("pde_filter_without_r_and_r_iterations", S,
+     {"optimization.design.mapping[0].r": DEL,
+      "optimization.design.mapping[0].r_iterations": DEL}, "mapping[0]"),
+    # ---- design -----------------------------------------------------------
+    # design_brinkman.f90:274,297-302: zone_name is read only for point_zone,
+    # and without a type the domain is `full`.
+    ("design_domain_zone_name_only", S,
+     {"optimization.design.domain": {"zone_name": "optimization_domain"}},
+     "domain"),
+    # design_hdf5_io.f90:256,355-358: the read-back buffer has 64 characters.
+    ("design_long_name_with_checkpoint_interval", S,
+     {"optimization.design.name": "a" * 70,
+      "optimization.solver.checkpoint.interval": 1}, "design.name"),
+    ("design_long_name_with_restart_file", S,
+     {"optimization.design.name": "a" * 70,
+      "optimization.solver.restart_file": "checkpoints/c.h5"}, "design.name"),
+    ("design_long_name_with_max_runtime", S,
+     {"optimization.design.name": "a" * 70,
+      "optimization.solver.max_runtime": "1:00:00"}, "design.name"),
+    ("design_blank_name_with_checkpoint_interval", S,
+     {"optimization.design.name": "",
+      "optimization.solver.checkpoint.interval": 1}, "design.name"),
+    # ---- problem ----------------------------------------------------------
+    # time_window_tester.f90:199-202: nothing freezes the fluid.
+    ("time_window_require_steady_without_freeze_flow", U,
+     {"optimization.time_window_test": {"require_steady_state": True}},
+     "case.fluid"),
+    # time_window_tester.f90:137: the key itself is required.
+    ("time_window_test_without_objectives_key", U,
+     {"optimization.time_window_test": {"tolerance": 1.0e-10},
+      "optimization.objectives": DEL}, "optimization"),
+    # problem_tester.f90:96-108: two constraints abort the sensitivity tester.
+    ("fd_test_two_constraints", S,
+     {"optimization.fd_test_tolerance": 1.0e-3,
+      "optimization.constraints[1]": _VOLUME}, "constraints"),
+    ("fd_test_continuation_iteration_two_constraints", S,
+     {"optimization.fd_test_continuation_iteration": 1,
+      "optimization.constraints[1]": _VOLUME}, "constraints"),
+    # json_get_or_default checks the JSON type of what it reads.
+    ("fd_test_continuation_iteration_real", S,
+     {"optimization.fd_test_continuation_iteration": 2.0},
+     "fd_test_continuation_iteration"),
+    ("zero_fields_integer", S, {"optimization.zero_fields": 1}, "zero_fields"),
+    ("time_window_pairwise_integer", U,
+     {"optimization.time_window_test": {"pairwise": 1}}, "pairwise"),
+    ("time_window_compare_steady_integer", U,
+     {"optimization.time_window_test": {"compare_steady": 1}},
+     "compare_steady"),
+    ("time_window_require_steady_integer", U,
+     {"optimization.time_window_test": {"require_steady_state": 1}},
+     "require_steady_state"),
+    ("objectives_object", S, {"optimization.objectives": {}},
+     "optimization.objectives"),
+    ("constraints_object", S, {"optimization.constraints": {}},
+     "optimization.constraints"),
+    ("scalar_mixing_name_integer", S,
+     {"optimization.objectives[0].name": 1}, "objectives[0]"),
+    ("viscous_dissipation_name_integer", S,
+     {"optimization.objectives[1].name": 1}, "objectives[1]"),
+    ("scalar_mixing_scalar_name_integer", S,
+     {"optimization.objectives[0].scalar_name": 1}, "objectives[0]"),
+    ("volume_is_max_integer", S,
+     {"optimization.constraints[0].is_max": 1}, "constraints[0]"),
+    ("volume_name_integer", S,
+     {"optimization.constraints[0].name": 1}, "constraints[0]"),
+    ("volume_mapping_object", S,
+     {"optimization.constraints[0].mapping": {}}, "constraints[0]"),
+    # ---- optimizer --------------------------------------------------------
+    # utils.f90:607-612: any `-` is the days separator.
+    ("max_runtime_negative_exponent", S,
+     {"optimization.solver.max_runtime": "1e-3"}, "optimization.solver"),
+    ("max_runtime_negative_exponent_fortran_d", S,
+     {"optimization.solver.max_runtime": "1d-3"}, "optimization.solver"),
+    ("max_runtime_integer", S, {"optimization.solver.max_runtime": 3600},
+     "optimization.solver"),
+    ("restart_file_integer", S, {"optimization.solver.restart_file": 1},
+     "optimization.solver"),
+    ("checkpoint_path_integer", S,
+     {"optimization.solver.checkpoint.path": 1}, "optimization.solver"),
+    ("checkpoint_base_integer", S,
+     {"optimization.solver.checkpoint.base": 1}, "optimization.solver"),
+    # mma_cpu.f90:588,984: the subproblem loops run zero times.
+    ("mma_max_iter_zero", S, {"optimization.solver.mma.max_iter": 0},
+     "max_iter"),
+    ("mma_max_iter_negative", S, {"optimization.solver.mma.max_iter": -5},
+     "max_iter"),
+    # mma_cpu.f90:323-326: unclamped asymptotes in iterations 1 and 2.
+    ("mma_asyinit_zero", S, {"optimization.solver.mma.asyinit": 0.0},
+     "asyinit"),
+    ("mma_asyinit_negative", S, {"optimization.solver.mma.asyinit": -0.2},
+     "asyinit"),
+    # mma.f90:293-294: no order check of the bounds.
+    ("mma_xmin_above_default_xmax", S,
+     {"optimization.solver.mma.xmin": 1.5,
+      "optimization.solver.mma.xmax": DEL}, "mma"),
+    ("mma_xmax_below_default_xmin", S,
+     {"optimization.solver.mma.xmax": -0.5,
+      "optimization.solver.mma.xmin": DEL}, "mma"),
+    # mma_optimizer.f90:328-336,411-414: a scale that flips or drops the
+    # constraints ends in the validation abort.
+    ("mma_scale_negative", S, {"optimization.solver.mma.scale": -1000.0},
+     "scale"),
+    ("mma_scale_zero", S, {"optimization.solver.mma.scale": 0.0}, "scale"),
+    ("mma_scale_zero_with_auto_scale", S,
+     {"optimization.solver.mma.scale": 0.0,
+      "optimization.solver.mma.auto_scale": True}, "scale"),
+    # steepest_descent_optimizer.f90:214-217,226-235: boundaries of the rules.
+    ("sd_xmax_zero_alone", U,
+     {"optimization.solver.steepest_descent.xmax": 0.0,
+      "optimization.solver.steepest_descent.xmin": DEL}, "steepest_descent"),
+    # ---- state recovery ---------------------------------------------------
+    # checkpoint.f90:164: registered only after sim%init.
+    ("state_recovery_extra_fields_brinkman_amplitude", U,
+     {"state_recovery.extra_fields": ["brinkman_amplitude"]}, "extra_fields"),
+    ("state_recovery_extra_fields_design_indicator", U,
+     {"state_recovery.extra_fields": ["design_indicator"]}, "extra_fields"),
+    ("state_recovery_extra_fields_sensitivity", U,
+     {"state_recovery.extra_fields": ["sensitivity"]}, "extra_fields"),
+    ("state_recovery_extra_fields_mapping", U,
+     {"state_recovery.extra_fields": ["PDE_filter_mapping_2"]},
+     "extra_fields"),
+    # checkpoint.f90:70,72: character(len=256).
+    ("state_recovery_path_300_characters", U,
+     {"state_recovery.path": "a" * 300}, "state_recovery.path"),
+    ("state_recovery_filename_300_characters", U,
+     {"state_recovery.filename": "a" * 300}, "state_recovery.filename"),
+    # ---- adjoint fluid ----------------------------------------------------
+    # dong_outflow.f90:236-238,124-133: the primal velocity drives p_adj.
+    ("adjoint_bc_outflow_dong", S,
+     {"case.adjoint_fluid.boundary_conditions[1]":
+      {"type": "outflow+dong", "zone_indices": [2]}}, "boundary_conditions"),
+    ("adjoint_bc_normal_outflow_dong", S,
+     {"case.adjoint_fluid.boundary_conditions[1]":
+      {"type": "normal_outflow+dong", "zone_indices": [2],
+       "value": [1.0, 0.0, 0.0]}},
+     "boundary_conditions"),
+    # zero_dirichlet.f90:73-79 reads no key.
+    ("adjoint_bc_no_slip_moving", S,
+     {"case.adjoint_fluid.boundary_conditions[0]":
+      {"type": "no_slip", "zone_indices": [1, 3, 4, 5, 6], "moving": True}},
+     "boundary_conditions"),
+    # ---- adjoint scalar ---------------------------------------------------
+    # adjoint_scalar_pnpn_bc_fctry.f90:73,94: type and zone_indices, literal.
+    ("adjoint_scalar_bc_user_without_zone_indices", S,
+     {"case.adjoint_scalar.boundary_conditions[0]": {"type": "user"}},
+     "adjoint_scalar"),
+    ("adjoint_scalar_bc_without_type", S,
+     {"case.adjoint_scalar.boundary_conditions[0]": {"zone_indices": [1]}},
+     "adjoint_scalar"),
+    ("adjoint_scalar_bc_user_zone_indices_constant", S,
+     {"case.adjoint_scalar.boundary_conditions[0]":
+      {"type": "user", "zone_indices": "inlet"}}, "adjoint_scalar"),
+    # advection_adjoint_fctry.f90:100-101 for the adjoint scalar's advection.
+    ("dealiased_order_constant_adjoint_scalar_advects",
+     S, {"case.fluid.advection": False,
+         "case.numerics.dealiased_polynomial_order": "lxd"},
+     "dealiased_polynomial_order"),
+    # adjoint_scalar_scheme.f90:284-285,333-337: existing fields.
+    ("adjoint_scalar_name_u_e", S, {"case.adjoint_scalar.name": "u_e"},
+     "adjoint_scalar.name"),
+    ("adjoint_scalar_name_u_adj_e", S, {"case.adjoint_scalar.name": "u_adj_e"},
+     "adjoint_scalar.name"),
+    ("adjoint_scalar_name_fluid_rho", S,
+     {"case.adjoint_scalar.name": "fluid_rho"}, "adjoint_scalar.name"),
+    ("adjoint_scalar_name_s_cp", S, {"case.adjoint_scalar.name": "s_cp"},
+     "adjoint_scalar.name"),
+    ("adjoint_scalar_name_s_lambda_tot", S,
+     {"case.adjoint_scalar.name": "s_lambda_tot"}, "adjoint_scalar.name"),
+    # :281-285: the default name is primal_name//'_adj'.
+    ("adjoint_scalar_primal_name_u_default_name", S,
+     {"case.scalar.name": "u", "case.adjoint_scalar.primal_name": "u"},
+     "adjoint_scalar.primal_name"),
+    ("adjoint_scalar_primal_name_p_default_name", S,
+     {"case.scalar.name": "p", "case.adjoint_scalar.primal_name": "p"},
+     "adjoint_scalar.primal_name"),
+    # neko_ext.f90:216-217: the scalar of the array form is never reset.
+    # (base S minus case.scalar: next to case.scalar, Neko never reads
+    # case.scalars, neko src/case.f90:319-353, so those rows are accepted.)
+    ("scalars_item_enabled", S,
+     dict(_NO_SCALAR, **{"case.scalars": [dict(SCALAR_ITEM, enabled=True)]}),
+     "case.scalars"),
+    ("scalars_item_without_enabled", S,
+     dict(_NO_SCALAR, **{"case.scalars": [dict(SCALAR_ITEM)]}),
+     "case.scalars"),
+    # adjoint_case.f90:180-183,260: case.adjoint_scalars alone reads
+    # case.scalars without `found`; a missing path leaves json-fortran in an
+    # exception state and `case.time` is then reported missing.
+    ("adjoint_scalars_empty_without_scalars", S,
+     dict(_NO_SCALAR, **{"case.adjoint_scalars": []}), "$.case"),
+    ("adjoint_scalars_empty_with_disabled_scalar", S,
+     {"case.scalar.enabled": False, "case.adjoint_scalar": DEL,
+      "optimization.objectives[0]": {"type": "viscous_dissipation"},
+      "case.adjoint_scalars": []}, "$.case"),
+    # neko_ext.f90:216-217: the default of case.scalar.enabled is false there.
+    ("scalar_enabled_implicit", S, {"case.scalar.enabled": DEL},
+     "case.scalar"),
+    # adjoint_case.f90:209-230, adjoint_scalar_pnpn.f90:194,248-253: the
+    # adjoint ignores these keys of the primal.
+    ("scalar_advection_false", S, {"case.scalar.advection": False},
+     "case.scalar"),
+    ("scalar_alphat", S, {"case.scalar.alphat": {"nut_dependency": False,
+                           "alphat_field": "at"}},
+     "case.scalar"),
+    ("scalar_svv_enabled", S, {"case.scalar.svv": {"enabled": True,
+      "kernel": {"type": "power", "power_coefficient": 1.0},
+      "nu": {"type": "value", "value": 1.0}}},
+     "case.scalar"),
+    ("scalar_freeze", S, {"case.scalar.freeze": True}, "case.scalar"),
+]
+
+OPTIMIZING_RESTRICTIONS += [
+    # problem.f90:615-626: the forward run is assumed to start at t = 0.
+    ("start_time_in_unsteady_run", U, {"case.time.start_time": 1.0},
+     "start_time"),
+    # pc_hsmg.f90:224-225 through the adjoint's own precon_factory call.
+    ("hsmg_adjoint_velocity_order_one", S,
+     {"case.numerics.polynomial_order": 1,
+      "case.fluid.pressure_solver.preconditioner": {"type": "jacobi"},
+      "case.adjoint_fluid.velocity_solver":
+      {"type": "cg", "preconditioner": {"type": "hsmg"}}},
+     "adjoint_fluid.velocity_solver"),
+    ("hsmg_adjoint_scalar_order_one", S,
+     {"case.numerics.polynomial_order": 1,
+      "case.fluid.pressure_solver.preconditioner": {"type": "jacobi"},
+      "case.adjoint_scalar.solver":
+      {"type": "cg", "preconditioner": {"type": "hsmg"}}},
+     "adjoint_scalar.solver"),
+    # adjoint_case.f90:452-459: only meaningful for the topology drivers.
+    ("adjoint_fluid_without_initial_condition", S,
+     {"case.adjoint_fluid.initial_condition": DEL},
+     "case.adjoint_fluid"),
+    ("adjoint_scalar_without_initial_condition", S,
+     {"case.adjoint_scalar.initial_condition": DEL},
+     "case.adjoint_scalar"),
+    ("adjoint_fluid_output_control_without_value", S,
+     {"case.adjoint_fluid.output_control": "tsteps",
+      "case.adjoint_fluid.output_value": DEL}, "case.adjoint_fluid"),
+]
+
+REGISTERED_BY_NEKO_TOP += [
+    # simple_brinkman_source_term.f90:110-123: allocated by the factory for
+    # case.scalars[i] too, and uninitialised.
+    ("scalars_item_source_term_simple_brinkman", N,
+     {"case.scalars": [dict(SCALAR_ITEM, name="s1",
+                            source_terms=[{"type": "simple_brinkman"}])]},
+     False),
+    ("scalars_item_source_term_unknown_type", N,
+     {"case.scalars": [dict(SCALAR_ITEM, name="s1",
+                            source_terms=[{"type": "my_source"}])]}, True),
+]
+
+_LONG = "x" * 66
+
+ACCEPTED_BY_THE_CODE += [
+    # neko src/case.f90:319-353: case.scalars is not read next to case.scalar.
+    ("scalars_enabled_entry_next_to_scalar", S,
+     {"case.scalars": [dict(SCALAR_ITEM, enabled=True)]}),
+    ("scalars_entry_without_enabled_next_to_scalar", S,
+     {"case.scalars": [dict(SCALAR_ITEM)]}),
+    ("scalars_enabled_entry_without_scalar_optimization_free", N,
+     {"case.scalars": [dict(SCALAR_ITEM, enabled=True)]}),
+    # adjoint_case.f90:175-186: case.adjoint_scalar wins; adjoint_scalars is
+    # read only in the else branch.
+    ("adjoint_scalars_next_to_adjoint_scalar", S,
+     {"case.adjoint_scalars": [{"primal_name": "s"}]}),
+    ("adjoint_scalars_empty_with_scalars", S,
+     dict(_NO_SCALAR, **{"case.adjoint_scalars": [],
+                         "case.scalars": []})),
+    # adjoint_scalar_scheme.f90:321: 66 characters still fit the log line.
+    ("adjoint_scalar_name_66_characters", S,
+     {"case.adjoint_scalar.name": _LONG}),
+    ("adjoint_scalar_default_name_from_62_characters", S,
+     {"case.scalar.name": "y" * 62,
+      "case.adjoint_scalar.primal_name": "y" * 62}),
+    ("disabled_adjoint_scalar_name_with_slash", S,
+     dict(_NO_SCALAR, **{"case.adjoint_scalar":
+                         {"enabled": False, "name": "a/b"}})),
+    # simulation_component_fctry.f90:108-109: is_user entries are skipped
+    # before `type` is read, so no steady component is built.
+    ("is_user_steady_label_in_unsteady_run", U,
+     {"case.simulation_components": [{"type": "steady", "is_user": True}]}),
+    ("is_user_steady_label_with_two_scalars", N,
+     {"case.simulation_components": [{"type": "steady", "is_user": True}],
+      "case.scalars": [dict(SCALAR_ITEM, name="s1"),
+                       dict(SCALAR_ITEM, name="s2")]}),
+    ("steady_is_user_false_is_a_steady_component", S,
+     {"case.simulation_components[0].is_user": False}),
+    # time_state.f90:76: start_time is read with a constants lookup.
+    ("unsteady_start_time_constant_name", U,
+     {"case.time.start_time": "t0"}),
+    # problem.f90:533,553,625: no window means no clock mismatch.
+    ("unsteady_restart_without_objective_window", U,
+     {"case.restart_file": "restart.chkp"}),
+    # time_window_tester.f90:113-115,199-202: checked only when true.
+    ("time_window_require_steady_state_false", U,
+     {"optimization.time_window_test": {"require_steady_state": False}}),
+    # simulation_component_fctry.f90: an unsteady run may carry lambda2.
+    ("unsteady_with_lambda2", U,
+     {"case.simulation_components": [{"type": "lambda2"}]}),
+    # simulation.f90:271-286: the variable timestep is checked for unsteady
+    # runs only; tests/unit/sensitivity/CMakeLists.txt:13 registers one.
+    ("steady_with_variable_timestep", S,
+     {"case.time.variable_timestep": True}),
+    ("unsteady_false_with_variable_timestep", S,
+     {"unsteady": False, "case.time.variable_timestep": True}),
+    ("unsteady_false_with_steady_simcomp", S, {"unsteady": False}),
+    # pc_hsmg.f90:224-225 aborts for order 1 only.
+    ("adjoint_hsmg_velocity_order_two", S,
+     {"case.numerics.polynomial_order": 2,
+      "case.adjoint_fluid.velocity_solver":
+      {"type": "cg", "preconditioner": {"type": "hsmg"},
+       "absolute_tolerance": 1.0e-4}}),
+    # mma_optimizer.f90:194,328-336: without auto_scale the factor is scale.
+    ("scale_positive_auto_scale_false", S,
+     {"optimization.solver.mma.scale": 2.0,
+      "optimization.solver.mma.auto_scale": False}),
+]
+
+REJECTED_AS_THE_CODE_ABORTS += [
+    # adjoint_scalar_scheme.f90:333-337 + design_brinkman.f90:365-371.
+    ("adjoint_scalar_name_abx1", S,
+     {"case.adjoint_scalar.name": "abx1"}, "adjoint_scalar.name"),
+    ("adjoint_scalar_name_abx2", S,
+     {"case.adjoint_scalar.name": "abx2"}, "adjoint_scalar.name"),
+    ("adjoint_scalar_name_design_indicator", S,
+     {"case.adjoint_scalar.name": "design_indicator"},
+     "adjoint_scalar.name"),
+    ("adjoint_scalar_name_sensitivity", S,
+     {"case.adjoint_scalar.name": "sensitivity"}, "adjoint_scalar.name"),
+    ("scalar_name_brinkman_amplitude", S,
+     {"case.scalar.name": "brinkman_amplitude",
+      "case.adjoint_scalar.primal_name": "brinkman_amplitude"},
+     "scalar.name"),
+    # adjoint_scalar_scheme.f90:321 ('End of record'), checkpoint_payload.f90.
+    ("adjoint_scalar_name_67_characters", S,
+     {"case.adjoint_scalar.name": _LONG + "x"}, "adjoint_scalar.name"),
+    ("adjoint_scalar_name_with_slash", S,
+     {"case.adjoint_scalar.name": "s/adj"}, "adjoint_scalar.name"),
+    ("adjoint_scalar_name_blank", S,
+     {"case.adjoint_scalar.name": " "}, "adjoint_scalar.name"),
+    ("adjoint_scalar_default_name_from_63_characters", S,
+     {"case.scalar.name": "y" * 63,
+      "case.adjoint_scalar.primal_name": "y" * 63}, "primal_name"),
+    # reserved-name rules, each condition on its own
+    ("adjoint_scalar_name_fluid_rho_default_fluid", S,
+     {"case.adjoint_scalar.name": "fluid_rho"}, "adjoint_scalar.name"),
+    ("adjoint_scalar_name_fluid_rho_explicit_fluid_name", S,
+     {"case.fluid.name": "fluid", "case.adjoint_scalar.name": "fluid_rho"},
+     "adjoint_scalar.name"),
+    ("adjoint_scalar_name_s_cp_explicit_scalar_name", S,
+     {"case.scalar.name": "s", "case.adjoint_scalar.name": "s_cp"},
+     "adjoint_scalar.name"),
+    ("adjoint_scalar_name_u_implicitly_enabled", S,
+     {"case.adjoint_scalar.enabled": DEL, "case.adjoint_scalar.name": "u"},
+     "adjoint_scalar.name"),
+    ("adjoint_scalar_implicitly_enabled_without_scalar", S,
+     {"case.scalar": DEL, "case.adjoint_scalar": {
+         "boundary_conditions": [], "initial_condition":
+         {"type": "uniform", "value": 0.0}},
+      "optimization.objectives[0]": {"type": "viscous_dissipation"}},
+     "$.case"),
+    # steady_simcomp.f90:149-151 / owner ruling: an entry with is_user false
+    # is still a steady component.
+    ("steady_is_user_false_with_bad_tol", S,
+     {"case.simulation_components[0].is_user": False,
+      "case.simulation_components[0].tol": 1}, "simulation_components"),
+    ("unsteady_with_steady_is_user_false", U,
+     {"case.simulation_components": [{"type": "steady", "is_user": False}]},
+     "simulation_components"),
+    # problem.f90:533,553,625: restart clock vs windowed objective.
+    ("unsteady_restart_with_objective_window", U,
+     {"case.restart_file": "restart.chkp",
+      "optimization.objectives[0].start_time": 0.01}, "objectives"),
+    ("unsteady_restart_with_objective_end_time", U,
+     {"case.restart_file": "restart.chkp",
+      "optimization.objectives[0].end_time": 0.02}, "objectives"),
+    # scalar_mixing_objective_function.f90:171: needs an enabled adjoint
+    # scalar, so also an absent one.
+    ("scalar_mixing_without_adjoint_scalar", S,
+     {"case.adjoint_scalar": DEL}, "$.case"),
+    # time_window_tester.f90:128-131,199-202
+    ("time_window_test_with_unsteady_false", S,
+     {"unsteady": False, "optimization.time_window_test": {}}, "unsteady"),
+    ("time_window_require_steady_state_with_freeze_flow_absent", U,
+     {"optimization.time_window_test": {"require_steady_state": True}},
+     "fluid"),
+    # mma_optimizer.f90:194,328-336: scale <= 0 without auto_scale.
+    ("scale_negative_auto_scale_false", S,
+     {"optimization.solver.mma.scale": -1.0,
+      "optimization.solver.mma.auto_scale": False}, "mma.scale"),
+    # adjoint_fluid_pnpn_bc_fctry.f90:87,149: `type` is read with no default.
+    ("adjoint_bc_split_form_without_type", S,
+     {"case.adjoint_fluid.boundary_conditions[0]":
+      {"zone_indices": [1], "velocity": {"type": "no_slip"}}},
+     "boundary_conditions"),
+    # pc_hsmg.f90:224-225
+    ("adjoint_hsmg_velocity_order_one", S,
+     {"case.numerics.polynomial_order": 1,
+      "case.adjoint_fluid.velocity_solver":
+      {"type": "cg", "preconditioner": {"type": "hsmg"},
+       "absolute_tolerance": 1.0e-4}}, "velocity_solver"),
+    # output_file is read as a string (adjoint_fluid_pnpn.f90:468-491)
+    ("root_output_file_integer", S, {"output_file": 5}, "output_file"),
+]
+
+ACCEPTED_BY_THE_CODE += [
+    # fluid_scheme_incompressible.f90:202,690-692: with the fluid named
+    # `water` the registered fields are water_mu..., so fluid_rho is new.
+    ("adjoint_scalar_name_fluid_rho_other_fluid_name", S,
+     {"case.fluid.name": "water", "case.adjoint_scalar.name": "fluid_rho"}),
+    # a disabled adjoint scalar never reads `name`
+    ("disabled_adjoint_scalar_name_fluid_rho", S,
+     dict(_NO_SCALAR, **{"case.adjoint_scalar":
+                         {"enabled": False, "name": "fluid_rho"}})),
+    ("disabled_adjoint_scalar_name_u", S,
+     dict(_NO_SCALAR, **{"case.adjoint_scalar":
+                         {"enabled": False, "name": "u"}})),
+]
+
+_CORIOLIS = {"type": "coriolis", "rotation_vector": [0.0, 0.0, 1.0]}
+_CONSTANT = {"type": "constant", "values": [0.0, 0.0, 1.0]}
+
+ACCEPTED_BY_THE_CODE += [
+    # state-independent source terms need no adjoint counterpart.
+    ("fluid_constant_source_term_with_optimization", S,
+     {"case.fluid.source_terms": [_CONSTANT]}),
+    ("adjoint_constant_source_term", S,
+     {"case.adjoint_fluid.source_term": [_CONSTANT]}),
+    # fluid_scheme_incompressible.f90:362-380: svv off is the default.
+    ("fluid_svv_disabled_with_optimization", S,
+     {"case.fluid.svv": {"enabled": False}}),
+]
+
+REJECTED_AS_THE_CODE_ABORTS += [
+    # fluid_pnpn.f90:590-604 vs adjoint_fluid_pnpn.f90:329: the adjoint never
+    # builds the SVV operator.
+    ("fluid_svv_enabled_with_optimization", S,
+     {"case.fluid.svv": {"enabled": True,
+                         "kernel": {"type": "power",
+                                    "power_coefficient": 1.0},
+                         "nu": {"type": "value", "value": 0.1}}},
+     "fluid.svv.enabled"),
+    # neko src/fluid/fluid_scheme_incompressible.f90:359 vs the adjoint,
+    # which builds only case.adjoint_fluid.source_term.
+    ("fluid_coriolis_source_term_with_optimization", S,
+     {"case.fluid.source_terms": [_CORIOLIS]}, "fluid.source_terms"),
+    # the adjoint hands these to Neko's factory, which reads the primal u/v/w.
+    ("adjoint_coriolis_source_term", S,
+     {"case.adjoint_fluid.source_term": [_CORIOLIS]},
+     "adjoint_fluid.source_term"),
+]
+
 # Edits that need a Neko-valid case without `optimization` to compare with.
 _WITHOUT_OPTIMIZATION_EXTRA = {
     "unsteady_variable_timestep": {"unsteady": False, "state_recovery": DEL},
@@ -928,3 +2119,61 @@ def test_what_the_neko_top_root_accepts_neko_accepts(validator,
             assert not found, f"{name}: {short(found)}"
             count += 1
     assert count > 40
+
+
+# --------------------------------------------------------------------------- #
+# Rules that Neko's own root already enforces by another route are tested on
+# Neko-TOP's `optimizing` definition alone, so that they cannot hide behind it.
+# --------------------------------------------------------------------------- #
+def test_exact_output_time_rule_is_ours(registry):
+    """simulation.f90:289-297 aborts an unsteady run with
+    case.time.exact_output_time true, whatever variable_timestep says. Neko's
+    time schema rejects the input through its own rule; this rule must not
+    depend on that."""
+    validator = vcs.strict_validator_class()(
+        {"$ref": "urn:neko-top:schema:case-file#/$defs/optimizing"},
+        registry=registry)
+    good = build(U, {"case.time.exact_output_time": False})
+    assert not errors(validator, good)
+    bad = build(U, {"case.time.exact_output_time": True,
+                    "case.time.variable_timestep": False})
+    assert any("exact_output_time" in path
+               for path in error_paths(validator, bad))
+
+
+def test_common_solver_keys_are_defined_once(top_schemas):
+    """mma and steepest_descent read these keys through one Fortran routine
+    (optimizer.f90:415-449): both closed objects refer to one definition, so
+    the two cannot drift."""
+    schema = top_schemas["urn:neko-top:schema:optimizer"]["$defs"]
+    shared = ["max_iterations", "enable_output", "max_runtime",
+              "stop_design_change", "restart_file", "checkpoint",
+              "continuation_iterations"]
+    for key in shared:
+        mma = schema["mmaSolver"]["properties"][key]
+        sd = schema["steepestDescentSolver"]["properties"][key]
+        assert mma == sd and list(mma) == ["$ref"], key
+
+
+# Reals of the optimisers that the code reads without a constants lookup.
+LITERAL_REALS_OF_THE_OPTIMISERS = [
+    ("sd_step_length", U, "optimization.solver.steepest_descent.step_length",
+     0.5, "step"),
+    ("sd_move_limit_decrease", U,
+     "optimization.solver.steepest_descent.move_limit.decrease", 0.5, "d"),
+    ("sd_stop_design_change", U, "optimization.solver.stop_design_change",
+     1.0e-8, "s"),
+    ("mma_stop_design_change", S, "optimization.solver.stop_design_change",
+     1.0e-8, "s"),
+    ("sd_xmax", U, "optimization.solver.steepest_descent.xmax", 0.9, "xmax"),
+]
+
+
+@pytest.mark.parametrize("name, base, path, good, bad",
+                         LITERAL_REALS_OF_THE_OPTIMISERS,
+                         ids=ids(LITERAL_REALS_OF_THE_OPTIMISERS))
+def test_literal_reals_of_the_optimisers(validator, name, base, path, good,
+                                         bad):
+    assert not errors(validator, build(base, {path: good}))
+    assert error_paths(validator, build(base, {path: bad}))
+    assert error_paths(validator, build(base, {path: int(good)}))

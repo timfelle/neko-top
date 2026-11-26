@@ -4,20 +4,23 @@
   "$defs": {
     "keys": {
       "description": "Keys of the `steady` simulation component.",
-      "$comment": "sources/simulation_components/steady_simcomp.f90:126-129",
+      "$comment": "sources/simulation_components/steady_simcomp.f90:126-129 `name` is never read and this%name is never set, so two `steady` components always collide on Neko's name-uniqueness check (neko src/simulation_components/simcomp_executor.f90:273-283) at the first step, whatever `name` the entries carry; at most one `steady` entry per case cannot be written with the whitelisted keywords (no contains).",
       "type": "object",
       "properties": {
         "type": {
           "const": "steady"
         },
         "tol": {
-          "description": "Convergence tolerance on the change per step. Default 1.0e-6.",
+          "description": "Convergence tolerance: the maximum over u, v, w, p (and the scalar) of ||f_new - f_old||_L2 / (dt * domain volume) must not exceed it. Default 1.0e-6.",
           "$ref": "urn:neko:schema:common#/$defs/realNumber"
         },
         "log_frequency": {
-          "description": "Steps between log lines; at least 1. Default 50.",
-          "$comment": "steady_simcomp.f90:276 takes a modulo by it, so 0 divides by zero.",
-          "$ref": "urn:neko:schema:common#/$defs/positiveInteger"
+          "description": "Steps between log lines; any integer but 0 (a negative value logs like its absolute value). Default 50.",
+          "$comment": "steady_simcomp.f90:128 reads it with json_get_or_default and :276, :335 only use mod(tstep, log_frequency) == 0, so 0 divides by zero and nothing else aborts.",
+          "type": "integer",
+          "not": {
+            "const": 0
+          }
         },
         "scalar_coupled": {
           "description": "Include the scalar in the convergence test. Default false.",

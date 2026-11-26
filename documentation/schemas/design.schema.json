@@ -4,7 +4,7 @@
   "$defs": {
     "initialDistribution": {
       "description": "Initial design field, discriminated by `type`.",
-      "$comment": "sources/design/bcknd/set_optimization_ic.f90:100-123.",
+      "$comment": "sources/design/bcknd/set_optimization_ic.f90:100-123. The `field` type is not accepted: set_optimization_ic.f90:262 aborts without a `.fNNNNN` suffix, and with one :267 passes `trim(file_name)` as the output argument of filename_chsuffix (an expression, never written back), so the suffix reaches `f%init` at :270 and neko src/io/file.f90:133 aborts with an unknown file format.",
       "oneOf": [
         {
           "type": "object",
@@ -17,8 +17,10 @@
               "const": "uniform"
             },
             "value": {
-              "description": "Uniform design value.",
-              "$ref": "urn:neko:schema:common#/$defs/realNumber"
+              "description": "Uniform design value, in [0, 1]: the mapping rules (e.g. a non-integer SIMP `p`) assume a design inside that range, and the first forward map runs on this value at design initialisation (design_brinkman.f90:330,338), so a negative value gives a NaN Brinkman amplitude (SIMP_mapping_cpu.f90:93,110).",
+              "$ref": "urn:neko:schema:common#/$defs/realNumber",
+              "minimum": 0,
+              "maximum": 1
             }
           },
           "additionalProperties": false
@@ -36,55 +38,20 @@
               "const": "point_zone"
             },
             "base_value": {
-              "description": "Value outside the zone.",
-              "$ref": "urn:neko:schema:common#/$defs/realNumber"
+              "description": "Value outside the zone, in [0, 1] (see `uniform`).",
+              "$ref": "urn:neko:schema:common#/$defs/realNumber",
+              "minimum": 0,
+              "maximum": 1
             },
             "zone_name": {
               "description": "Name of the point zone.",
               "$ref": "urn:neko:schema:common#/$defs/nonEmptyString"
             },
             "zone_value": {
-              "description": "Value inside the zone.",
-              "$ref": "urn:neko:schema:common#/$defs/realNumber"
-            }
-          },
-          "additionalProperties": false
-        },
-        {
-          "$comment": "set_optimization_ic.f90:262 requires a `.fNNNNN` suffix. :270 then calls filename_chsuffix with `trim(file_name)` as the output argument, so the suffix may never change to `fld`; that abort was inferred from reading and not run, so the type is accepted. `tolerance` is read as a real (set_optimization_ic.f90:117).",
-          "type": "object",
-          "required": [
-            "type",
-            "file_name"
-          ],
-          "properties": {
-            "type": {
-              "const": "field"
-            },
-            "file_name": {
-              "description": "Field file, with a `.fNNNNN` suffix.",
-              "type": "string",
-              "pattern": "\\.f[0-9]{5}$"
-            },
-            "interpolate": {
-              "description": "Interpolate onto the mesh. Default false.",
-              "type": "boolean"
-            },
-            "tolerance": {
-              "description": "Interpolation tolerance. Default 1.0e-6.",
-              "$ref": "urn:neko:schema:common#/$defs/realNumber"
-            },
-            "mesh_file_name": {
-              "description": "Mesh of the field file when it is another file; `none` uses the field file. Default `none`.",
-              "oneOf": [
-                {
-                  "const": "none"
-                },
-                {
-                  "type": "string",
-                  "pattern": "\\.f[0-9]{5}$"
-                }
-              ]
+              "description": "Value inside the zone, in [0, 1] (see `uniform`).",
+              "$ref": "urn:neko:schema:common#/$defs/realNumber",
+              "minimum": 0,
+              "maximum": 1
             }
           },
           "additionalProperties": false
@@ -104,7 +71,7 @@
           "const": "brinkman"
         },
         "name": {
-          "description": "Display name. Default `Brinkman Design`.",
+          "description": "Identifier of the design checkpoint; it is not displayed and not part of any output file name. It is written to the HDF5 design checkpoint (design_hdf5_io.f90:160-164) and compared on every load (:355-358), so a resumed run aborts unless it equals the name stored in the checkpoint. Default `Brinkman Design`. At most 64 bytes (ASCII characters only) and not blank when a design checkpoint is written or read (see the rule in `optimization`).",
           "type": "string"
         },
         "domain": {
@@ -151,15 +118,15 @@
           "additionalProperties": false
         },
         "dealias": {
-          "description": "Dealias the design. Default `case.numerics.dealias`.",
+          "description": "Over-integrate the forward and adjoint Brinkman source terms (and build the adjoint Gauss stack for them). The design field itself is not dealiased. Default `case.numerics.dealias`.",
           "type": "boolean"
         },
         "verbose_design": {
-          "description": "Write the design fields. Default false.",
+          "description": "Write every forward cascade stage of the design. When false, only the first unmapped stage and the mapped Brinkman amplitude are written (the design is written every iteration either way, mapping_handler.f90:165-176,184-196 configure the writers; optimizer.f90:520,547 write every iteration). Default false.",
           "type": "boolean"
         },
         "verbose_sensitivity": {
-          "description": "Write the sensitivity fields. Default false.",
+          "description": "Write every backward chain-rule stage of the sensitivity as well as the final sensitivity. When false, only the final sensitivity is written (the sensitivity is written every iteration either way, mapping_handler.f90:198-221 configure the writers; optimizer.f90:520,547 write every iteration). Default false.",
           "type": "boolean"
         },
         "output_precision": {
@@ -175,13 +142,14 @@
           ]
         },
         "output_format": {
-          "description": "Output format. Default `fld`.",
-          "$comment": "design_brinkman.f90:284; the suffix must be known to Neko's file_t (neko src/io/file.f90:133).",
+          "description": "Output format. Default `fld`. `bp` and `adios2` both write `.bp` and need an ADIOS2-enabled Neko.",
+          "$comment": "design_brinkman.f90:284 passes the string to field_output_t%init (mapping_handler.f90:180,205,216), which builds the suffix `.<format>` (neko src/io/field_output.f90:83-86). Other file_t suffixes (csv, vtk, chkp, nmsh, stl) abort on the first write (vtk_file.f90:141, csv_file.f90:96, chkp_file.f90:293, nmsh_file.f90:93), because the design is always written (optimizer.f90:520,547); `rea` silently writes nothing (neko src/io/rea_file.f90:452-456), `re2` and `map` abort (re2_file.f90:243, map_file.f90:93), and any other value aborts at file_t init (file.f90:133).",
           "enum": [
             "fld",
             "nek5000",
             "vtkhdf",
             "adios2",
+            "bp",
             "hdf5",
             "h5"
           ]
@@ -194,6 +162,7 @@
           }
         },
         "initial_distribution": {
+          "description": "Initial design field. Default: zero everywhere. With a `point_zone` domain the values outside the domain are reset to 0 by the first forward mapping.",
           "$ref": "urn:neko-top:schema:design#/$defs/initialDistribution"
         }
       },

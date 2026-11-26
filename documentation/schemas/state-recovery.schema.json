@@ -29,29 +29,38 @@
           "$ref": "urn:neko:schema:common#/$defs/positiveInteger"
         },
         "path": {
-          "description": "Directory of the checkpoint files. Default `checkpoints/`.",
-          "type": "string"
+          "description": "Directory of the checkpoint files. Default `checkpoints/`. At most 256 characters.",
+          "$comment": "Stored in character(len=256) and cut silently (checkpoint.f90:72,209,227): a longer path is created and written under its first 256 characters.",
+          "type": "string",
+          "maxLength": 256
         },
         "filename": {
-          "description": "File name base. Default `checkpoint`.",
-          "type": "string"
+          "description": "File name base. Default `checkpoint`. At most 256 characters.",
+          "$comment": "Stored in character(len=256) and cut silently (checkpoint.f90:70,210). It is passed to Neko's chkp_output, where Neko's own case.checkpoint_filename is a non-empty string.",
+          "type": "string",
+          "maxLength": 256
         },
         "format": {
           "description": "`chkp` or `hdf5`. Default `chkp`.",
           "enum": [
             "chkp",
             "hdf5"
-          ]
+          ],
+          "$comment": "A deliberate copy of Neko's inline `case.checkpoint_format` enum (no $defs entry to reference): both go to chkp_output_t%init (checkpoint.f90:155-156, neko src/io/chkp_output.f90:69-74), where `hdf5` gives `.h5` and anything else `.chkp`, so another value would silently run as `chkp`; the enum rejects it."
         },
         "keep_checkpoints": {
           "description": "Keep the files after the run. Default false.",
           "type": "boolean"
         },
         "extra_fields": {
-          "description": "Names of further registered fields to checkpoint. They must exist when the simulation is initialised.",
+          "description": "Names of further registered fields to checkpoint. They must exist when the simulation is initialised, which excludes the adjoint velocity components `u_adj`, `v_adj` and `w_adj` (they are registered, but restoring a stored value before every adjoint step and sensitivity sample resets the incrementally advanced adjoint, so the sensitivity is wrong with no abort: problem.f90:622-634, checkpoint.f90:474, adjoint_fluid_pnpn.f90:824; `p_adj` is re-solved each step and is fine) and excludes the design fields (`design_indicator`, `brinkman_amplitude`, `sensitivity`) and the mapping fields (`<type>_mapping`, `<type>_mapping_2`, ...), registered only after the lookup.",
+          "$comment": "checkpoint.f90:160-165 looks every name up in the registry inside sim%init (simulation.f90:299-301), before the drivers create the design (topopt.f90:93,96); design_brinkman.f90:365-367 and mapping.f90:176-184 register those fields. A name that no startup routine registers aborts with 'Field ... could not be found in the registry' (neko src/registries/registry.f90:562); that cannot be checked here, except for these fixed names.",
           "type": "array",
           "items": {
-            "$ref": "urn:neko:schema:common#/$defs/nonEmptyString"
+            "$ref": "urn:neko:schema:common#/$defs/nonEmptyString",
+            "not": {
+              "pattern": "^(design_indicator|brinkman_amplitude|sensitivity|u_adj|v_adj|w_adj|(linear|SIMP|RAMP|Borrvall_Petersson|heaviside|PDE_filter)_mapping(_[0-9]+)?)$"
+            }
           }
         }
       },

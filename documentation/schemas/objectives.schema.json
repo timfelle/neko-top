@@ -62,7 +62,7 @@
     },
     "scalarMixingObjective": {
       "description": "Scalar mixing; needs an adjoint scalar (see the case-file root).",
-      "$comment": "sources/problem/objectives/scalar_mixing_objective_function.f90:128-133. The key `phi_ref` that some case files carry is not read.",
+      "$comment": "sources/problem/objectives/scalar_mixing_objective_function.f90:126-133. The key `phi_ref` that some case files carry is not read.",
       "type": "object",
       "required": [
         "type"
@@ -100,7 +100,7 @@
           "$ref": "urn:neko:schema:common#/$defs/realNumber"
         },
         "scalar_name": {
-          "description": "Name of the scalar. Default `s`.",
+          "description": "Name of the scalar. Default `s`. The value is ignored while the case has one scalar and one adjoint scalar, the only configuration the code runs: get_scalar_indicies then returns (1, 1) without comparing names (neko_ext.f90:526-530). It is compared with the primal scalar names only with several scalars, which abort first (adjoint_case.f90:252-253).",
           "type": "string"
         }
       },
@@ -128,7 +128,7 @@
     },
     "brinkmanDissipationObjective": {
       "description": "Dissipation caused by the Brinkman penalisation.",
-      "$comment": "sources/problem/objectives/brinkman_dissipation_objective.f90:150-162; the objective needs a Brinkman design (:212).",
+      "$comment": "sources/problem/objectives/brinkman_dissipation_objective.f90:146-165; the objective needs a Brinkman design (:212).",
       "type": "object",
       "required": [
         "type"
@@ -162,11 +162,11 @@
           "$ref": "urn:neko:schema:common#/$defs/realNumber"
         },
         "dealias_sensitivity": {
-          "description": "Dealias the sensitivity. Default `case.numerics.dealias`.",
+          "description": "Must equal `dealias_forcing` (an allOf rule enforces it); it has no effect of its own: it is read only to be compared with `dealias_forcing` (brinkman_dissipation_objective.f90:161-164). Default `case.numerics.dealias`.",
           "type": "boolean"
         },
         "dealias_forcing": {
-          "description": "Dealias the forcing. Default `case.numerics.dealias`.",
+          "description": "Integrate the objective value, its adjoint forcing and its sensitivity on the over-integration (GL) points; this flag alone is passed on (brinkman_dissipation_objective.f90:166-167,253-257,304,386). Must equal `dealias_sensitivity`. Default `case.numerics.dealias`.",
           "type": "boolean"
         }
       },

@@ -15,7 +15,7 @@
           "const": "volume"
         },
         "limit": {
-          "description": "Volume limit (required, a JSON real).",
+          "description": "Limit on the design's volume fraction of the `mask_name` zone (of the whole domain when `mask_name` is empty), not an absolute volume: the constraint value is limit - volume / volume_domain (volume_constraint.f90:186-204,247-250). A minimum unless `is_max`. Required, a JSON real.",
           "$ref": "urn:neko:schema:common#/$defs/realNumber"
         },
         "is_max": {
@@ -23,7 +23,7 @@
           "type": "boolean"
         },
         "mask_name": {
-          "description": "Point zone the volume is measured on; empty for the whole domain. Default empty.",
+          "description": "Point zone the volume is measured on; empty for the whole domain. The zone also sets the volume the fraction is normalised by (volume_constraint.f90:186-204). Default empty.",
           "$ref": "urn:neko-top:schema:common#/$defs/pointZoneName"
         },
         "name": {

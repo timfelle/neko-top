@@ -43,8 +43,8 @@
           "additionalProperties": false
         },
         "fd_test_tolerance": {
-          "description": "Read only by the sensitivity test drivers (tests/unit/sensitivity/problem_tester.f90:75): tolerance of the finite-difference check.",
-          "$ref": "urn:neko:schema:common#/$defs/realNumber"
+          "description": "Read only by the sensitivity test drivers (unit: tests/unit/sensitivity/problem_tester.f90:75, default 1.0e-5; regression: tests/regression/sensitivity/problem_tester.f90:75, default 1.0e-3). Tolerance on the finite-difference error at the smallest perturbation; above 0, because the tester aborts when abs(error) > tolerance (tests/shared/sensitivity.f90:199), which a zero or negative value always does. The sensitivity test drivers accept a single constraint at most (see the rule on `constraints`).",
+          "$ref": "urn:neko:schema:common#/$defs/positiveRealNumber"
         },
         "fd_test_continuation_iteration": {
           "description": "Read only by the sensitivity test driver (tests/unit/sensitivity/problem_tester.f90:79): continuation iteration to test at. Default 0.",
@@ -55,8 +55,8 @@
           "type": "object",
           "properties": {
             "tolerance": {
-              "description": "Default 1.0e-12.",
-              "$ref": "urn:neko:schema:common#/$defs/realNumber"
+              "description": "Default 1.0e-12. Not negative: a difference is accepted only if `difference <= tolerance` (time_window_tester.f90:233,260), so a negative value fails every comparison and aborts at :272. 0 asks for a bit-for-bit match.",
+              "$ref": "urn:neko:schema:common#/$defs/nonNegativeRealNumber"
             },
             "pairwise": {
               "description": "Default false.",
@@ -67,11 +67,11 @@
               "type": "boolean"
             },
             "require_steady_state": {
-              "description": "Default false.",
+              "description": "Default false. Needs `case.fluid.freeze_flow: true`, because nothing else freezes the fluid in an unsteady run.",
               "type": "boolean"
             },
             "end_times": {
-              "description": "Window end times. Default `[case.time.end_time]`.",
+              "description": "End times of the unsteady runs the tester compares; each entry overrides case.time.end_time for one run (time_window_tester.f90:146-150,170,185). The objective windows are set by `objectives[].start_time` and `end_time`. Default `[case.time.end_time]`.",
               "$ref": "urn:neko:schema:common#/$defs/numberArray"
             }
           },
@@ -106,6 +106,212 @@
             "properties": {
               "constraints": {
                 "maxItems": 0
+              }
+            }
+          }
+        },
+        {
+          "$comment": "tests/unit/sensitivity/problem_tester.f90:96-108 and tests/regression/sensitivity/problem_tester.f90:88-100 abort ('Specify a) a single constraint b) multiple objectives') for two or more constraints. Only the cases that carry a key read by these drivers alone are caught; the drivers also run cases without either key.",
+          "if": {
+            "anyOf": [
+              {
+                "required": [
+                  "fd_test_tolerance"
+                ]
+              },
+              {
+                "required": [
+                  "fd_test_continuation_iteration"
+                ]
+              }
+            ]
+          },
+          "then": {
+            "properties": {
+              "constraints": {
+                "maxItems": 1
+              }
+            }
+          }
+        },
+        {
+          "$comment": "mma_optimizer.f90:194,328-336 multiplies the constraint values and sensitivities by the scaling factor (`scale`, or abs(scale / g1) with auto_scale) before every MMA update. A negative factor reverses each inequality and 0 removes the constraints; the final validation of the unscaled constraints then aborts (mma_optimizer.f90:411-414). Without constraints only the dummy constraint is scaled and no harm was found.",
+          "if": {
+            "required": [
+              "constraints",
+              "solver"
+            ],
+            "properties": {
+              "constraints": {
+                "minItems": 1
+              },
+              "solver": {
+                "required": [
+                  "type",
+                  "mma"
+                ],
+                "properties": {
+                  "type": {
+                    "const": "mma"
+                  },
+                  "mma": {
+                    "required": [
+                      "scale"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "solver": {
+                "properties": {
+                  "mma": {
+                    "if": {
+                      "required": [
+                        "auto_scale"
+                      ],
+                      "properties": {
+                        "auto_scale": {
+                          "const": true
+                        }
+                      }
+                    },
+                    "then": {
+                      "properties": {
+                        "scale": {
+                          "not": {
+                            "const": 0
+                          }
+                        }
+                      }
+                    },
+                    "else": {
+                      "properties": {
+                        "scale": {
+                          "exclusiveMinimum": 0
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "$comment": "The MMA artificial variable y costs c (mma.f90:297; mma_cpu.f90:961 dip y = max(0, lambda - c)); with c <= 0 and constraints present the subproblem relaxes every constraint at no first-order cost, each active constraint ends violated and the final validation aborts after the whole run (mma_optimizer.f90:411-414). A small positive c does not enforce them either, because c must exceed the constraint multiplier; this only excludes the values that are certainly wrong. Without constraints only the dummy constraint sees c. The pdip-only rule on negative c is in the mma object.",
+          "if": {
+            "required": [
+              "constraints",
+              "solver"
+            ],
+            "properties": {
+              "constraints": {
+                "minItems": 1
+              },
+              "solver": {
+                "required": [
+                  "type",
+                  "mma"
+                ],
+                "properties": {
+                  "type": {
+                    "const": "mma"
+                  },
+                  "mma": {
+                    "required": [
+                      "c"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "solver": {
+                "properties": {
+                  "mma": {
+                    "properties": {
+                      "c": {
+                        "exclusiveMinimum": 0
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "$comment": "design_hdf5_io.f90:155-168,256,311-315,355-358: the design name is stored in the HDF5 design checkpoint and read back into character(len=64); a longer name is cut and the resumed run aborts with 'design: mismatch in name during HDF5 read'. An empty or blank name fails too (h5tset_size_f rejects size 0). An all-blank max_runtime reads as no limit (neko src/common/utils.f90:499), like the empty string, so it does not count as set. Only runs that write or read a design checkpoint are affected: restart_file, a max_runtime, or checkpoint.interval >= 1 (the automatic lookup of earlier checkpoint files also reads one).",
+          "if": {
+            "required": [
+              "solver"
+            ],
+            "properties": {
+              "solver": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "restart_file"
+                    ],
+                    "properties": {
+                      "restart_file": {
+                        "minLength": 1
+                      }
+                    }
+                  },
+                  {
+                    "required": [
+                      "max_runtime"
+                    ],
+                    "properties": {
+                      "max_runtime": {
+                        "pattern": "[^ ]"
+                      }
+                    }
+                  },
+                  {
+                    "required": [
+                      "checkpoint"
+                    ],
+                    "properties": {
+                      "checkpoint": {
+                        "required": [
+                          "interval"
+                        ],
+                        "properties": {
+                          "interval": {
+                            "minimum": 1
+                          }
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "design": {
+                "properties": {
+                  "name": {
+                    "allOf": [
+                      {
+                        "maxLength": 64,
+                        "pattern": "[^ ]"
+                      },
+                      {
+                        "$comment": "The name is held as bytes (json-fortran returns the UTF-8 bytes; design_hdf5_io.f90:160 sizes the attribute with len_trim), so maxLength, which counts code points, bounds the bytes only for ASCII.",
+                        "pattern": "^[\\x00-\\x7F]*$"
+                      }
+                    ]
+                  }
+                }
               }
             }
           }

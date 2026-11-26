@@ -4,19 +4,35 @@
   "$defs": {
     "simulationComponentAdditions": {
       "description": "Overlay for the simulation components that Neko-TOP registers, applied to every entry of `case.simulation_components`.",
-      "$comment": "sources/simulation_components/neko_top_simcomps.f90:54 registers `steady`. Neko's registered-type fallback admits it; the overlay types its keys.",
+      "$comment": "sources/simulation_components/neko_top_simcomps.f90:54 registers `steady`. Neko's registered-type fallback admits it; the overlay types its keys. An entry with `is_user: true` is skipped by Neko's factory before any key is read (neko src/simulation_components/simulation_component_fctry.f90:108-109), whatever its type, so the overlay leaves it to Neko's open `is_user` branch; the other entries already pass Neko's simcompBase through the fallback branch.",
       "if": {
-        "required": [
-          "type"
-        ],
-        "properties": {
-          "type": {
-            "const": "steady"
+        "allOf": [
+          {
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "const": "steady"
+              }
+            }
+          },
+          {
+            "not": {
+              "required": [
+                "is_user"
+              ],
+              "properties": {
+                "is_user": {
+                  "const": true
+                }
+              }
+            }
           }
-        }
+        ]
       },
       "then": {
-        "$ref": "urn:neko-top:schema:simcomps:steady#/$defs/simulationComponent"
+        "$ref": "urn:neko-top:schema:simcomps:steady#/$defs/keys"
       }
     }
   }

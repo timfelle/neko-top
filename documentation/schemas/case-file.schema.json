@@ -25,48 +25,19 @@
           "$ref": "urn:neko-top:schema:state-recovery#/$defs/stateRecovery"
         },
         "norm_scaling": {
-          "description": "Left over from the power iteration, which has no caller; read at the document root. Default 0.5.",
-          "$ref": "urn:neko:schema:common#/$defs/realNumber"
+          "description": "Left over from the power iteration, which has no caller; read at the document root. Default 0.5. Read only by the topology optimisation drivers (adjoint_fluid_pnpn.f90:468-491); typed under `optimization`."
         },
         "norm_target": {
-          "description": "As `norm_scaling`. Default -1.0.",
-          "$ref": "urn:neko:schema:common#/$defs/realNumber"
+          "description": "As `norm_scaling`. Default -1.0. Read only by the topology optimisation drivers (adjoint_fluid_pnpn.f90:468-491); typed under `optimization`."
         },
         "norm_tolerance": {
-          "description": "As `norm_scaling`. Default 10.0.",
-          "$ref": "urn:neko:schema:common#/$defs/realNumber"
+          "description": "As `norm_scaling`. Default 10.0. Read only by the topology optimisation drivers (adjoint_fluid_pnpn.f90:468-491); typed under `optimization`."
         },
         "output_file": {
-          "description": "Left over from the power iteration; read at the document root and checked for a file suffix Neko knows. Default `power_iterations.csv`.",
-          "$comment": "adjoint_fluid_pnpn.f90:489-491; neko src/io/file.f90:133 aborts for an unknown suffix.",
-          "type": "string",
-          "pattern": "\\.(rea|re2|map|vtk|nmsh|bp|fld|chkp|stl|csv|hdf5|h5|vtkhdf)$"
+          "description": "Left over from the power iteration; read at the document root by the topology optimisation drivers only (adjoint_fluid_pnpn.f90:468-491), where it must end in a file suffix Neko knows. Default `power_iterations.csv`."
         }
       },
       "allOf": [
-        {
-          "$comment": "simulation.f90:271-287: state_recovery is required for an unsteady run and not read otherwise.",
-          "if": {
-            "required": [
-              "unsteady"
-            ],
-            "properties": {
-              "unsteady": {
-                "const": true
-              }
-            }
-          },
-          "then": {
-            "required": [
-              "state_recovery"
-            ]
-          },
-          "else": {
-            "properties": {
-              "state_recovery": false
-            }
-          }
-        },
         {
           "if": {
             "required": [
@@ -109,7 +80,63 @@
             "$ref": "urn:neko-top:schema:simulation-components#/$defs/simulationComponentAdditions"
           }
         }
-      }
+      },
+      "allOf": [
+        {
+          "$comment": "steady_simcomp.f90:148-151 aborts when a steady component meets more than one scalar. The component is registered by every driver (neko_top_register_types), so the rule holds without `optimization` too. It counts the entries of case.scalars; the code counts the enabled ones, so the rare [enabled, disabled] form is rejected too (the whitelisted keywords have no `contains`). With case.scalar present Neko builds that one and never reads case.scalars (neko src/case.f90:319-353), so the rule does not apply then. An entry with is_user true is skipped by Neko's factory (simulation_component_fctry.f90:108-109), so it is not counted.",
+          "if": {
+            "allOf": [
+              {
+                "required": [
+                  "simulation_components"
+                ],
+                "properties": {
+                  "simulation_components": {
+                    "not": {
+                      "items": {
+                        "not": {
+                          "required": [
+                            "type"
+                          ],
+                          "properties": {
+                            "type": {
+                              "const": "steady"
+                            }
+                          },
+                          "not": {
+                            "required": [
+                              "is_user"
+                            ],
+                            "properties": {
+                              "is_user": {
+                                "const": true
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "not": {
+                  "required": [
+                    "scalar"
+                  ]
+                }
+              }
+            ]
+          },
+          "then": {
+            "properties": {
+              "scalars": {
+                "maxItems": 1
+              }
+            }
+          }
+        }
+      ]
     },
     "optimizing": {
       "description": "Restrictions that apply when the case has an `optimization` object, that is when a topology optimisation driver runs it.",
@@ -119,10 +146,40 @@
             "case": {
               "allOf": [
                 {
-                  "$comment": "neko_ext.f90:356-359 (reset_adjoint) reads case.adjoint_fluid.initial_condition at every design iteration with no fallback.",
+                  "$comment": "neko_ext.f90:356-359 (reset_adjoint) reads case.adjoint_fluid.initial_condition at every design iteration with no fallback. adjoint_case.f90:452-459 reads output_value for the output controls that need it (and the adjoint fluid is built by the topology optimisation drivers only).",
                   "required": [
                     "adjoint_fluid"
-                  ]
+                  ],
+                  "properties": {
+                    "adjoint_fluid": {
+                      "required": [
+                        "initial_condition"
+                      ],
+                      "allOf": [
+                        {
+                          "if": {
+                            "required": [
+                              "output_control"
+                            ],
+                            "properties": {
+                              "output_control": {
+                                "enum": [
+                                  "tsteps",
+                                  "nsamples",
+                                  "simulationtime"
+                                ]
+                              }
+                            }
+                          },
+                          "then": {
+                            "required": [
+                              "output_value"
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  }
                 },
                 {
                   "properties": {
@@ -130,15 +187,12 @@
                       "$ref": "urn:neko-top:schema:fluid#/$defs/fluidOptimizing"
                     },
                     "numerics": {
-                      "$comment": "adjoint_fluid_pnpn.f90:309, adjoint_case.f90:136 and advection_adjoint_fctry.f90:96-100 read these as JSON integers (no constants name); a true `oifs` aborts (advection_adjoint_fctry.f90:105, adjoint_fluid_pnpn.f90:741).",
+                      "$comment": "adjoint_fluid_pnpn.f90:309 and adjoint_case.f90:136 read these as JSON integers (no constants name); advection_adjoint_fctry.f90:96-99 reads the polynomial order the same way; a true `oifs` aborts (advection_adjoint_fctry.f90:105, adjoint_fluid_pnpn.f90:741). dealiased_polynomial_order is conditional, below.",
                       "properties": {
                         "time_order": {
                           "type": "integer"
                         },
                         "polynomial_order": {
-                          "type": "integer"
-                        },
-                        "dealiased_polynomial_order": {
                           "type": "integer"
                         },
                         "oifs": {
@@ -160,9 +214,28 @@
                   "then": {
                     "properties": {
                       "adjoint_scalars": {
+                        "type": "array",
                         "maxItems": 0
                       }
                     }
+                  }
+                },
+                {
+                  "$comment": "adjoint_case.f90:180-183: without case.adjoint_scalar, case.adjoint_scalars takes the array branch, which calls params%info('case.scalars', n_children=...) without `found`. On a missing path json-fortran is left in an exception state, every later lookup fails and the next read, json_get('case.time') at :260, aborts with 'Parameter case.time missing from the case file' (also for an empty case.adjoint_scalars).",
+                  "if": {
+                    "required": [
+                      "adjoint_scalars"
+                    ],
+                    "not": {
+                      "required": [
+                        "adjoint_scalar"
+                      ]
+                    }
+                  },
+                  "then": {
+                    "required": [
+                      "scalars"
+                    ]
                   }
                 },
                 {
@@ -265,12 +338,20 @@
                             "$ref": "urn:neko-top:schema:scalar#/$defs/scalarOptimizing"
                           }
                         }
+                      },
+                      {
+                        "$comment": "adjoint_case.f90:309-312 and neko_ext.f90:420-423 read initial_condition.type of an enabled adjoint scalar without a default; nothing reads case.adjoint_scalar without `optimization`.",
+                        "properties": {
+                          "adjoint_scalar": {
+                            "$ref": "urn:neko:schema:scalar#/$defs/scalarInitialConditionRequired"
+                          }
+                        }
                       }
                     ]
                   }
                 },
                 {
-                  "$comment": "adjoint_scalar_scheme.f90:281 reads primal_name (default s) and looks the field up by it (:341); the field is named case.scalar.name (Neko default s). That the two names are equal cannot be expressed; the cases that cannot match are rejected.",
+                  "$comment": "adjoint_scalar_scheme.f90:281 reads primal_name (default s) and looks the field up by it (:341); the field is named case.scalar.name (Neko default s). That the two names are equal cannot be expressed; the cases that cannot match are rejected. The adjoint scalar must be enabled (adjoint_case.f90:175-196); a disabled one never reads primal_name.",
                   "if": {
                     "required": [
                       "scalar",
@@ -285,6 +366,18 @@
                           "name": {
                             "not": {
                               "const": "s"
+                            }
+                          }
+                        }
+                      },
+                      "adjoint_scalar": {
+                        "not": {
+                          "required": [
+                            "enabled"
+                          ],
+                          "properties": {
+                            "enabled": {
+                              "const": false
                             }
                           }
                         }
@@ -309,7 +402,7 @@
                   }
                 },
                 {
-                  "$comment": "Same lookup: with the scalar named s (explicitly or by default) primal_name can only be s.",
+                  "$comment": "Same lookup: with the scalar named s (explicitly or by default) primal_name can only be s. Again only for an enabled adjoint scalar.",
                   "if": {
                     "required": [
                       "adjoint_scalar"
@@ -325,6 +418,18 @@
                               "not": {
                                 "const": "s"
                               }
+                            }
+                          }
+                        }
+                      },
+                      "adjoint_scalar": {
+                        "not": {
+                          "required": [
+                            "enabled"
+                          ],
+                          "properties": {
+                            "enabled": {
+                              "const": false
                             }
                           }
                         }
@@ -344,40 +449,7 @@
                   }
                 },
                 {
-                  "$comment": "steady_simcomp.f90:149-151 aborts with more than one scalar.",
-                  "if": {
-                    "required": [
-                      "simulation_components"
-                    ],
-                    "properties": {
-                      "simulation_components": {
-                        "not": {
-                          "items": {
-                            "not": {
-                              "required": [
-                                "type"
-                              ],
-                              "properties": {
-                                "type": {
-                                  "const": "steady"
-                                }
-                              }
-                            }
-                          }
-                        }
-                      }
-                    }
-                  },
-                  "then": {
-                    "properties": {
-                      "scalars": {
-                        "maxItems": 1
-                      }
-                    }
-                  }
-                },
-                {
-                  "$comment": "The adjoint reads this key from case.adjoint_fluid.velocity_solver when present and from case.fluid.velocity_solver otherwise, without a constants lookup (adjoint_fluid_scheme_incompressible.f90:211-336, adjoint_scalar_scheme.f90:288-385).",
+                  "$comment": "The adjoint reads this key from case.adjoint_fluid.velocity_solver when present and from case.fluid.velocity_solver otherwise, without a constants lookup (adjoint_fluid_scheme_incompressible.f90:211-224,308-311,328-331).",
                   "if": {
                     "not": {
                       "required": [
@@ -416,7 +488,7 @@
                   }
                 },
                 {
-                  "$comment": "The adjoint reads this key from case.adjoint_fluid.velocity_solver when present and from case.fluid.velocity_solver otherwise, without a constants lookup (adjoint_fluid_scheme_incompressible.f90:211-336, adjoint_scalar_scheme.f90:288-385).",
+                  "$comment": "The adjoint reads this key from case.adjoint_fluid.velocity_solver when present and from case.fluid.velocity_solver otherwise, without a constants lookup (adjoint_fluid_scheme_incompressible.f90:211-224,308-311,328-331).",
                   "if": {
                     "not": {
                       "required": [
@@ -455,7 +527,7 @@
                   }
                 },
                 {
-                  "$comment": "The adjoint reads this key from case.adjoint_fluid.velocity_solver when present and from case.fluid.velocity_solver otherwise, without a constants lookup (adjoint_fluid_scheme_incompressible.f90:211-336, adjoint_scalar_scheme.f90:288-385).",
+                  "$comment": "The adjoint reads this key from case.adjoint_fluid.velocity_solver when present and from case.fluid.velocity_solver otherwise, without a constants lookup (adjoint_fluid_scheme_incompressible.f90:211-224,308-311,328-331).",
                   "if": {
                     "not": {
                       "required": [
@@ -494,7 +566,7 @@
                   }
                 },
                 {
-                  "$comment": "The adjoint reads this key from case.adjoint_fluid.velocity_solver when present and from case.fluid.velocity_solver otherwise, without a constants lookup (adjoint_fluid_scheme_incompressible.f90:211-336, adjoint_scalar_scheme.f90:288-385).",
+                  "$comment": "The adjoint reads this key from case.adjoint_fluid.velocity_solver when present and from case.fluid.velocity_solver otherwise, without a constants lookup (adjoint_fluid_scheme_incompressible.f90:211-224,308-311,328-331).",
                   "if": {
                     "not": {
                       "required": [
@@ -533,7 +605,85 @@
                   }
                 },
                 {
-                  "$comment": "The adjoint reads this key from case.adjoint_scalar.solver when present and from case.scalar.solver otherwise, without a constants lookup (adjoint_fluid_scheme_incompressible.f90:211-336, adjoint_scalar_scheme.f90:288-385). Applies while the adjoint scalar is enabled.",
+                  "$comment": "The adjoint reads this key from case.adjoint_fluid.pressure_solver when present and from case.fluid.pressure_solver otherwise, without a constants lookup (adjoint_fluid_scheme_incompressible.f90:215-229). Neko reads the primal key with a constants lookup, so it is typed only while the adjoint key is absent.",
+                  "if": {
+                    "not": {
+                      "required": [
+                        "adjoint_fluid"
+                      ],
+                      "properties": {
+                        "adjoint_fluid": {
+                          "required": [
+                            "pressure_solver"
+                          ],
+                          "properties": {
+                            "pressure_solver": {
+                              "required": [
+                                "projection_space_size"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "then": {
+                    "properties": {
+                      "fluid": {
+                        "properties": {
+                          "pressure_solver": {
+                            "properties": {
+                              "projection_space_size": {
+                                "type": "integer"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                {
+                  "$comment": "The adjoint reads this key from case.adjoint_fluid.pressure_solver when present and from case.fluid.pressure_solver otherwise, without a constants lookup (adjoint_fluid_scheme_incompressible.f90:215-229). Neko reads the primal key with a constants lookup, so it is typed only while the adjoint key is absent.",
+                  "if": {
+                    "not": {
+                      "required": [
+                        "adjoint_fluid"
+                      ],
+                      "properties": {
+                        "adjoint_fluid": {
+                          "required": [
+                            "pressure_solver"
+                          ],
+                          "properties": {
+                            "pressure_solver": {
+                              "required": [
+                                "projection_hold_steps"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "then": {
+                    "properties": {
+                      "fluid": {
+                        "properties": {
+                          "pressure_solver": {
+                            "properties": {
+                              "projection_hold_steps": {
+                                "type": "integer"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                {
+                  "$comment": "The adjoint reads this key from case.adjoint_scalar.solver when present and from case.scalar.solver otherwise, without a constants lookup (adjoint_scalar_scheme.f90:301-316,376-380). Applies while the adjoint scalar is enabled.",
                   "if": {
                     "allOf": [
                       {
@@ -595,7 +745,7 @@
                   }
                 },
                 {
-                  "$comment": "The adjoint reads this key from case.adjoint_scalar.solver when present and from case.scalar.solver otherwise, without a constants lookup (adjoint_fluid_scheme_incompressible.f90:211-336, adjoint_scalar_scheme.f90:288-385). Applies while the adjoint scalar is enabled.",
+                  "$comment": "The adjoint reads this key from case.adjoint_scalar.solver when present and from case.scalar.solver otherwise, without a constants lookup (adjoint_scalar_scheme.f90:301-316,376-380). Applies while the adjoint scalar is enabled.",
                   "if": {
                     "allOf": [
                       {
@@ -657,7 +807,7 @@
                   }
                 },
                 {
-                  "$comment": "The adjoint reads this key from case.adjoint_scalar.solver when present and from case.scalar.solver otherwise, without a constants lookup (adjoint_fluid_scheme_incompressible.f90:211-336, adjoint_scalar_scheme.f90:288-385). Applies while the adjoint scalar is enabled.",
+                  "$comment": "The adjoint reads this key from case.adjoint_scalar.solver when present and from case.scalar.solver otherwise, without a constants lookup (adjoint_scalar_scheme.f90:301-316,376-380). Applies while the adjoint scalar is enabled.",
                   "if": {
                     "allOf": [
                       {
@@ -719,7 +869,7 @@
                   }
                 },
                 {
-                  "$comment": "The adjoint reads this key from case.adjoint_scalar.solver when present and from case.scalar.solver otherwise, without a constants lookup (adjoint_fluid_scheme_incompressible.f90:211-336, adjoint_scalar_scheme.f90:288-385). Applies while the adjoint scalar is enabled.",
+                  "$comment": "The adjoint reads this key from case.adjoint_scalar.solver when present and from case.scalar.solver otherwise, without a constants lookup (adjoint_scalar_scheme.f90:301-316,376-380). Applies while the adjoint scalar is enabled.",
                   "if": {
                     "allOf": [
                       {
@@ -779,16 +929,444 @@
                       }
                     }
                   }
+                },
+                {
+                  "$comment": "adjoint_case.f90:443-445 reads case.nsamples for output_control `org` with no default (neko src/common/case_file_utils.f90:129-142, json_utils.f90:252). Neko has the same rule for case.fluid.output_control.",
+                  "if": {
+                    "required": [
+                      "adjoint_fluid"
+                    ],
+                    "properties": {
+                      "adjoint_fluid": {
+                        "required": [
+                          "output_control"
+                        ],
+                        "properties": {
+                          "output_control": {
+                            "const": "org"
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "then": {
+                    "required": [
+                      "nsamples"
+                    ]
+                  }
+                },
+                {
+                  "$comment": "advection_adjoint_fctry.f90:100-101 reads the order as a JSON integer, but only after the dummy-advection return (:85-94), which the adjoint takes when case.fluid.advection is false (adjoint_fluid_pnpn.f90:437-443) and, for the adjoint scalar, when case.adjoint_scalar.advection is false (adjoint_scalar_pnpn.f90:247-252). Otherwise Neko's own read, with its constants lookup, is the only one.",
+                  "if": {
+                    "anyOf": [
+                      {
+                        "not": {
+                          "required": [
+                            "fluid"
+                          ],
+                          "properties": {
+                            "fluid": {
+                              "required": [
+                                "advection"
+                              ],
+                              "properties": {
+                                "advection": {
+                                  "const": false
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "allOf": [
+                          {
+                            "required": [
+                              "adjoint_scalar"
+                            ],
+                            "properties": {
+                              "adjoint_scalar": {
+                                "not": {
+                                  "required": [
+                                    "enabled"
+                                  ],
+                                  "properties": {
+                                    "enabled": {
+                                      "const": false
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          },
+                          {
+                            "properties": {
+                              "adjoint_scalar": {
+                                "not": {
+                                  "required": [
+                                    "advection"
+                                  ],
+                                  "properties": {
+                                    "advection": {
+                                      "const": false
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "then": {
+                    "properties": {
+                      "numerics": {
+                        "properties": {
+                          "dealiased_polynomial_order": {
+                            "type": "integer"
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                {
+                  "$comment": "adjoint_scalar_scheme.f90:284-285,333-337 add the adjoint field only if no field of that name exists, else reuse it; the velocity and pressure fields and their adjoints exist before the adjoint scalar is set up (adjoint_fluid_scheme_incompressible.f90:198-200, adjoint_fluid_pnpn.f90:302). The adjoint then overwrites them, with no abort. The fields u_e, v_e, w_e (neko src/fluid/fluid_scheme_incompressible.f90:348-350) and u_adj_e, v_adj_e, w_adj_e (adjoint_fluid_scheme_incompressible.f90:360-362) exist too. The scheme's own fields abx1 and abx2 collide with the payload registered under the adjoint name (adjoint_scalar_pnpn.f90:215,217,263-267; neko src/common/checkpoint_payload.f90:607-611 aborts on a duplicate field name). The design fields design_indicator, brinkman_amplitude and sensitivity are registered after the adjoint scalar with ignore_existing (design_brinkman.f90:365-371; neko src/registries/registry.f90:258-260), so the design would silently get the scalar's field.",
+                  "if": {
+                    "required": [
+                      "adjoint_scalar"
+                    ],
+                    "properties": {
+                      "adjoint_scalar": {
+                        "not": {
+                          "required": [
+                            "enabled"
+                          ],
+                          "properties": {
+                            "enabled": {
+                              "const": false
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "then": {
+                    "properties": {
+                      "adjoint_scalar": {
+                        "properties": {
+                          "name": {
+                            "not": {
+                              "enum": [
+                                "u",
+                                "v",
+                                "w",
+                                "p",
+                                "u_adj",
+                                "v_adj",
+                                "w_adj",
+                                "p_adj",
+                                "u_e",
+                                "v_e",
+                                "w_e",
+                                "u_adj_e",
+                                "v_adj_e",
+                                "w_adj_e",
+                                "abx1",
+                                "abx2",
+                                "design_indicator",
+                                "brinkman_amplitude",
+                                "sensitivity"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                {
+                  "$comment": "The same design fields (design_brinkman.f90:365-371, registered after sim%init with ignore_existing) alias a primal scalar of the same name: the scalar and the design overwrite each other with no abort.",
+                  "if": {
+                    "required": [
+                      "scalar"
+                    ],
+                    "properties": {
+                      "scalar": {
+                        "not": {
+                          "required": [
+                            "enabled"
+                          ],
+                          "properties": {
+                            "enabled": {
+                              "const": false
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "then": {
+                    "properties": {
+                      "scalar": {
+                        "properties": {
+                          "name": {
+                            "not": {
+                              "enum": [
+                                "design_indicator",
+                                "brinkman_amplitude",
+                                "sensitivity"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                {
+                  "$comment": "Same: the primal scalar field is named `s` by default. Neko registers s_lambda, s_lambda_tot and s_cp for the scalar (neko src/scalar/scalar_scheme.f90:716-718).",
+                  "if": {
+                    "allOf": [
+                      {
+                        "required": [
+                          "adjoint_scalar"
+                        ],
+                        "properties": {
+                          "adjoint_scalar": {
+                            "not": {
+                              "required": [
+                                "enabled"
+                              ],
+                              "properties": {
+                                "enabled": {
+                                  "const": false
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "properties": {
+                          "scalar": {
+                            "not": {
+                              "required": [
+                                "name"
+                              ],
+                              "properties": {
+                                "name": {
+                                  "not": {
+                                    "const": "s"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "then": {
+                    "properties": {
+                      "adjoint_scalar": {
+                        "properties": {
+                          "name": {
+                            "not": {
+                              "enum": [
+                                "s",
+                                "s_lambda",
+                                "s_lambda_tot",
+                                "s_cp"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                {
+                  "$comment": "Same: the fluid is named `fluid` by default and registers fluid_mu, fluid_mu_tot and fluid_rho (neko src/fluid/fluid_scheme_incompressible.f90:202,690-692).",
+                  "if": {
+                    "allOf": [
+                      {
+                        "required": [
+                          "adjoint_scalar"
+                        ],
+                        "properties": {
+                          "adjoint_scalar": {
+                            "not": {
+                              "required": [
+                                "enabled"
+                              ],
+                              "properties": {
+                                "enabled": {
+                                  "const": false
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "properties": {
+                          "fluid": {
+                            "not": {
+                              "required": [
+                                "name"
+                              ],
+                              "properties": {
+                                "name": {
+                                  "not": {
+                                    "const": "fluid"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "then": {
+                    "properties": {
+                      "adjoint_scalar": {
+                        "properties": {
+                          "name": {
+                            "not": {
+                              "enum": [
+                                "fluid_mu",
+                                "fluid_mu_tot",
+                                "fluid_rho"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                {
+                  "$comment": "adjoint_scalar_scheme.f90:281-285: the default name is primal_name//'_adj'; with primal_name u, v, w or p that is the adjoint velocity or pressure field, which the adjoint scalar then overwrites (:333-337).",
+                  "if": {
+                    "allOf": [
+                      {
+                        "required": [
+                          "adjoint_scalar"
+                        ],
+                        "properties": {
+                          "adjoint_scalar": {
+                            "not": {
+                              "required": [
+                                "enabled"
+                              ],
+                              "properties": {
+                                "enabled": {
+                                  "const": false
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "properties": {
+                          "adjoint_scalar": {
+                            "not": {
+                              "required": [
+                                "name"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "then": {
+                    "properties": {
+                      "adjoint_scalar": {
+                        "properties": {
+                          "primal_name": {
+                            "not": {
+                              "enum": [
+                                "u",
+                                "v",
+                                "w",
+                                "p"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                {
+                  "$comment": "neko_ext.f90:216-217 and :399-400 gate the scalar reset on case.scalar.enabled, which is absent for case.scalars, so a scalar of the array form is never re-initialised after the first design iteration (and has no adjoint scalar, adjoint_case.f90:177-190); only a disabled entry is accepted. With case.scalar present Neko builds that one and never reads case.scalars (neko src/case.f90:319-353), Neko-TOP reads case.scalars only in the adjoint_scalars branch of adjoint_case.f90:180-183 (not taken with case.adjoint_scalar) and its resets read case.scalar.enabled, so the rule applies only without case.scalar.",
+                  "if": {
+                    "not": {
+                      "required": [
+                        "scalar"
+                      ]
+                    }
+                  },
+                  "then": {
+                    "properties": {
+                      "scalars": {
+                        "items": {
+                          "required": [
+                            "enabled"
+                          ],
+                          "properties": {
+                            "enabled": {
+                              "const": false
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                {
+                  "$comment": "The adjoint velocity, pressure and scalar solvers build Neko's preconditioner through precon_factory (adjoint_fluid_scheme_incompressible.f90:318-326,345-347; adjoint_scalar_scheme.f90:292-299,388-390), and hsmg aborts for polynomial order 1 (neko src/krylov/pc_hsmg.f90:224-225). Neko's own rule covers the primal solvers (urn:neko:schema:case-file#/$defs/case/allOf/7).",
+                  "if": {
+                    "required": [
+                      "numerics"
+                    ],
+                    "properties": {
+                      "numerics": {
+                        "required": [
+                          "polynomial_order"
+                        ],
+                        "properties": {
+                          "polynomial_order": {
+                            "const": 1
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "then": {
+                    "properties": {
+                      "adjoint_fluid": {
+                        "properties": {
+                          "velocity_solver": {
+                            "$ref": "urn:neko:schema:case-file#/$defs/notHsmgSolver"
+                          }
+                        }
+                      },
+                      "adjoint_scalar": {
+                        "properties": {
+                          "solver": {
+                            "$ref": "urn:neko:schema:case-file#/$defs/notHsmgSolver"
+                          }
+                        }
+                      }
+                    }
+                  }
                 }
-              ]
-            }
-          }
-        },
-        {
-          "properties": {
-            "case": {
-              "required": [
-                "adjoint_fluid"
               ]
             }
           }
@@ -1020,7 +1598,7 @@
           }
         },
         {
-          "$comment": "Owner ruling 2026-11-16: a `steady` simulation component with `unsteady: true` is invalid. The rejection exists in the code only on an unmerged branch; steady_simcomp.f90:116-133 does not reject it yet.",
+          "$comment": "Owner ruling 2026-11-16: a `steady` simulation component with `unsteady: true` is invalid. The rejection exists in the code only on an unmerged branch; steady_simcomp.f90:116-133 does not reject it yet. An entry with is_user true is skipped by Neko's factory before `type` is read (neko src/simulation_components/simulation_component_fctry.f90:108-109), so no steady component is built and the ruling does not apply to it (the overlay in simulation-components.schema.json exempts it too).",
           "if": {
             "required": [
               "unsteady"
@@ -1045,7 +1623,213 @@
                           "type": {
                             "const": "steady"
                           }
+                        },
+                        "not": {
+                          "required": [
+                            "is_user"
+                          ],
+                          "properties": {
+                            "is_user": {
+                              "const": true
+                            }
+                          }
                         }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "$comment": "simulation.f90:271-301: `unsteady` is read at :271 and, for an unsteady run, state_recovery at :299 (factory :300-301); state_recovery is required for an unsteady run and not read otherwise. :283 aborts a variable timestep and :289-297 abort case.time.exact_output_time true. Read by the topology optimisation drivers only. problem.f90:615-626 maps the adjoint clock to the forward time as n_timesteps*dt - t_adj, which assumes the forward run starts at t = 0, while neko_ext.f90:128-129,321-322 reset both clocks to case.time.start_time: with a start_time above 0 the objective windows and the adjoint forcing gate the wrong steps and the sensitivity is wrong (zero in the probe).",
+          "if": {
+            "required": [
+              "unsteady"
+            ],
+            "properties": {
+              "unsteady": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "state_recovery"
+            ],
+            "properties": {
+              "case": {
+                "properties": {
+                  "time": {
+                    "properties": {
+                      "exact_output_time": {
+                        "const": false
+                      },
+                      "start_time": {
+                        "$comment": "A constants name is accepted next to the literal: Neko reads start_time with a constants lookup (neko src/common/time_state.f90:76) and Neko-TOP uses only the resolved value (neko_ext.f90:128-129,321-322). The value of a constant cannot be checked here, as for every lookup key.",
+                        "anyOf": [
+                          {
+                            "const": 0
+                          },
+                          {
+                            "$ref": "urn:neko:schema:common#/$defs/constRef"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "state_recovery": false
+            }
+          }
+        },
+        {
+          "$comment": "case.restart_file breaks the same assumption as a start_time above 0: Neko's simulation_init restarts from the file on every call (neko src/simulation.f90:71-74), Neko-TOP calls it before every unsteady forward run (problem.f90:533), so the forward clock starts at the checkpoint time while backward samples use total_time - adjoint time (problem.f90:553,625). A windowed objective then selects different steps forward and backward and the sensitivity is wrong (run: 6.3e-2 error against 1.5e-2 without the window; the second part of that error is a known missing initial-state sample that a restart does not cause). Only the objective windows are rejected here; whether to reject unsteady + restart_file altogether is the owner's decision.",
+          "if": {
+            "required": [
+              "unsteady",
+              "case"
+            ],
+            "properties": {
+              "unsteady": {
+                "const": true
+              },
+              "case": {
+                "required": [
+                  "restart_file"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "optimization": {
+                "properties": {
+                  "objectives": {
+                    "items": {
+                      "not": {
+                        "anyOf": [
+                          {
+                            "required": [
+                              "start_time"
+                            ]
+                          },
+                          {
+                            "required": [
+                              "end_time"
+                            ]
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "$comment": "adjoint_fluid_pnpn.f90:468-491 reads these root keys (the power iteration leftovers) as JSON reals, and output_file with a file suffix that neko src/io/file.f90:133 knows. Without `optimization` nothing reads them.",
+          "properties": {
+            "norm_scaling": {
+              "$ref": "urn:neko:schema:common#/$defs/realNumber"
+            },
+            "norm_target": {
+              "$ref": "urn:neko:schema:common#/$defs/realNumber"
+            },
+            "norm_tolerance": {
+              "$ref": "urn:neko:schema:common#/$defs/realNumber"
+            },
+            "output_file": {
+              "type": "string",
+              "pattern": "\\.(rea|re2|map|vtk|nmsh|bp|fld|chkp|stl|csv|hdf5|h5|vtkhdf)$"
+            }
+          }
+        },
+        {
+          "$comment": "The time-window test driver (tests/unit/objectives/time_window_tester.f90:128,137) aborts for a steady run and for an empty objective list. It also aborts for `pairwise: true` with an odd number of objectives (time_window_tester.f90:251-254), which the whitelisted keywords cannot express (no array-length parity).",
+          "if": {
+            "required": [
+              "optimization"
+            ],
+            "properties": {
+              "optimization": {
+                "required": [
+                  "time_window_test"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "unsteady"
+            ],
+            "properties": {
+              "unsteady": {
+                "const": true
+              },
+              "optimization": {
+                "required": [
+                  "objectives"
+                ],
+                "properties": {
+                  "objectives": {
+                    "minItems": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "$comment": "time_window_tester.f90:199-202 aborts after the first run unless the fluid is frozen, and the only writers of fluid%freeze are the reset from case.fluid.freeze_flow (neko_ext.f90:267-270) and the steady simcomp (steady_simcomp.f90:283), which the schema does not allow in an unsteady run.",
+          "if": {
+            "required": [
+              "optimization"
+            ],
+            "properties": {
+              "optimization": {
+                "required": [
+                  "time_window_test"
+                ],
+                "properties": {
+                  "time_window_test": {
+                    "required": [
+                      "require_steady_state"
+                    ],
+                    "properties": {
+                      "require_steady_state": {
+                        "const": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "case"
+            ],
+            "properties": {
+              "case": {
+                "required": [
+                  "fluid"
+                ],
+                "properties": {
+                  "fluid": {
+                    "required": [
+                      "freeze_flow"
+                    ],
+                    "properties": {
+                      "freeze_flow": {
+                        "const": true
                       }
                     }
                   }

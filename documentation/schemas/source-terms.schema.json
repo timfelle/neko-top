@@ -3,9 +3,9 @@
   "$id": "urn:neko-top:schema:source-terms",
   "$defs": {
     "registeredSourceTerm": {
-      "description": "Overlay for the source terms that Neko-TOP registers: they read no key from the case file.",
-      "$comment": "sources/source_terms/neko_top_source_terms.f90:71-78 registers the five types; their init_from_json is empty (simple_brinkman_source_term.f90:110-123 and its siblings), so only `type` is meaningful. Neko's registered-type fallback already admits them; this overlay only rejects the keys nothing reads.",
-      "if": {
+      "description": "Narrowing for the source terms that Neko-TOP registers: a case file cannot use them, so none of the five types is accepted.",
+      "$comment": "sources/source_terms/neko_top_source_terms.f90:71-78 registers the five types. Neko's factory allocates the type and calls its init_from_json (neko src/source_terms/source_term_fctry.f90:80-86,124-130), which is empty for all five (simple_brinkman_source_term.f90:110-123 and its siblings): no fields, coefficients or pointers are set, so the first compute_ dereferences them (simple_brinkman_source_term.f90:214-216,280). They are built in code with init_from_components only. This narrows Neko's custom-type branch through allOf and widens nothing.",
+      "not": {
         "required": [
           "type"
         ],
@@ -20,20 +20,6 @@
             ]
           }
         }
-      },
-      "then": {
-        "properties": {
-          "type": {
-            "enum": [
-              "simple_brinkman",
-              "adjoint_brinkman_dissipation",
-              "adjoint_viscous_dissipation",
-              "adjoint_scalar_convection",
-              "adjoint_mixing_scalar"
-            ]
-          }
-        },
-        "additionalProperties": false
       }
     }
   }

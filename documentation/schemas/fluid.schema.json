@@ -86,19 +86,47 @@
           }
         },
         "pressure_solver": {
-          "$comment": "adjoint_fluid_pnpn.f90:411-422 reads the adjoint pressure solver keys from here, without a constants lookup.",
+          "$comment": "adjoint_fluid_pnpn.f90:411-422 reads the adjoint pressure solver's absolute_tolerance and max_iterations from here, without a constants lookup. projection_space_size and projection_hold_steps are read from here only when case.adjoint_fluid.pressure_solver has no such key (adjoint_fluid_scheme_incompressible.f90:215-229), which $defs/optimizing in the case-file schema expresses.",
           "properties": {
             "absolute_tolerance": {
               "$ref": "urn:neko:schema:common#/$defs/realNumber"
             },
             "max_iterations": {
               "$ref": "urn:neko:schema:common#/$defs/positiveInteger"
-            },
-            "projection_space_size": {
-              "type": "integer"
-            },
-            "projection_hold_steps": {
-              "type": "integer"
+            }
+          }
+        },
+        "svv": {
+          "$comment": "neko src/fluid/fluid_scheme_incompressible.f90:362-380 reads svv.enabled and fluid_pnpn.f90:590-604 builds the SVV Helmholtz operator (full_svv / standard_svv); the adjoint never reads `svv` and always allocates the `standard` operator (adjoint_fluid_pnpn.f90:329), so the adjoint is not the transpose of the forward operator and the sensitivities are inconsistent, with no abort. Same as the scalar (scalar.schema.json, scalarOptimizing).",
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "const": false
+            }
+          }
+        },
+        "source_terms": {
+          "description": "Source terms of the forward momentum equation. The state-dependent Neko types `brinkman`, `coriolis`, `boussinesq`, `sponge`, `translation`, `gradient_jump_penalty` and `hpfrt` are not accepted: the adjoint has no counterpart for them, so the sensitivities are wrong with no abort. `constant`, `field`, `centrifugal` and `user` do not depend on the flow and are accepted.",
+          "$comment": "neko src/fluid/fluid_scheme_incompressible.f90:359 builds them for the forward run; the adjoint builds only case.adjoint_fluid.source_term (adjoint_fluid_scheme_incompressible.f90:368-370) and the scalar-convection coupling term (adjoint_case.f90:237); no Neko-TOP source supplies the transposed terms (-chi u_adj, Coriolis, sponge relaxation, buoyancy coupling).",
+          "type": "array",
+          "items": {
+            "not": {
+              "required": [
+                "type"
+              ],
+              "properties": {
+                "type": {
+                  "enum": [
+                    "brinkman",
+                    "coriolis",
+                    "boussinesq",
+                    "sponge",
+                    "translation",
+                    "gradient_jump_penalty",
+                    "hpfrt"
+                  ]
+                }
+              }
             }
           }
         }
