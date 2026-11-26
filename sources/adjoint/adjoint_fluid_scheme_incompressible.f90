@@ -52,7 +52,8 @@ module adjoint_fluid_scheme_incompressible
   use operators, only: cfl
   use logger, only: neko_log, LOG_SIZE, NEKO_LOG_VERBOSE
   use registry, only: neko_registry
-  use json_utils, only: json_get, json_get_or_default
+  use json_utils, only: json_get, json_get_or_default, json_get_or_lookup, &
+       json_get_or_lookup_or_default
   use json_module, only: json_file
   use user_intf, only: user_t, dummy_user_material_properties, &
        user_material_properties_intf
@@ -211,21 +212,23 @@ contains
     json_key = json_key_fallback(params, &
          'case.adjoint_fluid.velocity_solver.projection_space_size', &
          'case.fluid.velocity_solver.projection_space_size')
-    call json_get_or_default(params, json_key, this%vel_projection_dim, 0)
+    call json_get_or_lookup_or_default(params, json_key, &
+         this%vel_projection_dim, 0)
     json_key = json_key_fallback(params, &
          'case.adjoint_fluid.pressure_solver.projection_space_size', &
          'case.fluid.pressure_solver.projection_space_size')
-    call json_get_or_default(params, json_key, this%pr_projection_dim, 0)
+    call json_get_or_lookup_or_default(params, json_key, &
+         this%pr_projection_dim, 0)
 
     json_key = json_key_fallback(params, &
          'case.adjoint_fluid.velocity_solver.projection_hold_steps', &
          'case.fluid.velocity_solver.projection_hold_steps')
-    call json_get_or_default(params, json_key, &
+    call json_get_or_lookup_or_default(params, json_key, &
          this%vel_projection_activ_step, 5)
     json_key = json_key_fallback(params, &
          'case.adjoint_fluid.pressure_solver.projection_hold_steps', &
          'case.fluid.pressure_solver.projection_hold_steps')
-    call json_get_or_default(params, json_key, &
+    call json_get_or_lookup_or_default(params, json_key, &
          this%pr_projection_activ_step, 5)
 
     json_key = json_key_fallback(params, 'case.adjoint_fluid.freeze', &
@@ -308,7 +311,8 @@ contains
        json_key = json_key_fallback(params, &
             'case.adjoint_fluid.velocity_solver.max_iterations', &
             'case.fluid.velocity_solver.max_iterations')
-       call json_get_or_default(params, json_key, integer_val, KSP_MAX_ITER)
+       call json_get_or_lookup_or_default(params, json_key, integer_val, &
+            KSP_MAX_ITER)
 
        json_key = json_key_fallback(params, &
             'case.adjoint_fluid.velocity_solver.type', &
@@ -328,7 +332,7 @@ contains
        json_key = json_key_fallback(params, &
             'case.adjoint_fluid.velocity_solver.absolute_tolerance', &
             'case.fluid.velocity_solver.absolute_tolerance')
-       call json_get(params, json_key, real_val)
+       call json_get_or_lookup(params, json_key, real_val)
 
        json_key = json_key_fallback(params, &
             'case.adjoint_fluid.velocity_solver.monitor', &
@@ -713,7 +717,7 @@ contains
           call neko_log%message(log_buf, lvl = NEKO_LOG_VERBOSE)
 
           ! Read Re into mu for further manipulation.
-          call json_get(params, 'case.fluid.Re', const_mu)
+          call json_get_or_lookup(params, 'case.fluid.Re', const_mu)
           write(log_buf, '(A)') 'Read non-dimensional material properties'
           call neko_log%message(log_buf)
           write(log_buf, '(A,ES13.6)') 'Re         :', const_mu
@@ -725,8 +729,8 @@ contains
           const_mu = 1.0_rp/const_mu
        else
           ! Dimensional case
-          call json_get(params, 'case.fluid.mu', const_mu)
-          call json_get(params, 'case.fluid.rho', const_rho)
+          call json_get_or_lookup(params, 'case.fluid.mu', const_mu)
+          call json_get_or_lookup(params, 'case.fluid.rho', const_rho)
        end if
     end if
 

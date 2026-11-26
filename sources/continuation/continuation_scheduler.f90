@@ -36,7 +36,9 @@
 module continuation_scheduler
   use num_types, only: rp
   use json_module, only: json_file
-  use json_utils, only: json_get_or_default, json_get_or_lookup, json_get
+  use json_utils, only: json_get_or_lookup, json_get, &
+       json_get_or_lookup_or_default
+  use registry, only: neko_const_registry
   use utils, only: neko_error
   implicit none
   private
@@ -85,7 +87,7 @@ contains
     type(json_file), intent(inout) :: json
     integer :: n_default
 
-    call json_get_or_default(json, &
+    call json_get_or_lookup_or_default(json, &
          'optimization.solver.continuation_iterations', n_default, 1)
 
     this%default_iterations = n_default
@@ -112,6 +114,8 @@ contains
   !! If the parameter is given as a scalar, its value is returned.
   !! If it is given as an array, the first entry is used as the initial value
   !! and the full array is registered for continuation.
+  !! If it is given as a string, it names an entry of `case.constants`: a
+  !! vector constant is used as the array form, a real one as the scalar form.
   !! If the parameter is not found and no default_value is provided,
   !! the routine terminates with an error.
   !! @param this The continuation scheduler instance.
@@ -130,11 +134,23 @@ contains
     real(kind=rp), intent(in), optional :: default_value
     real(kind=rp), allocatable :: values(:)
     real(kind=rp) :: scalar_parameter
+    character(len=:), allocatable :: const_name
     logical :: found
     integer :: var_type, iter
 
     ! Inspect JSON for the parameter
     call json%info(name, found=found, var_type=var_type)
+
+    ! A string names a constant: take the form of the constant it names
+    if (found .and. var_type == 7) then
+       call json_get(json, name, const_name)
+       if (neko_const_registry%vector_exists(const_name)) then
+          var_type = 3
+       else if (neko_const_registry%real_scalar_exists(const_name)) then
+          var_type = 6
+       end if
+    end if
+
     if (.not. found) then
        if (present(default_value)) then
           value = default_value
@@ -143,21 +159,31 @@ contains
        end if
     else if (var_type == 6) then ! scalar
        if (present(default_value)) then
-          call json_get_or_default(json, name, scalar_parameter, default_value)
+          call json_get_or_lookup_or_default(json, name, scalar_parameter, &
+               default_value)
        else
-          call json_get(json, name, scalar_parameter)
+          call json_get_or_lookup(json, name, scalar_parameter)
        end if
        value = scalar_parameter
     else if (var_type == 3) then ! array
        call json_get_or_lookup(json, name, values)
        value = values(1)
        ! Read optional iterations per parameter step
-       call json_get_or_default(json, trim(name)//'_iterations', iter, &
-            this%default_iterations)
+       call json_get_or_lookup_or_default(json, trim(name)//'_iterations', &
+            iter, this%default_iterations)
        ! Register the parameter for continuation
        call this%register_parameter(name, target, values, iter)
+    else if (var_type == 7) then ! a name no real or vector constant has
+       if (neko_const_registry%integer_scalar_exists(const_name)) then
+          call neko_error(trim(name) // ": the constant '" // const_name // &
+               "' is an integer. Give its value as a real, e.g. 2.0.")
+       else
+          call neko_error(trim(name) // ": no real or vector constant '" // &
+               const_name // "' in case.constants.")
+       end if
     else
-       call neko_error(trim(name)//" can only be real variable or real array!")
+       call neko_error(trim(name)// &
+            " can only be a real, a real array or the name of a constant!")
     end if
 
   end subroutine json_get_or_register

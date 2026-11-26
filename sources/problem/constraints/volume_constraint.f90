@@ -47,7 +47,7 @@ module volume_constraint
   use num_types, only: rp
   use coefs, only: coef_t
   use json_module, only: json_file
-  use json_utils, only: json_get, json_get_or_default
+  use json_utils, only: json_get_or_default, json_get_or_lookup
   use field, only: field_t
   use scratch_registry, only: neko_scratch_registry
   use neko_config, only: NEKO_BCKND_DEVICE
@@ -134,7 +134,7 @@ contains
     call json_get_or_default(json, "name", name, "Volume constraint")
     call json_get_or_default(json, "mask_name", mask_name, "")
     call json_get_or_default(json, "is_max", is_max, .false.)
-    call json_get(json, "limit", limit)
+    call json_get_or_lookup(json, "limit", limit)
 
     call this%init_from_components(design, simulation, name, mask_name, &
          is_max, limit)

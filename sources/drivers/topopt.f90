@@ -86,11 +86,12 @@ program topopt
   ! -------------------------------------------------------------------------- !
   ! Initialization of the components
 
-  ! initialize the global continuation_scheduler object (nekotop_continuation)
-  call nekotop_continuation%init(parameters)
-
   ! initialize the simulation
   call sim%init(parameters)
+
+  ! initialize the global continuation_scheduler object (nekotop_continuation)
+  ! after the simulation, which fills the constants it may look up
+  call nekotop_continuation%init(parameters)
 
   ! initialize the design
   call design_factory(des, design_parameters, sim)

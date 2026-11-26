@@ -51,7 +51,7 @@ module adjoint_case
   use file, only: file_t
   use json_module, only: json_file
   use json_utils, only: json_get, json_get_or_default, json_extract_item, &
-       json_get_or_lookup
+       json_get_or_lookup, json_get_or_lookup_or_default
   use adjoint_scalar_scheme, only: adjoint_scalar_scheme_t
   use adjoint_scalar_pnpn, only : adjoint_scalar_pnpn_t
   use logger, only : neko_log
@@ -133,7 +133,8 @@ contains
     call json_get(neko_case%params, 'case.fluid.scheme', string_val)
     call adjoint_fluid_scheme_factory(this%fluid_adj, trim(string_val))
 
-    call json_get(neko_case%params, 'case.numerics.polynomial_order', lx)
+    call json_get_or_lookup(neko_case%params, &
+         'case.numerics.polynomial_order', lx)
     lx = lx + 1 ! add 1 to get number of gll points
 
     call this%chkp%init()
@@ -468,7 +469,7 @@ contains
     call json_get_or_default(neko_case%params, &
          'case.adjoint_fluid.norm_output_control', norm_control, 'never')
     if (trim(norm_control) .ne. 'never') then
-       call json_get_or_default(neko_case%params, &
+       call json_get_or_lookup_or_default(neko_case%params, &
             'case.adjoint_fluid.norm_output_value', real_val, 1.0_dp)
        call json_get_or_default(neko_case%params, &
             'case.adjoint_fluid.norm_output_file', norm_file, &

@@ -1,0 +1,188 @@
+!> Unit tests for a continuation parameter given as the name of a constant.
+!!
+!! A case file may give a continuation parameter, such as the penalty of a
+!! mapping, as the name of an entry of `case.constants` instead of a value.
+!! The constants live in `neko_const_registry`, which the tests fill here as
+!! Neko's case initialisation would:
+!!
+!!   1. A real constant is used as the scalar form: its value is returned and
+!!      nothing is registered for continuation.
+!!   2. A vector constant is used as the array form: its first value is
+!!      returned and all of them are registered. `<name>_iterations` may name
+!!      an integer constant in turn.
+!!   3. An integer constant, or a name no constant has, raises an error.
+!!
+!! An error is redirected to a pFUnit exception, so that it can be caught.
+module test_continuation_scheduler
+  use mpi
+  use pfunit
+  use funit, only: throw, catch, SourceLocation
+  use num_types, only: rp
+  use json_module, only: json_file
+  use registry, only: neko_const_registry
+  use vector, only: vector_t
+  use continuation_scheduler, only: continuation_scheduler_t
+  use neko_config, only: NEKO_BCKND_DEVICE
+  use device, only: device_init, device_finalize
+  use utils, only: throw_error, default_throw_error
+  implicit none
+
+  @TestCase
+  type, extends(MPITestCase) :: continuation_scheduler_tc
+   contains
+     procedure :: setUp
+     procedure :: tearDown
+  end type continuation_scheduler_tc
+
+contains
+
+  subroutine setUp(this)
+    class(continuation_scheduler_tc), intent(inout) :: this
+    type(vector_t), pointer :: vec
+
+    if (NEKO_BCKND_DEVICE .eq. 1) then
+       call device_init
+    end if
+    call neko_const_registry%free()
+    call neko_const_registry%init()
+
+    call neko_const_registry%add_real_scalar(3.0_rp, 'penalty')
+    call neko_const_registry%add_integer_scalar(2, 'steps')
+    call neko_const_registry%add_vector(3, 'penalties')
+    vec => neko_const_registry%get_vector('penalties')
+    vec%x = [1.0_rp, 2.0_rp, 4.0_rp]
+  end subroutine setUp
+
+  subroutine tearDown(this)
+    class(continuation_scheduler_tc), intent(inout) :: this
+    ! A test that fails early must not leave neko_error redirected.
+    throw_error => default_throw_error
+    call neko_const_registry%free()
+    if (NEKO_BCKND_DEVICE .eq. 1) then
+       call device_finalize
+    end if
+  end subroutine tearDown
+
+  !> Raise a pFUnit exception in place of stopping, so that a test can catch
+  !! the error raised by the scheduler.
+  !! @param filename The file that raised the error.
+  !! @param line_number The line that raised the error.
+  !! @param message The error message, if any.
+  subroutine throw_to_pfunit(filename, line_number, message)
+    character(len=*), intent(in) :: filename
+    integer, intent(in) :: line_number
+    character(len=*), optional, intent(in) :: message
+
+    call throw('neko_error was called', SourceLocation(filename, line_number))
+
+  end subroutine throw_to_pfunit
+
+  !> Read the parameter `p` from a JSON string, catching any error.
+  !! @param json_string The JSON holding `p`.
+  !! @param sched The scheduler, initialised here.
+  !! @param target The variable `p` may be registered for.
+  !! @param value The value read.
+  !! @param raised Whether an error was raised.
+  subroutine read_p(json_string, sched, target, value, raised)
+    character(len=*), intent(in) :: json_string
+    type(continuation_scheduler_t), intent(inout) :: sched
+    real(kind=rp), target, intent(inout) :: target
+    real(kind=rp), intent(out) :: value
+    logical, intent(out) :: raised
+    type(json_file) :: json
+
+    call json%initialize()
+    call json%load_from_string(json_string)
+    call sched%init(json)
+
+    value = -1.0_rp
+    throw_error => throw_to_pfunit
+    call sched%json_get_or_register(json, 'p', target, value)
+    raised = catch()
+    throw_error => default_throw_error
+
+    call json%destroy()
+  end subroutine read_p
+
+  @test(npes=[1])
+  subroutine test_real_constant_is_a_scalar(this)
+    class(continuation_scheduler_tc), intent(inout) :: this
+    type(continuation_scheduler_t) :: sched
+    real(kind=rp), target :: target
+    real(kind=rp) :: value
+    logical :: raised
+    integer :: n_params
+
+    call read_p('{"p": "penalty"}', sched, target, value, raised)
+    n_params = sched%get_n_params()
+    call sched%free()
+
+    @assertFalse(raised, 'A real constant raised an error')
+    @assertEqual(3.0_rp, value, 'Value of the real constant')
+    @assertEqual(0, n_params, 'A real constant was registered')
+  end subroutine test_real_constant_is_a_scalar
+
+  @test(npes=[1])
+  subroutine test_vector_constant_is_an_array(this)
+    class(continuation_scheduler_tc), intent(inout) :: this
+    type(continuation_scheduler_t) :: sched
+    real(kind=rp), target :: target
+    real(kind=rp) :: value, values(3), after(3)
+    logical :: raised
+    integer :: n_params, iterations
+
+    call read_p('{"p": "penalties", "p_iterations": "steps"}', sched, &
+         target, value, raised)
+    n_params = sched%get_n_params()
+    values = -1.0_rp
+    iterations = -1
+    if (n_params .eq. 1) then
+       values = sched%params(1)%values
+       iterations = sched%params(1)%iterations_per_value
+    end if
+    ! Two iterations per value: iterations 2, 3 and 5 take values 1, 2, 4.
+    call sched%update(2)
+    after(1) = target
+    call sched%update(3)
+    after(2) = target
+    call sched%update(5)
+    after(3) = target
+    call sched%free()
+
+    @assertFalse(raised, 'A vector constant raised an error')
+    @assertEqual(1.0_rp, value, 'First value of the vector constant')
+    @assertEqual(1, n_params, 'Parameters registered')
+    @assertEqual([1.0_rp, 2.0_rp, 4.0_rp], values, 'Values registered')
+    @assertEqual(2, iterations, 'Iterations per value, from a constant')
+    @assertEqual([1.0_rp, 2.0_rp, 4.0_rp], after, 'Values stepped through')
+  end subroutine test_vector_constant_is_an_array
+
+  @test(npes=[1])
+  subroutine test_integer_constant_raises(this)
+    class(continuation_scheduler_tc), intent(inout) :: this
+    type(continuation_scheduler_t) :: sched
+    real(kind=rp), target :: target
+    real(kind=rp) :: value
+    logical :: raised
+
+    call read_p('{"p": "steps"}', sched, target, value, raised)
+    call sched%free()
+
+    @assertTrue(raised, 'An integer constant raised no error')
+  end subroutine test_integer_constant_raises
+
+  @test(npes=[1])
+  subroutine test_missing_constant_raises(this)
+    class(continuation_scheduler_tc), intent(inout) :: this
+    type(continuation_scheduler_t) :: sched
+    real(kind=rp), target :: target
+    real(kind=rp) :: value
+    logical :: raised
+
+    call read_p('{"p": "no_such_constant"}', sched, target, value, raised)
+    call sched%free()
+
+    @assertTrue(raised, 'A missing constant raised no error')
+  end subroutine test_missing_constant_raises
+
+end module test_continuation_scheduler

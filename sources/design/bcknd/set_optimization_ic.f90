@@ -45,7 +45,8 @@ module optimization_ic
   use coefs, only : coef_t
   use math, only : col2, cfill, cfill_mask
   use json_module, only : json_file
-  use json_utils, only: json_get, json_get_or_default
+  use json_utils, only: json_get, json_get_or_default, json_get_or_lookup, &
+       json_get_or_lookup_or_default
   use point_zone, only: point_zone_t
   use point_zone_registry, only: neko_point_zone_registry
   use registry, only: neko_registry
@@ -101,20 +102,21 @@ contains
 
     select case (trim(type))
     case ('uniform')
-       call json_get(params, 'value', ic_value)
+       call json_get_or_lookup(params, 'value', ic_value)
        call set_optimization_ic_uniform(fld, ic_value)
 
     case ('point_zone')
-       call json_get(params, 'base_value', ic_value)
+       call json_get_or_lookup(params, 'base_value', ic_value)
        call json_get(params, 'zone_name', read_str)
-       call json_get(params, 'zone_value', zone_value)
+       call json_get_or_lookup(params, 'zone_value', zone_value)
 
        call set_optimization_ic_point_zone(fld, ic_value, read_str, zone_value)
 
     case ('field')
        call json_get(params, 'file_name', fname)
        call json_get_or_default(params, 'interpolate', interpolate, .false.)
-       call json_get_or_default(params, 'tolerance', tol, 0.000001_dp)
+       call json_get_or_lookup_or_default(params, 'tolerance', tol, &
+            0.000001_dp)
        call json_get_or_default(params, 'mesh_file_name', mesh_fname, "none")
 
        call set_optimization_ic_fld(fld, fname, interpolate, tol, mesh_fname)

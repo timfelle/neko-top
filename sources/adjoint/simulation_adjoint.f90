@@ -41,7 +41,7 @@ module simulation_adjoint
   use file, only: file_t
   use logger, only: LOG_SIZE, neko_log
   use profiler, only: profiler_start_region, profiler_end_region
-  use json_utils, only: json_get_or_default
+  use json_utils, only: json_get_or_default, json_get_or_lookup
   use time_state, only : time_state_t
   use time_step_controller, only: time_step_controller_t
   use adjoint_case, only: adjoint_case_t
@@ -261,9 +261,10 @@ contains
        call previous_meshf%read(C%fluid_adj%chkp%previous_mesh)
     end if
 
-    call C%case%params%get('case.mesh2mesh_tolerance', tol, found)
-
-    if (found) C%case%fluid%chkp%mesh2mesh_tol = tol
+    if (C%case%params%valid_path('case.mesh2mesh_tolerance')) then
+       call json_get_or_lookup(C%case%params, 'case.mesh2mesh_tolerance', tol)
+       C%case%fluid%chkp%mesh2mesh_tol = tol
+    end if
 
     call chkpf%init(trim(restart_file))
     call chkpf%read(C%fluid_adj%chkp)

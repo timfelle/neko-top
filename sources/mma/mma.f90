@@ -70,7 +70,7 @@ module mma
   ! Inclusions from Neko
   use num_types, only: rp, dp, sp
   use json_module, only: json_file
-  use json_utils, only: json_get_or_default
+  use json_utils, only: json_get_or_default, json_get_or_lookup_or_default
   use vector, only: vector_t
   use matrix, only: matrix_t
   use comm, only: pe_rank, NEKO_COMM, pe_size, MPI_REAL_PRECISION
@@ -278,27 +278,34 @@ contains
     ! ------------------------------------------------------------------------ !
     ! Assign defaults if nothing is parsed
     ! based on the Cpp Code by Niels
-    call json_get_or_default(json, 'mma.epsimin', epsimin, &
+    call json_get_or_lookup_or_default(json, 'mma.epsimin', epsimin, &
          1.0e-9_rp * sqrt(real(m + n_global, rp)))
-    call json_get_or_default(json, 'mma.max_iter', max_iter, max_iter_default)
+    call json_get_or_lookup_or_default(json, 'mma.max_iter', max_iter, &
+         max_iter_default)
 
     ! Following parameters are set based on eq.3.8:--------
-    call json_get_or_default(json, 'mma.asyinit', asyinit, asyinit_default)
-    call json_get_or_default(json, 'mma.asyincr', asyincr, asyincr_default)
-    call json_get_or_default(json, 'mma.asydecr', asydecr, asydecr_default)
+    call json_get_or_lookup_or_default(json, 'mma.asyinit', asyinit, &
+         asyinit_default)
+    call json_get_or_lookup_or_default(json, 'mma.asyincr', asyincr, &
+         asyincr_default)
+    call json_get_or_lookup_or_default(json, 'mma.asydecr', asydecr, &
+         asydecr_default)
 
     call json_get_or_default(json, 'mma.backend', bcknd, bcknd_default)
     call json_get_or_default(json, 'mma.subsolver', subsolver, subsolver_default)
 
-    call json_get_or_default(json, 'mma.xmin', xmin_const, xmin_default)
-    call json_get_or_default(json, 'mma.xmax', xmax_const, xmax_default)
-    call json_get_or_default(json, 'mma.a0', a0, a0_default)
-    call json_get_or_default(json, 'mma.a', a_const, a_default)
-    call json_get_or_default(json, 'mma.c', c_const, c_default)
-    call json_get_or_default(json, 'mma.d', d_const, d_default)
-    call json_get_or_default(json, 'mma.move_limit', move_limit, move_limit_default)
+    call json_get_or_lookup_or_default(json, 'mma.xmin', xmin_const, &
+         xmin_default)
+    call json_get_or_lookup_or_default(json, 'mma.xmax', xmax_const, &
+         xmax_default)
+    call json_get_or_lookup_or_default(json, 'mma.a0', a0, a0_default)
+    call json_get_or_lookup_or_default(json, 'mma.a', a_const, a_default)
+    call json_get_or_lookup_or_default(json, 'mma.c', c_const, c_default)
+    call json_get_or_lookup_or_default(json, 'mma.d', d_const, d_default)
+    call json_get_or_lookup_or_default(json, 'mma.move_limit', move_limit, &
+         move_limit_default)
 
-    call json_get_or_default(json, 'mma.scale', scale, scale_default)
+    call json_get_or_lookup_or_default(json, 'mma.scale', scale, scale_default)
     call json_get_or_default(json, 'mma.auto_scale', auto_scale, auto_scale_default)
 
     ! Initialize the MMA object with the parsed parameters

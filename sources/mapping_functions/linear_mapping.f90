@@ -41,7 +41,7 @@ module linear_mapping
   use json_module, only: json_file
   use field, only: field_t
   use coefs, only: coef_t
-  use json_utils, only: json_get, json_get_or_default
+  use json_utils, only: json_get, json_get_or_lookup_or_default
   use continuation_scheduler, only: nekotop_continuation
   implicit none
   private
@@ -77,7 +77,7 @@ contains
     type(coef_t), intent(inout) :: coef
     real(kind=rp) :: f_min, f_max
 
-    call json_get_or_default(json, 'f_min', f_min, 0.0_rp)
+    call json_get_or_lookup_or_default(json, 'f_min', f_min, 0.0_rp)
     call nekotop_continuation%json_get_or_register(json, 'f_max', this%f_max, &
          f_max)
 

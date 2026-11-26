@@ -38,7 +38,8 @@ module mma_optimizer
   use problem, only: problem_t
   use num_types, only: rp
   use utils, only: neko_error
-  use json_utils, only: json_get, json_get_or_default
+  use json_utils, only: json_get, json_get_or_default, &
+       json_get_or_lookup_or_default
   use simulation_m, only: simulation_t
   use design, only: design_t
   use brinkman_design, only: brinkman_design_t
@@ -129,9 +130,9 @@ contains
 
     ! Read the solver properties from the JSON file
     call json_get(parameters, 'optimization.solver', solver_parameters)
-    call json_get_or_default(solver_parameters, 'max_iterations', &
+    call json_get_or_lookup_or_default(solver_parameters, 'max_iterations', &
          max_iterations, 100)
-    call json_get_or_default(solver_parameters, 'tolerance', &
+    call json_get_or_lookup_or_default(solver_parameters, 'tolerance', &
          tolerance, 1.0e-3_rp)
     call json_get_or_default(solver_parameters, 'enable_output', &
          enable_output, .true.)

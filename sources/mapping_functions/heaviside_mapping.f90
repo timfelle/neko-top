@@ -46,7 +46,7 @@ module heaviside_mapping
   use heaviside_mapping_cpu, only: &
        heaviside_mapping_apply_cpu, &
        heaviside_mapping_apply_backward_cpu
-  use json_utils, only: json_get_or_default
+  use json_utils, only: json_get_or_lookup_or_default
   use utils, only: neko_error
   use continuation_scheduler, only: nekotop_continuation
 
@@ -91,7 +91,7 @@ contains
     type(coef_t), intent(inout) :: coef
     real(kind=rp) :: eta, beta
 
-    call json_get_or_default(json, 'eta', eta, 0.5_rp)
+    call json_get_or_lookup_or_default(json, 'eta', eta, 0.5_rp)
 
     call nekotop_continuation%json_get_or_register(json, 'beta', this%beta, &
          beta)

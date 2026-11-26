@@ -61,7 +61,8 @@ module PDE_filter_mapping
   use sx_jacobi, only: sx_jacobi_t
   use utils, only: neko_error
   use device_math, only: device_cfill, device_subcol3, device_cmult
-  use json_utils, only: json_get, json_get_or_default
+  use json_utils, only: json_get, json_get_or_default, &
+       json_get_or_lookup_or_default
   use continuation_scheduler, only: nekotop_continuation
   implicit none
   private
@@ -134,8 +135,8 @@ contains
     logical :: strict_convergence
 
     call nekotop_continuation%json_get_or_register(json, 'r', this%r, r)
-    call json_get_or_default(json, 'tol', tol, 0.0000000001_rp)
-    call json_get_or_default(json, 'max_iter', max_iter, 200)
+    call json_get_or_lookup_or_default(json, 'tol', tol, 0.0000000001_rp)
+    call json_get_or_lookup_or_default(json, 'max_iter', max_iter, 200)
     call json_get_or_default(json, 'solver', ksp_solver, "cg")
     call json_get_or_default(json, 'preconditioner', precon_type, "jacobi")
     call json_get_or_default(json, 'strict_convergence', strict_convergence, &

@@ -54,7 +54,8 @@ module adjoint_scalar_scheme
   use time_scheme_controller, only : time_scheme_controller_t
   use logger, only : neko_log, LOG_SIZE, NEKO_LOG_VERBOSE
   use registry, only : neko_registry
-  use json_utils, only : json_get, json_get_or_default, json_extract_item
+  use json_utils, only : json_get, json_get_or_default, json_extract_item, &
+       json_get_or_lookup, json_get_or_lookup_or_default
   use json_module, only : json_file
   use user_intf, only : user_t, dummy_user_material_properties, &
        user_material_properties_intf
@@ -300,18 +301,18 @@ contains
 
     params_selected => json_key_fallback(params_adjoint, params_primal, &
          'solver.absolute_tolerance')
-    call json_get(params_selected, 'solver.absolute_tolerance', &
+    call json_get_or_lookup(params_selected, 'solver.absolute_tolerance', &
          solver_abstol)
 
     params_selected => json_key_fallback(params_adjoint, params_primal, &
          'solver.projection_space_size')
-    call json_get_or_default(params_selected, &
+    call json_get_or_lookup_or_default(params_selected, &
          'solver.projection_space_size', &
          this%projection_dim, 0)
 
     params_selected => json_key_fallback(params_adjoint, params_primal, &
          'solver.projection_hold_steps')
-    call json_get_or_default(params_selected, &
+    call json_get_or_lookup_or_default(params_selected, &
          'solver.projection_hold_steps', &
          this%projection_activ_step, 5)
 
@@ -375,7 +376,7 @@ contains
     ! todo parameter file ksp tol should be added
     params_selected => json_key_fallback(params_adjoint, params_primal, &
          'solver.max_iterations')
-    call json_get_or_default(params_selected, &
+    call json_get_or_lookup_or_default(params_selected, &
          'solver.max_iterations', &
          integer_val, KSP_MAX_ITER)
     params_selected => json_key_fallback(params_adjoint, params_primal, &
@@ -623,7 +624,7 @@ contains
           call neko_log%message(log_buf, lvl = NEKO_LOG_VERBOSE)
 
           ! Read Pe into lambda for further manipulation.
-          call json_get(params_primal, 'Pe', const_lambda)
+          call json_get_or_lookup(params_primal, 'Pe', const_lambda)
           write(log_buf, '(A,ES13.6)') 'Pe         :', const_lambda
           call neko_log%message(log_buf)
 
@@ -633,8 +634,8 @@ contains
           const_lambda = 1.0_rp/const_lambda
           ! Dimensional case
        else
-          call json_get(params_primal, 'lambda', const_lambda)
-          call json_get(params_primal, 'cp', const_cp)
+          call json_get_or_lookup(params_primal, 'lambda', const_lambda)
+          call json_get_or_lookup(params_primal, 'cp', const_cp)
        end if
     end if
     ! We need to fill the fields based on the parsed const values

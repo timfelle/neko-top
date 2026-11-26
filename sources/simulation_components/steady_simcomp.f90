@@ -38,7 +38,7 @@ module steady_simcomp
   use num_types, only: rp, dp
   use field, only: field_t
   use json_module, only: json_file
-  use json_utils, only: json_get_or_default
+  use json_utils, only: json_get_or_default, json_get_or_lookup_or_default
   use case, only: case_t
   use field_math, only: field_sub2, field_copy
   use math, only: glsc3
@@ -123,9 +123,9 @@ contains
     call this%init_base(json, case)
 
     ! Read the tolerance
-    call json_get_or_default(json, "tol", tol, 1.0e-6_rp)
+    call json_get_or_lookup_or_default(json, "tol", tol, 1.0e-6_rp)
     ! Read the log frequency
-    call json_get_or_default(json, "log_frequency", log_frequency, 50)
+    call json_get_or_lookup_or_default(json, "log_frequency", log_frequency, 50)
     call json_get_or_default(json, "scalar_coupled", this%scalar_coupled, .false.)
 
     call this%init_from_attributes(tol, log_frequency)

@@ -51,7 +51,7 @@ module simple_design
   use simulation_m, only: simulation_t
   use comm, only: pe_size
   use json_module, only: json_file
-  use json_utils, only: json_get, json_get_or_default
+  use json_utils, only: json_get, json_get_or_default, json_get_or_lookup
   use simple_brinkman_source_term, only: simple_brinkman_source_term_t
   use vector, only: vector_t
   use math, only: copy
@@ -131,10 +131,14 @@ contains
 
     select case (trim(type))
     case ("box")
-       call json_get(parameters, 'optimization.design.domain.nx', nx)
-       call json_get(parameters, 'optimization.design.domain.ny', ny)
-       call json_get(parameters, 'optimization.design.domain.nz', nz)
-       call json_get(parameters, 'optimization.design.domain.limits', limits)
+       call json_get_or_lookup(parameters, 'optimization.design.domain.nx', &
+            nx)
+       call json_get_or_lookup(parameters, 'optimization.design.domain.ny', &
+            ny)
+       call json_get_or_lookup(parameters, 'optimization.design.domain.nz', &
+            nz)
+       call json_get_or_lookup(parameters, &
+            'optimization.design.domain.limits', limits)
        n = (nx + 1) * (ny + 1) * (nz + 1)
        this%nx = nx
        this%ny = ny

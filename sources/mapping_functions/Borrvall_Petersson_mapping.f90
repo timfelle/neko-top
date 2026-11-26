@@ -46,7 +46,7 @@ module Borrvall_Petersson_mapping
   use Borrvall_Petersson_mapping_cpu, only: &
        Borrvall_Petersson_mapping_apply_cpu, &
        Borrvall_Petersson_mapping_apply_backward_cpu
-  use json_utils, only: json_get, json_get_or_default
+  use json_utils, only: json_get, json_get_or_lookup_or_default
   use logger, only: neko_log
   use continuation_scheduler, only: nekotop_continuation
   implicit none
@@ -111,7 +111,7 @@ contains
     type(coef_t), intent(inout) :: coef
     real(kind=rp) :: f_min, f_max, q
 
-    call json_get_or_default(json, 'f_min', f_min, 0.0_rp)
+    call json_get_or_lookup_or_default(json, 'f_min', f_min, 0.0_rp)
     call nekotop_continuation%json_get_or_register(json, 'f_max', this%f_max, &
          f_max)
     call nekotop_continuation%json_get_or_register(json, 'q', this%q, q, 1.0_rp)

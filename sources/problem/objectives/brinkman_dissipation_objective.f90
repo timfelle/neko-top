@@ -53,7 +53,8 @@ module brinkman_dissipation_objective
   use mask_ops, only: mask_exterior_const, compute_masked_volume
   use utils, only: neko_error
   use json_module, only: json_file
-  use json_utils, only: json_get, json_get_or_default
+  use json_utils, only: json_get, json_get_or_default, &
+       json_get_or_lookup_or_default
   use registry, only: neko_registry
   use interpolation, only: interpolator_t
   use space, only: space_t, GL
@@ -153,8 +154,8 @@ contains
          dealias_sensitivity, dealias_fallback)
     call json_get_or_default(json, "dealias_forcing", &
          dealias_forcing, dealias_fallback)
-    call json_get_or_default(json, "start_time", start_time, 0.0_dp)
-    call json_get_or_default(json, "end_time", end_time, huge(0.0_dp))
+    call json_get_or_lookup_or_default(json, "start_time", start_time, 0.0_dp)
+    call json_get_or_lookup_or_default(json, "end_time", end_time, huge(0.0_dp))
 
     ! The two keys select one quadrature. Set differently, the sensitivity
     ! is not the gradient of any value this objective could report.

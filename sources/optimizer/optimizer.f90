@@ -51,7 +51,7 @@ module optimizer
        mkdir
   use csv_file, only: csv_file_t
   use vector, only: vector_t
-  use json_utils, only: json_get_or_default
+  use json_utils, only: json_get_or_default, json_get_or_lookup_or_default
   use comm, only: pe_rank, MPI_REAL_PRECISION, NEKO_COMM
   use continuation_scheduler, only: nekotop_continuation
   use math, only: Neko_EPS
@@ -427,7 +427,7 @@ contains
 
     call json_get_or_default(solver_params, 'max_runtime', read_str, "")
     call read_duration(read_str, this%max_runtime)
-    call json_get_or_default(solver_params, 'stop_design_change', &
+    call json_get_or_lookup_or_default(solver_params, 'stop_design_change', &
          this%stop_design_change, NEKO_EPS)
 
     call json_get_or_default(solver_params, 'restart_file', read_str, &
@@ -443,7 +443,8 @@ contains
     call json_get_or_default(solver_params, 'checkpoint.format', read_str, &
          this%checkpoint_format)
     this%checkpoint_format = read_str
-    call json_get_or_default(solver_params, 'checkpoint.interval', read_int, &
+    call json_get_or_lookup_or_default(solver_params, 'checkpoint.interval', &
+         read_int, &
          this%checkpoint_interval)
     this%checkpoint_interval = read_int
     call json_get_or_default(solver_params, 'checkpoint.overwrite', &

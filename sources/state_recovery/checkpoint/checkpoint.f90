@@ -37,7 +37,8 @@ module state_recover_checkpoint
   use num_types, only: rp
   use case, only: case_t
   use json_file_module, only: json_file
-  use json_utils, only: json_get, json_get_or_default
+  use json_utils, only: json_get, json_get_or_default, &
+       json_get_or_lookup_or_default
   use chkp_output, only: chkp_output_t
   use field, only: field_t
   use field_list, only: field_list_t
@@ -150,7 +151,7 @@ contains
     logical :: keep_checkpoints
 
     call json_get_or_default(params, "algorithm", algorithm, "linear")
-    call json_get_or_default(params, "n_memory", n_saves_memory, 10)
+    call json_get_or_lookup_or_default(params, "n_memory", n_saves_memory, 10)
     call json_get_or_default(params, "path", path, "checkpoints/")
     call json_get_or_default(params, "filename", filename, "checkpoint")
     call json_get_or_default(params, "format", fmt, "chkp")

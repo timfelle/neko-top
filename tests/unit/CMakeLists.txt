@@ -50,6 +50,7 @@ add_subdirectory(mapping)
 add_subdirectory(adjoint)
 add_subdirectory(mma)
 add_subdirectory(constraints)
+add_subdirectory(continuation)
 
 # ============================================================================ #
 # Add the listed tests to the CMake project.

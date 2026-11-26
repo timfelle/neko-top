@@ -87,14 +87,15 @@ program topopt_user
   ! -------------------------------------------------------------------------- !
   ! Initialization of the components
 
-  ! initialize the global continuation_scheduler object (nekotop_continuation)
-  call nekotop_continuation%init(parameters)
-
   ! initialize the user additions for the forward (through the neko interface)
   call user_setup(sim%neko_case%user)
 
   ! initialize the simulation
   call sim%init(parameters)
+
+  ! initialize the global continuation_scheduler object (nekotop_continuation)
+  ! after the simulation, which fills the constants it may look up
+  call nekotop_continuation%init(parameters)
 
   ! initialize the design
   call design_factory(des, design_parameters, sim)

@@ -88,7 +88,7 @@ module viscous_dissipation_objective
   use math_ext, only: glsc2_mask
   use utils, only: neko_error
   use json_module, only: json_file
-  use json_utils, only: json_get_or_default
+  use json_utils, only: json_get_or_default, json_get_or_lookup_or_default
   use continuation_scheduler, only: nekotop_continuation
   implicit none
   private
@@ -157,8 +157,8 @@ contains
          this%weight, weight, 1.0_rp)
     call json_get_or_default(json, "mask_name", mask_name, "")
     call json_get_or_default(json, "name", name, "Viscous dissipation")
-    call json_get_or_default(json, "start_time", start_time, 0.0_dp)
-    call json_get_or_default(json, "end_time", end_time, huge(0.0_dp))
+    call json_get_or_lookup_or_default(json, "start_time", start_time, 0.0_dp)
+    call json_get_or_lookup_or_default(json, "end_time", end_time, huge(0.0_dp))
 
     call this%init_from_attributes(design, simulation, weight, name, &
          mask_name, start_time, end_time)

@@ -83,8 +83,8 @@ program problem_tester
   ! -------------------------------------------------------------------------- !
   ! Initialization of the components
 
-  call nekotop_continuation%init(parameters)
   call sim%init(parameters)
+  call nekotop_continuation%init(parameters)
   call des%init(design_parameters, sim)
   call prob%init(parameters, des, sim)
   if (continuation_iteration .gt. 0) then

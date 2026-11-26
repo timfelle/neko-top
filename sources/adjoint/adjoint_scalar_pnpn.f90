@@ -63,7 +63,8 @@ module adjoint_scalar_pnpn
   use logger, only : neko_log, LOG_SIZE, NEKO_LOG_DEBUG
   use advection_adjoint, only : advection_adjoint_t, advection_adjoint_factory
   use profiler, only : profiler_start_region, profiler_end_region
-  use json_utils, only : json_get, json_get_or_default, json_extract_item
+  use json_utils, only : json_get, json_get_or_default, json_extract_item, &
+       json_get_or_lookup
   use json_module, only : json_file, json_core, json_value
   use user_intf, only : user_t
   use neko_config, only : NEKO_BCKND_DEVICE
@@ -545,7 +546,7 @@ contains
           ! Check that we are not trying to assing a bc to zone, for which one
           ! has already been assigned and that the zone has more than 0 size
           ! in the mesh.
-          call json_get(bc_subdict, "zone_indices", zone_indices)
+          call json_get_or_lookup(bc_subdict, "zone_indices", zone_indices)
 
           do j = 1, size(zone_indices)
              zone_size = this%msh%labeled_zones(zone_indices(j))%size

@@ -59,7 +59,8 @@ module steepest_descent_optimizer
   use simulation_m, only: simulation_t
   use num_types, only: rp
   use utils, only: neko_error
-  use json_utils, only: json_get, json_get_or_default
+  use json_utils, only: json_get, json_get_or_default, &
+       json_get_or_lookup_or_default
   use logger, only: neko_log
   use profiler, only: profiler_start_region, profiler_end_region
   use scratch_registry, only: neko_scratch_registry
@@ -186,28 +187,30 @@ contains
     end if
 
     ! Read and validate the optimizer settings
-    call json_get_or_default(solver_parameters, 'max_iterations', &
+    call json_get_or_lookup_or_default(solver_parameters, 'max_iterations', &
          max_iterations, 100)
     call json_get_or_default(solver_parameters, 'enable_output', &
          this%enable_output, .true.)
 
-    call json_get_or_default(solver_parameters, 'steepest_descent.xmin', &
+    call json_get_or_lookup_or_default(solver_parameters, &
+         'steepest_descent.xmin', &
          this%xmin, 0.0_rp)
-    call json_get_or_default(solver_parameters, 'steepest_descent.xmax', &
+    call json_get_or_lookup_or_default(solver_parameters, &
+         'steepest_descent.xmax', &
          this%xmax, 1.0_rp)
-    call json_get_or_default(solver_parameters, &
+    call json_get_or_lookup_or_default(solver_parameters, &
          'steepest_descent.step_length', this%step_length, 1.0_rp)
-    call json_get_or_default(solver_parameters, &
+    call json_get_or_lookup_or_default(solver_parameters, &
          'steepest_descent.move_limit.initial', this%move_limit_initial, &
          0.1_rp)
-    call json_get_or_default(solver_parameters, &
+    call json_get_or_lookup_or_default(solver_parameters, &
          'steepest_descent.move_limit.min', this%move_limit_min, 0.001_rp)
-    call json_get_or_default(solver_parameters, &
+    call json_get_or_lookup_or_default(solver_parameters, &
          'steepest_descent.move_limit.max', this%move_limit_max, 0.1_rp)
-    call json_get_or_default(solver_parameters, &
+    call json_get_or_lookup_or_default(solver_parameters, &
          'steepest_descent.move_limit.decrease', this%move_limit_decrease, &
          0.7_rp)
-    call json_get_or_default(solver_parameters, &
+    call json_get_or_lookup_or_default(solver_parameters, &
          'steepest_descent.move_limit.increase', this%move_limit_increase, &
          1.1_rp)
 

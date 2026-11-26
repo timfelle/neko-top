@@ -109,7 +109,7 @@ contains
             ADJOINT_FLUID_PNPN_KNOWN_BCS)
     end select
 
-    call json_get(json, "zone_indices", zone_indices)
+    call json_get_or_lookup(json, "zone_indices", zone_indices)
     call object%init(coef, json)
 
     do i = 1, size(zone_indices)
@@ -191,7 +191,7 @@ contains
             ADJOINT_FLUID_PNPN_KNOWN_BCS)
     end select
 
-    call json_get(json, "zone_indices", zone_indices)
+    call json_get_or_lookup(json, "zone_indices", zone_indices)
     call object%init(coef, json)
     do i = 1, size(zone_indices)
        call object%mark_labeled_zone(zone_indices(i))

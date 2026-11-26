@@ -34,7 +34,8 @@
 !
 !> Contains the factory routine for `advection_t` children.
 submodule (advection_adjoint) advection_adjoint_fctry
-  use json_utils, only: json_get, json_get_or_default
+  use json_utils, only: json_get, json_get_or_default, json_get_or_lookup, &
+       json_get_or_lookup_or_default
   use utils, only: neko_error
 
   ! Advection and derivatives
@@ -94,13 +95,13 @@ contains
     end if
 
     call json_get(json, 'dealias', dealias)
-    call json_get(json, 'polynomial_order', order)
+    call json_get_or_lookup(json, 'polynomial_order', order)
     call json_get_or_default(json, 'oifs', oifs, .false.)
 
-    call json_get_or_default(json, 'dealiased_polynomial_order', &
+    call json_get_or_lookup_or_default(json, 'dealiased_polynomial_order', &
          lxd, (3 * (order + 1)) / 2)
 
-    call json_get_or_default(json, 'target_cfl', ctarget, 1.9_rp)
+    call json_get_or_lookup_or_default(json, 'target_cfl', ctarget, 1.9_rp)
 
     if (oifs) then
        call neko_error("OIFS advection is not supported in the adjoint module.")
