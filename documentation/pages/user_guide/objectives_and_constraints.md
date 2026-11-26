@@ -69,28 +69,26 @@ value whether the simulation stops at \f$t = 6\f$ or continues to \f$t = 20\f$.
 A window that never overlaps the simulated interval accumulates nothing. The
 objective then reports zero and a warning is written to the log.
 
-\warning Setting `end_time` to exactly the simulation's own `end_time` is not
-the same as leaving it at its `+\infty` default. The adjoint forcing terms that
-objectives register are gated by `source_term_t`'s time window, which compares
-against the simulation time without a tolerance. The accumulated time of the
-final step lands within a few ULP of the prescribed `end_time`, on either side
-of it, so whether that step keeps its forcing is decided by round-off rather
-than by the case file, and when it loses it the sensitivity is wrong. Leave
-`end_time` unset unless a genuinely shorter window is wanted.
+The unsteady adjoint applies an objective's forcing at exactly the timesteps
+its average samples, decided by the same test. A window boundary placed on a
+timestep therefore needs no special care, and an `end_time` equal to the
+simulation's own behaves as the `+\infty` default. The forcing is also scaled
+by the length of the run over \f$|W|\f$. The term that couples the adjoint to
+the design is averaged over the whole run, and the scaling keeps the
+sensitivity that of the window average. The adjoint fields of a windowed
+objective are larger by the same factor.
 
 The window only applies to unsteady problems. A steady problem evaluates its
 objectives once, on the converged field, so `start_time` and `end_time` have no
-effect there.
+effect there, and a note in the log says so when either is set.
 
 The two paths agree wherever they are asking the same question. Once a problem
 has reached a steady state, an unsteady objective averaged over a window inside
 the converged part of the run reports what the steady path reports for the same
 problem: the field no longer changes, so its average over the window is its
-converged value. `tests/unit/objectives/steady_unsteady_converged` is exactly
-this check, and it holds to the iterative solvers' own round-off. Note that
-`steady_simcomp` freezes the fluid on convergence but not the scalar, so set
-`scalar_coupled` when a scalar objective is involved, or the objective may be
-evaluated on a scalar that has not settled.
+converged value. The `steady` simulation component, which drives a steady
+problem to convergence and freezes the fluid there, belongs to the steady path
+alone: an unsteady problem that declares it stops with an error at setup.
 
 They also agree trivially at the end of any run, converged or not: an unsteady
 objective windowed to the final timestep alone reports exactly what the steady
@@ -198,8 +196,8 @@ based on lubrication theory written by Gersborg-Hansen et al.
 | `weight`| The weight used in the objective. | Real | `1.0` |
 | `mask_name` | The name of the `point_zone` indicating \f$\Omega_\text{obj}\f$. | String | `""`|
 | `name`| The name that will appear in `objective_data.csv` | String | `Out of plane stresses`|
-| `dealias_forcing`| If the objective is integrated on the over-integration (Gauss-Legendre) points rather than the GLL points. Must equal `dealias_sensitivity`. | logical | `.true.`|
-| `dealias_sensitivity`| Must equal `dealias_forcing`. | logical | `.true.`|
+| `dealias_forcing`| If the objective is integrated on the over-integration (Gauss-Legendre) points rather than the GLL points. Must equal `dealias_sensitivity`. See [Adjoint over-integration](@ref configuration-adjoint-dealias) | logical | `case.numerics.dealias`|
+| `dealias_sensitivity`| Must equal `dealias_forcing`. See [Adjoint over-integration](@ref configuration-adjoint-dealias) | logical | `case.numerics.dealias`|
 | `start_time` | Start of the active time window for unsteady accumulation. | Real | `0.0` |
 | `end_time` | End of the active time window for unsteady accumulation. | Real | `+\infty` |
 
@@ -207,8 +205,9 @@ based on lubrication theory written by Gersborg-Hansen et al.
 the objective's value, its adjoint forcing and its sensitivity. The
 sensitivity is the gradient of the reported value only when all three use the
 same one, so a case that sets the two keys differently is rejected. The
-over-integration space is the one the adjoint solver always builds, so these
-keys act whether or not `numerics.dealias` is set.
+adjoint solver builds its over-integration space on demand and this objective
+requests it when the keys are `true`, so they act whether or not
+`numerics.dealias` is set.
 
 ### Scalar mixing {#objective_scalar_mixing}
 

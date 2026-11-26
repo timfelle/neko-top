@@ -1,6 +1,6 @@
 !> @file design_brinkman.f90
 !! @copyright
-!! Copyright (c) 2024-2025, The Neko-TOP Authors
+!! Copyright (c) 2024-2026, The Neko-TOP Authors
 !! All rights reserved.
 !!
 !! Redistribution and use in source and binary forms, with or without
@@ -171,11 +171,11 @@ module brinkman_design
      !> A mask indicating the optimization domain
      class(point_zone_t), pointer :: optimization_domain
      !> A logical if we're restricting the optimization domain
-     logical :: has_mask
+     logical :: has_mask = .false.
      !> SEM coefficients
      class(coef_t), pointer :: coef
      !> Average mass matrix
-     real(kind=rp) :: avg_B
+     real(kind=rp) :: avg_B = 0.0_rp
 
      ! TODO
      ! you also had logicals for convergence etc,
@@ -260,6 +260,9 @@ module brinkman_design
 contains
 
   !> Initialize the design from a JSON file
+  !! @param this The design.
+  !! @param parameters The JSON parameters of the design.
+  !! @param simulation The simulation the design is injected into.
   subroutine brinkman_design_init_from_json_sim(this, parameters, simulation)
     class(brinkman_design_t), intent(inout) :: this
     type(json_file), intent(inout) :: parameters
@@ -267,12 +270,14 @@ contains
     type(json_file) :: json_subdict
     character(len=:), allocatable :: domain_name, domain_type, name
     character(len=:), allocatable :: output_format_str, output_precision_str
-    logical :: dealias, verbose_design, verbose_sensitivity
+    logical :: dealias, dealias_fallback, verbose_design, verbose_sensitivity
     integer :: output_precision
 
     call json_get_or_default(parameters, 'name', name, 'Brinkman Design')
     call json_get_or_default(parameters, 'domain.type', domain_type, 'full')
-    call json_get_or_default(parameters, 'dealias', dealias, .true.)
+    call json_get(simulation%neko_case%params, 'case.numerics.dealias', &
+         dealias_fallback)
+    call json_get_or_default(parameters, 'dealias', dealias, dealias_fallback)
     call json_get_or_default(parameters, 'verbose_design', verbose_design, &
          .false.)
     call json_get_or_default(parameters, 'verbose_sensitivity', &
@@ -310,18 +315,17 @@ contains
     ! Initialize and inject into the simulation
     call this%init_from_components(name, simulation, dealias)
 
-    ! Initialize the mapper
+    ! Add the mapping cascade and its output, then set the initial design
     associate(coef => simulation%neko_case%fluid%c_Xh, &
          gs => simulation%neko_case%fluid%gs_Xh)
 
-      if ('mapping' .in. parameters) then
-         call this%mapping%init_base(coef)
-         call this%mapping%add(parameters, 'mapping')
-         call this%mapping%init_output_fields(this%design_indicator, &
-              this%brinkman_amplitude, this%sensitivity, verbose_design, &
-              verbose_sensitivity, output_precision, output_format_str, &
-              'design', 'sensitivity')
-      end if
+      ! Without a "mapping" the cascade stays empty, and the Brinkman
+      ! amplitude is the design made continuous.
+      call this%mapping%add(parameters, 'mapping')
+      call this%mapping%init_output_fields(this%design_indicator, &
+           this%brinkman_amplitude, this%sensitivity, verbose_design, &
+           verbose_sensitivity, output_precision, output_format_str, &
+           'design', 'sensitivity')
 
       if ('initial_distribution' .in. parameters) then
          call json_get(parameters, 'initial_distribution', json_subdict)
@@ -338,6 +342,7 @@ contains
   end subroutine brinkman_design_init_from_json_sim
 
   !> Free the design
+  !! @param this The design.
   subroutine brinkman_design_free(this)
     class(brinkman_design_t), intent(inout) :: this
 
@@ -346,9 +351,20 @@ contains
     nullify(this%brinkman_amplitude)
     nullify(this%design_indicator)
     nullify(this%sensitivity)
+    nullify(this%optimization_domain)
+    nullify(this%coef)
+    this%has_mask = .false.
+    this%avg_B = 0.0_rp
 
   end subroutine brinkman_design_free
 
+  !> Initialise the design from components
+  !! @details The mapping cascade is left empty, so the Brinkman amplitude is
+  !! the design made continuous.
+  !! @param this The design.
+  !! @param name The name of the design.
+  !! @param simulation The simulation the design is injected into.
+  !! @param dealias Whether the Brinkman source terms are dealiased.
   subroutine brinkman_design_init_from_components(this, name, simulation, &
        dealias)
     class(brinkman_design_t), intent(inout) :: this
@@ -371,6 +387,7 @@ contains
     this%sensitivity => neko_registry%get_field("sensitivity")
 
     this%coef => simulation%fluid%c_Xh
+    call this%mapping%init_base(simulation%fluid%c_Xh)
 
     ! TODO
     ! this is where we steal basically everything in
@@ -417,7 +434,13 @@ contains
     call this%init_base(name, n)
 
     ! compute the average mass matrix
-    this%avg_B = this%coef%volume / real(simulation%fluid%glb_unique_points)
+    this%avg_B = this%coef%volume / &
+         real(simulation%fluid%glb_unique_points, kind=rp)
+
+    ! The over-integration stack is only needed if the Brinkman terms dealias
+    if (dealias) then
+       call simulation%adjoint_fluid%require_gauss_stack()
+    end if
 
     ! init the simple brinkman term for the forward problem
     call forward_brinkman%init_from_components( &

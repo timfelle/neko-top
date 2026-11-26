@@ -9,16 +9,21 @@ fi
 binary="$1"
 case_file="$2"
 case_name="$(basename "$case_file")"
+case_stem="${case_name%.*}"
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# This suite runs realistic (~1000-timestep) forward+adjoint solves per
-# perturbation and is not meant to gate every PR. It is opt-in: unset (or
-# empty) NEKO_TOP_RUN_SENSITIVITY_REGRESSION means "skip", matching how
-# run_valgrind_check.sh skips when the `valgrind` tool itself is absent, but
-# here the gate is an explicit choice rather than a tool-availability check.
+# This script is shared by both tiers of the sensitivity regression lane
+# (see CMakeLists.txt). The fast tier sets
+# NEKO_TOP_RUN_SENSITIVITY_REGRESSION=1 in its own test command, so it
+# always passes the check below. The slow tier inherits the caller's
+# environment: unset (or empty) NEKO_TOP_RUN_SENSITIVITY_REGRESSION means
+# "skip", matching how run_valgrind_check.sh skips when the `valgrind` tool
+# itself is absent, but here the gate is an explicit choice rather than a
+# tool-availability check.
 if [[ -z "${NEKO_TOP_RUN_SENSITIVITY_REGRESSION:-}" ]]; then
     echo "Skipping sensitivity regression test: set" \
-        "NEKO_TOP_RUN_SENSITIVITY_REGRESSION=1 to opt in (this lane is not" \
-        "part of the default/PR-blocking test budget)."
+        "NEKO_TOP_RUN_SENSITIVITY_REGRESSION=1 to opt in (the slow tier is" \
+        "not part of the default test budget)."
     exit 77
 fi
 
@@ -50,10 +55,35 @@ fi
 ranks="${NEKO_TOP_SENSITIVITY_RANKS:-2}"
 export NEKO_LOG_FILE="neko_${case_name%.*}.log"
 
+# The driver logs through Neko's `csv_file_t`, whose `overwrite` flag
+# defaults to false, so it opens the CSV with `position="append"`. A file
+# left behind by an earlier run of this same case would therefore be
+# appended to rather than replaced. Remove it, so the comparison below is
+# unambiguously against the output of the run we are about to make.
+csv_file="FD_check_${case_stem}.csv"
+rm -f "$csv_file"
+
 # The FD-vs-analytic tolerance assertion happens inside the driver itself
-# (shared `sensitivity` module, see tests/unit/sensitivity/sensitivity.f90) —
+# (shared `sensitivity` module, see tests/shared/sensitivity.f90) —
 # a non-zero exit here means the finite-difference check genuinely failed,
 # not just that something crashed.
 mpirun -n "$ranks" "$binary" "$case_name"
+
+# That assertion only establishes that the adjoint sensitivity and the
+# finite-difference estimate agree *with each other*; a change that moves
+# both together passes it untouched. Compare against the recorded solution
+# in reference_data/ as well, which is the part this lane was missing —
+# the reference files existed but nothing in ctest ever read them.
+#
+# --case scopes the comparison to this case: every registered case runs in
+# this one working directory (RESOURCE_LOCK "sensitivity_regression_workspace")
+# so the other cases' CSVs are present too, and an unscoped run would have
+# each case re-check every other case's output. In --case mode a missing
+# reference is a hard failure rather than a silent skip, so a newly
+# registered case cannot pass vacuously.
+python3 "${script_dir}/FD_check.py" \
+    --case "$case_stem" \
+    --reference-dir "${script_dir}/reference_data" \
+    --no-plot
 
 echo "Sensitivity regression check passed for ${case_name}."

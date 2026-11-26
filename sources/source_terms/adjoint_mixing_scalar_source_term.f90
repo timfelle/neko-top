@@ -47,6 +47,7 @@ module adjoint_mixing_scalar_source_term
   use coefs, only : coef_t
   use field_math, only: field_add2s2, field_copy, field_cadd
   use mask_ops, only: mask_exterior_const, compute_masked_volume
+  use math, only: abscmp
   use point_zone, only: point_zone_t
   implicit none
   private
@@ -64,8 +65,12 @@ module adjoint_mixing_scalar_source_term
   type, public, extends(source_term_t) :: adjoint_mixing_scalar_source_term_t
      !> The forward scalar field
      type(field_t), pointer :: s => null()
-     !> A scalaing factor
-     real(kind=rp) :: obj_scale
+     !> A scaling factor, the weight of the objective. Pointed to, so that
+     !! continuation updates of the weight reach the forcing.
+     real(kind=rp), pointer :: obj_scale => null()
+     !> Scale of the forcing, owned by the objective. Zero switches the
+     !! forcing off.
+     real(kind=rp), pointer :: scale => null()
      !> Reference concentration
      real(kind=rp) :: phi_ref
      !> A mask for where the source term is evaluated
@@ -116,25 +121,29 @@ contains
   !! @param this The source term.
   !! @param f_s RHS of the adjoint scalar.
   !! @param s the forward scalar field.
-  !! @param obj_scale a scaling factor.
+  !! @param obj_scale a scaling factor, the weight of the objective. Must
+  !! stay valid while the term is computed.
   !! @param phi_ref target concentration.
   !! @param mask the mask for the source term.
   !! @param if_mask whether to use the mask.
   !! @param coef The SEM coeffs.
   !! @param start_time start of the integration window.
   !! @param end_time end of the integration window.
+  !! @param scale scale of the forcing, owned by the objective.
   subroutine adjoint_mixing_scalar_source_term_init_from_components(this, &
-       f_s, s, obj_scale, phi_ref, mask, if_mask, coef, start_time, end_time)
+       f_s, s, obj_scale, phi_ref, mask, if_mask, coef, start_time, end_time, &
+       scale)
     class(adjoint_mixing_scalar_source_term_t), intent(inout) :: this
     type(field_t), pointer, intent(in) :: f_s
     type(field_t), intent(in), target :: s
-    real(kind=rp), intent(in) :: obj_scale
+    real(kind=rp), intent(in), target :: obj_scale
     real(kind=rp), intent(in) :: phi_ref
     class(point_zone_t), intent(in), pointer :: mask
     logical, intent(in) :: if_mask
     type(coef_t), intent(in) :: coef
     real(kind=rp), intent(in) :: start_time
     real(kind=rp), intent(in) :: end_time
+    real(kind=rp), pointer, intent(in) :: scale
 
     type(field_list_t) :: fields
 
@@ -150,7 +159,8 @@ contains
 
     ! point everything in the correct places
     this%s => s
-    this%obj_scale = obj_scale
+    this%obj_scale => obj_scale
+    this%scale => scale
     this%phi_ref = phi_ref
     this%if_mask = if_mask
 
@@ -170,6 +180,8 @@ contains
     call this%free_base()
     nullify(this%s)
     nullify(this%mask)
+    nullify(this%obj_scale)
+    nullify(this%scale)
 
   end subroutine adjoint_mixing_scalar_source_term_free
 
@@ -183,6 +195,8 @@ contains
     type(field_t), pointer :: work
     integer :: temp_indices(1)
 
+    ! Off outside the objective's time window
+    if (abscmp(this%scale, 0.0_rp)) return
 
     fs => this%fields%get(1)
 
@@ -197,7 +211,8 @@ contains
     end if
 
     ! append to RHS with scaling and mask volume
-    call field_add2s2(fs, work, this%obj_scale / this%mask_volume)
+    call field_add2s2(fs, work, &
+         this%scale * this%obj_scale / this%mask_volume)
     call neko_scratch_registry%relinquish_field(temp_indices)
 
 

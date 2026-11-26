@@ -1,6 +1,6 @@
 !> @file brinkman_dissipation_objective.f90
 !! @copyright
-!! Copyright (c) 2025, The Neko-TOP Authors
+!! Copyright (c) 2025-2026, The Neko-TOP Authors
 !! All rights reserved.
 !!
 !! Redistribution and use in source and binary forms, with or without
@@ -46,14 +46,14 @@ module brinkman_dissipation_objective
   use adjoint_brinkman_dissipation_source_term, only: &
        adjoint_brinkman_dissipation_source_term_t
   use adjoint_fluid_pnpn, only: adjoint_fluid_pnpn_t
-  use num_types, only: rp
+  use num_types, only: rp, dp
   use field, only: field_t
   use scratch_registry, only: neko_scratch_registry, scratch_registry_t
   use neko_config, only: NEKO_BCKND_DEVICE
   use mask_ops, only: mask_exterior_const, compute_masked_volume
   use utils, only: neko_error
   use json_module, only: json_file
-  use json_utils, only: json_get_or_default
+  use json_utils, only: json_get, json_get_or_default
   use registry, only: neko_registry
   use interpolation, only: interpolator_t
   use space, only: space_t, GL
@@ -140,19 +140,21 @@ contains
     character(len=:), allocatable :: mask_name
     character(len=:), allocatable :: name
     real(kind=rp) :: weight
-    logical :: dealias_sensitivity, dealias_forcing
-    real(kind=rp) :: start_time, end_time
+    logical :: dealias_sensitivity, dealias_forcing, dealias_fallback
+    real(kind=dp) :: start_time, end_time
 
     call nekotop_continuation%json_get_or_register(json, 'weight', &
          this%weight, weight, 1.0_rp)
     call json_get_or_default(json, "mask_name", mask_name, "")
     call json_get_or_default(json, "name", name, "Brinkman dissipation")
+    call json_get(simulation%neko_case%params, 'case.numerics.dealias', &
+         dealias_fallback)
     call json_get_or_default(json, "dealias_sensitivity", &
-         dealias_sensitivity, .true.)
+         dealias_sensitivity, dealias_fallback)
     call json_get_or_default(json, "dealias_forcing", &
-         dealias_forcing, .true.)
-    call json_get_or_default(json, "start_time", start_time, 0.0_rp)
-    call json_get_or_default(json, "end_time", end_time, huge(0.0_rp))
+         dealias_forcing, dealias_fallback)
+    call json_get_or_default(json, "start_time", start_time, 0.0_dp)
+    call json_get_or_default(json, "end_time", end_time, huge(0.0_dp))
 
     ! The two keys select one quadrature. Set differently, the sensitivity
     ! is not the gradient of any value this objective could report.
@@ -185,10 +187,11 @@ contains
     character(len=*), intent(in) :: name
     character(len=*), intent(in) :: mask_name
     logical, intent(in) :: dealias
-    real(kind=rp), intent(in) :: start_time
-    real(kind=rp), intent(in) :: end_time
+    real(kind=dp), intent(in) :: start_time
+    real(kind=dp), intent(in) :: end_time
 
     type(adjoint_brinkman_dissipation_source_term_t) :: brinkman_dissipation
+    real(kind=rp) :: forcing_start, forcing_end
 
     call this%free()
 
@@ -219,6 +222,11 @@ contains
     this%Xh_GLL => simulation%neko_case%fluid%c_Xh%Xh
     this%gdim = this%c_Xh_GLL%msh%gdim
 
+    ! The over-integration stack is only needed if this objective dealiases
+    if (dealias) then
+       call simulation%adjoint_case%fluid_adj%require_gauss_stack()
+    end if
+
     ! GL
     this%c_Xh_GL => simulation%adjoint_case%fluid_adj%c_Xh_GL
     this%Xh_GL => this%c_Xh_GL%Xh
@@ -236,6 +244,7 @@ contains
     end if
 
     ! if we have the Brinkman dissipation we initialize and append it too
+    call this%get_forcing_window(simulation, forcing_start, forcing_end)
 
     associate(f_adj_x => simulation%adjoint_fluid%f_adj_x, &
          f_adj_y => simulation%adjoint_fluid%f_adj_y, &
@@ -244,8 +253,8 @@ contains
       call brinkman_dissipation%init_from_components(f_adj_x, f_adj_y, &
            f_adj_z, design, this%weight, this%u, this%v, this%w, this%mask, &
            this%has_mask, this%c_Xh_GLL, this%c_Xh_GL, this%GLL_to_GL, &
-           this%dealias, this%volume, this%scratch_GL, this%gdim, &
-           this%start_time, this%end_time)
+           this%dealias, this%volume, this%scratch_GL, forcing_start, &
+           forcing_end, this%forcing_scale)
 
     end associate
 

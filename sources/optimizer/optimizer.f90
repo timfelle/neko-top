@@ -42,11 +42,11 @@ module optimizer
   use simulation_m, only: simulation_t
   use problem, only: problem_t
   use design, only: design_t
-  use num_types, only: rp
+  use num_types, only: rp, dp
   use logger, only: neko_log, LOG_SIZE
   use profiler, only: profiler_start_region, profiler_end_region
   use mpi_f08, only: MPI_Wtime, MPI_Allreduce, MPI_MAX, MPI_Bcast, &
-       MPI_LOGICAL, MPI_Barrier
+       MPI_LOGICAL, MPI_Barrier, MPI_INTEGER
   use utils, only: neko_error, filename_path, filename_suffix, read_duration, &
        mkdir
   use csv_file, only: csv_file_t
@@ -94,7 +94,7 @@ module optimizer
 
      ! Variables for the runtime-based stopping criteria
      real(kind=rp), private :: max_runtime = -1.0_rp
-     real(kind=rp), private :: start_time = 0.0_rp
+     real(kind=dp), private :: start_time = 0.0_dp
      real(kind=rp), private :: average_time = 0.0_rp
      real(kind=rp), private :: step_count = 0.0_rp
 
@@ -315,11 +315,11 @@ contains
     logical, intent(in), optional :: checkpoint_overwrite
     character(len=LOG_SIZE) :: msg
     character(len=256) :: file_name
+    integer :: i
     logical :: exists
 
     ! Initialize internals
     this%start_time = MPI_Wtime()
-    this%initialized = .true.
 
     ! Mandatory settings
     this%optimizer_type = optimizer_type
@@ -355,6 +355,27 @@ contains
        end if
     end if
 
+    ! If no restart file have been specified, look for the latest checkpoint
+    ! file in the path. This helps us recover from a crash and automatic restart
+    if (len_trim(this%restart_file) .eq. 0) then
+       i = -1
+       if (pe_rank .eq. 0) then
+          do i = this%max_iterations, 1, -1
+             exists = .false.
+             file_name = checkpoint_filename(this, iteration = i)
+             inquire(file = file_name, exist = exists)
+             if (exists) exit
+          end do
+          if (.not. exists) i = -1
+       end if
+
+       call MPI_Bcast(i, 1, MPI_INTEGER, 0, NEKO_COMM)
+       if (i .gt. 0) then
+          this%restart_file = checkpoint_filename(this, iteration = i)
+       end if
+    end if
+
+    this%initialized = .true.
   end subroutine optimizer_init_base
 
   !> Base free routine for the optimizer
@@ -374,8 +395,11 @@ contains
     this%checkpoint_interval = -1
     this%checkpoint_overwrite = .false.
 
-    this%start_time = 0.0_rp
+    this%start_time = 0.0_dp
+    this%average_time = 0.0_dp
+    this%step_count = 0.0_dp
     this%current_iteration = 0
+    this%norm2_design_change = 0.0_rp
     call this%log_data%free()
     this%log_initialized = .false.
     this%log_extra_size = 0
@@ -456,6 +480,7 @@ contains
     class(design_t), intent(inout) :: design
     type(simulation_t), optional, intent(inout) :: simulation
     real(kind=rp) :: iteration_time
+    real(kind=dp) :: iteration_start
     logical :: converged
     integer :: stop_flag
 
@@ -506,7 +531,7 @@ contains
        end if
 
        call profiler_start_region('Optimizer iteration')
-       iteration_time = MPI_Wtime()
+       iteration_start = MPI_Wtime()
 
        ! Update the parameters in continuation scheduler
        call nekotop_continuation%update(this%current_iteration)
@@ -517,7 +542,7 @@ contains
        converged = this%step(this%current_iteration, problem, design, &
             simulation)
 
-       iteration_time = MPI_Wtime() - iteration_time
+       iteration_time = real(MPI_Wtime() - iteration_start, kind=rp)
        call profiler_end_region('Optimizer iteration')
 
        ! Log the progress and outputs
@@ -602,7 +627,7 @@ contains
             this%max_iterations, ' iterations.'
        call neko_log%warning(msg)
     case (2)
-       write(msg, '(A,A,F8.2,A)') 'Optimizer stopped, design change ', &
+       write(msg, '(A,A,ES12.4,A)') 'Optimizer stopped, design change ', &
             'below threshold of: ', this%stop_design_change, '.'
        call neko_log%warning(msg)
     case (3)
@@ -645,7 +670,7 @@ contains
          this%average_time * old_avg_weight
 
     ! Determine if next iteration would exceed max runtime
-    elapsed = MPI_Wtime() - this%start_time
+    elapsed = real(MPI_Wtime() - this%start_time, kind=rp)
     out_of_time = (elapsed + this%average_time) .gt. 0.99_rp * this%max_runtime
 
   end function optimizer_out_of_time

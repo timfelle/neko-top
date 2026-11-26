@@ -6,8 +6,8 @@
         "output_at_end": false,
         "output_boundary": false,
         "time": {
-            "end_time": 0.0475,
-            "timestep": 0.005
+            "end_time": 2.495,
+            "timestep": 0.01
         },
         "numerics": {
             "time_order": 3,
@@ -16,7 +16,7 @@
         },
         "fluid": {
             "scheme": "pnpn",
-            "Re": 50.0,
+            "Re": 5.0,
             "output_control": "never",
             "initial_condition": {
                 "type": "uniform",
@@ -75,7 +75,7 @@
                 "preconditioner": {
                     "type": "jacobi"
                 },
-                "absolute_tolerance": 1e-09,
+                "absolute_tolerance": 1e-12,
                 "max_iterations": 200
             },
             "initial_condition": {
@@ -211,24 +211,16 @@
         "simulation_components": [
             {
                 "type": "steady",
-                "tol": 1e-08,
-                "compute_control": "tsteps",
-                "compute_value": 1
+                "tol": 1e-06,
+                "compute_control": "simulationtime",
+                "compute_value": 0.1,
+                "scalar_coupled": false,
+                "log_frequency": 25
             }
         ]
     },
-    "unsteady": true,
-    "state_recovery": {
-        "type": "checkpoint",
-        "enabled": true,
-        "format": "chkp",
-        "n_memory": 64
-    },
+    "unsteady": false,
     "optimization": {
-        "time_window_test": {
-            "compare_steady": true,
-            "tolerance": 1e-09
-        },
         "design": {
             "type": "brinkman",
             "verbose_design": false,
@@ -237,7 +229,7 @@
             "mapping": [
                 {
                     "type": "RAMP",
-                    "f_max": 100.0
+                    "f_max": 50.0
                 }
             ],
             "initial_distribution": {
@@ -260,27 +252,6 @@
                 "xmin": 0.0,
                 "xmax": 1.0
             }
-        },
-        "objectives": [
-            {
-                "type": "viscous_dissipation",
-                "name": "viscous final step",
-                "weight": 1.0,
-                "start_time": 0.0475
-            },
-            {
-                "type": "brinkman_dissipation",
-                "name": "brinkman final step",
-                "weight": 1.0,
-                "start_time": 0.0475
-            },
-            {
-                "type": "scalar_mixing",
-                "name": "mixing final step",
-                "weight": 1.0,
-                "start_time": 0.0475,
-                "mask_name": "outlet_region"
-            }
-        ]
+        }
     }
 }
