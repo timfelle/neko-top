@@ -250,7 +250,7 @@ contains
     n_global = 0
     call MPI_Allreduce(n, n_global, 1, MPI_INTEGER, &
          MPI_SUM, NEKO_COMM, ierr)
-    this%avg_B = glsumB/n_global
+    this%avg_B = glsumB / real(n_global, kind=rp)
 
   end subroutine heat_compliance_init
 
@@ -434,7 +434,7 @@ contains
 
     if (this%enable_output) then
        call this%output%sample(this%writting_counter)
-       this%writting_counter = this%writting_counter + 1
+       this%writting_counter = this%writting_counter + 1.0_dp
     end if
   end subroutine heat_compliance_update_sensitivity
 
@@ -630,7 +630,7 @@ contains
     ! Sensitivity: d/d rho = -1 / |Omega|   (flip sign if is_max)
     ! scaled by average B
     call MPI_Allreduce(n, n_global, 1, MPI_INTEGER, MPI_SUM, NEKO_COMM, ierr)
-    avg_B = glsum(this%coef%B, n)/n_global
+    avg_B = glsum(this%coef%B, n) / real(n_global, kind=rp)
     call vector_rone(this%sensitivity, n)
     call vector_cmult(this%sensitivity, -avg_B / this%volume_domain, n)
 

@@ -35,7 +35,7 @@
 module adjoint_fluid_scheme
   use gather_scatter, only: gs_t
   use checkpoint, only: chkp_t
-  use num_types, only: rp, dp
+  use num_types, only: dp
   use field, only: field_t
   use space, only: space_t, GL
   use dofmap, only: dofmap_t

@@ -621,6 +621,11 @@ contains
     call this%advy%free()
     call this%advz%free()
 
+    if (allocated(this%adv)) then
+       call this%adv%free()
+       deallocate(this%adv)
+    end if
+
     if (allocated(this%Ax_vel)) then
        deallocate(this%Ax_vel)
     end if
@@ -759,7 +764,8 @@ contains
          ! Add the RHS contributions coming from the BDF scheme.
          call makebdf%compute_fluid(ulag, vlag, wlag, f_x%x, f_y%x, f_z%x, &
               u, v, w, c_Xh%B, c_Xh%Blag, c_Xh%Blaglag, rho%x(1,1,1,1), &
-              real(dt, kind=rp), ext_bdf%diffusion_coeffs%x, ext_bdf%ndiff, n)
+              real(dt, kind=rp), &
+              ext_bdf%diffusion_coeffs%x, ext_bdf%ndiff, n)
       end if
 
       ! Source terms that must not be extrapolated in time are added as

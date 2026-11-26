@@ -86,6 +86,15 @@ inline hipsolverStatus_t mma_getrs(hipsolverDnHandle_t handle, int n,
 // Local includes
 #include "mma_kernel.h"
 
+/*
+ * A rank without design variables calls the wrappers below with n = 0, and a
+ * grid of zero blocks is an invalid launch. The wrappers over n entries
+ * therefore launch nothing for n < 1: the elementwise ones and the reductions
+ * into an output array return at once, and the reductions to a scalar return
+ * 0, the value their reduction starts from. The callers zero the output
+ * arrays of those reductions first, so that such a rank adds zero to their
+ * sums over the ranks.
+ */
 extern "C" {
 
 int mma_red_s = 0;
@@ -273,6 +282,8 @@ extern "C" void hip_custom_solver(void* A, void* b, int n, int* info) {
 
 void delta_1dbeam_hip(void* Delta, real* L_total, real* Le,
                        int* offset, int* n) {
+    if (*n < 1) return;
+
     const dim3 nthrds(1024, 1, 1);
     const dim3 nblcks(((*n) + 1024 - 1) / 1024, 1, 1);
     hipLaunchKernelGGL(delta_1dbeam_kernel<real>,
@@ -286,6 +297,7 @@ void hip_Hess(void* Hess, void* hijx, void* Ljjxinv, int *n, int *m) {
     const dim3 nblcks(((*n) + 1024 - 1) / 1024, 1, 1);
     const int nb = ((*n) + 1024 - 1) / 1024;
     const hipStream_t stream = (hipStream_t) glb_cmd_queue;
+    if (*n < 1) return;
     HIP_CHECK(hipStreamSynchronize(stream));
 
     if (nb > mma_red_s) {
@@ -319,6 +331,8 @@ void hip_Hess(void* Hess, void* hijx, void* Ljjxinv, int *n, int *m) {
 
 void mma_Ljjxinv_hip(void* Ljjxinv, void* pjlambda, void* qjlambda, void* x,
     void* low, void* upp, void* alpha, void* beta, int* n) {
+    if (*n < 1) return;
+
     const dim3 nthrds(1024, 1, 1);
     const dim3 nblcks(((*n) + 1024 - 1) / 1024, 1, 1);
     hipLaunchKernelGGL(mma_Ljjxinv_kernel<real>, nblcks, nthrds, 0,
@@ -329,6 +343,8 @@ void mma_Ljjxinv_hip(void* Ljjxinv, void* pjlambda, void* qjlambda, void* x,
 
 void mma_dipsolvesub1_hip(void* x, void* pjlambda, void* qjlambda, void* low,
     void* upp, void* alpha, void* beta, int* n) {
+    if (*n < 1) return;
+
     const dim3 nthrds(1024, 1, 1);
     const dim3 nblcks(((*n) + 1024 - 1) / 1024, 1, 1);
     hipLaunchKernelGGL(mma_dipsolvesub1_kernel<real>, nblcks, nthrds, 0,
@@ -338,6 +354,8 @@ void mma_dipsolvesub1_hip(void* x, void* pjlambda, void* qjlambda, void* low,
 }
 
 void mattrans_v_mul_hip(void* output, void* pij, void* lambda, int* m, int* n) {
+    if (*n < 1) return;
+
     const dim3 nthrds(1024, 1, 1);
     const dim3 nblcks(((*n) + 1024 - 1) / 1024, 1, 1);
     hipLaunchKernelGGL(mattrans_v_mul_kernel<real>, nblcks, nthrds, 0,
@@ -356,6 +374,8 @@ void mma_gensub4_hip(const void* x, const void* low, const void* upp,
   const dim3 nblcks((N + 1023) / 1024, 1, 1);
   const int nb = (N + 1023) / 1024;
   const hipStream_t stream = (hipStream_t)glb_cmd_queue;
+
+  if (N < 1) return;
 
   if (nb > mma_red_s) {
     mma_red_s = nb;
@@ -406,6 +426,8 @@ void mma_gensub3_hip(void* x, void* df0dx, void* dfdx, void* low,
                      void* upp, void* xmin, void* xmax, void* alpha,
                      void* beta, void* p0j, void* q0j, void* pij,
                      void* qij, int* n, int* m) {
+    if (*n < 1) return;
+
     const dim3 nthrds(1024, 1, 1);
     const dim3 nblcks(((*n) + 1024 - 1) / 1024, 1, 1);
 
@@ -423,6 +445,8 @@ void mma_gensub3_dip_hip(void* x, void* df0dx, void* dfdx, void* low,
                          void* upp, void* xmin, void* xmax, void* alpha,
                          void* beta, void* p0j, void* q0j, void* pij,
                          void* qij, int* n, int* m) {
+    if (*n < 1) return;
+
     const dim3 nthrds(1024, 1, 1);
     const dim3 nblcks(((*n) + 1024 - 1) / 1024, 1, 1);
 
@@ -439,6 +463,8 @@ void mma_gensub3_dip_hip(void* x, void* df0dx, void* dfdx, void* low,
 void mma_gensub2_hip(void* low, void* upp, void* x, void* xold1,
                      void* xold2, void* xdiff, real* asydecr,
                      real* asyincr, int* n) {
+    if (*n < 1) return;
+
     const dim3 nthrds(1024, 1, 1);
     const dim3 nblcks(((*n) + 1024 - 1) / 1024, 1, 1);
 
@@ -452,6 +478,8 @@ void mma_gensub2_hip(void* low, void* upp, void* x, void* xold1,
 
 void mma_gensub1_hip(void* low, void* upp, void* x, void* xmin, void* xmax,
                      real* asyinit, int* n) {
+    if (*n < 1) return;
+
     const dim3 nthrds(1024, 1, 1);
     const dim3 nblcks(((*n) + 1024 - 1) / 1024, 1, 1);
 
@@ -464,6 +492,8 @@ void mma_gensub1_hip(void* low, void* upp, void* x, void* xmin, void* xmax,
 }
 
 void hip_mma_max(void* xsi, void* x, void* alpha, int* n) {
+    if (*n < 1) return;
+
     const dim3 nthrds(1024, 1, 1);
     const dim3 nblcks(((*n) + 1024 - 1) / 1024, 1, 1);
 
@@ -480,6 +510,8 @@ void hip_relambda(void* relambda, void* x, void* xupp, void* xlow,
     const dim3 nblcks(((*n) + 1024 - 1) / 1024, 1, 1);
     const int nb = nblcks.x;
     const hipStream_t stream = (hipStream_t)glb_cmd_queue;
+
+    if (*n < 1) return;
 
     if (nb > mma_red_s) {
         mma_red_s = nb;
@@ -519,6 +551,8 @@ void hip_relambda(void* relambda, void* x, void* xupp, void* xlow,
 }
 
 void hip_sub2cons2(void* a, void* b, void* c, void* d, real* e, int* n) {
+    if (*n < 1) return;
+
     const dim3 nthrds(1024, 1, 1);
     const dim3 nblcks(((*n) + 1024 - 1) / 1024, 1, 1);
 
@@ -530,6 +564,8 @@ void hip_sub2cons2(void* a, void* b, void* c, void* d, real* e, int* n) {
 }
 
 real hip_maxval(void* a, int* n) {
+    if (*n < 1) return 0.0;
+
     const dim3 nthrds(1024, 1, 1);
     const dim3 nblcks(((*n) + 1024 - 1) / 1024, 1, 1);
     const int nb = nblcks.x;
@@ -564,6 +600,8 @@ real hip_maxval(void* a, int* n) {
 void hip_delx(void* delx, void* x, void* xlow, void* xupp, void* pij,
        void* qij, void* p0j, void* q0j, void* alpha, void* beta, void* lambda,
        real* epsi, int* n, int* m) {
+    if (*n < 1) return;
+
     const dim3 nthrds(1024, 1, 1);
     const dim3 nblcks(((*n) + 1024 - 1) / 1024, 1, 1);
 
@@ -577,6 +615,8 @@ void hip_delx(void* delx, void* x, void* xlow, void* xupp, void* pij,
 
 void hip_GG(void* GG, void* x, void* xlow, void* xupp,
        void* pij, void* qij, int* n, int* m) {
+    if (*n < 1) return;
+
     const dim3 nthrds(1024, 1, 1);
     const dim3 nblcks(((*n) + 1024 - 1) / 1024, 1, 1);
 
@@ -590,6 +630,8 @@ void hip_GG(void* GG, void* x, void* xlow, void* xupp,
 void hip_diagx(void* diagx, void* x, void* xsi, void* xlow, void* xupp,
        void* p0j, void* q0j, void* pij, void* qij, void* alpha, void* beta,
        void* eta, void* lambda, int *n, int *m) {
+    if (*n < 1) return;
+
     const dim3 nthrds(1024, 1, 1);
     const dim3 nblcks(((*n) + 1024 - 1) / 1024, 1, 1);
 
@@ -606,6 +648,8 @@ void hip_bb(void* bb, void* GG, void* delx, void* diagx, int *n, int *m) {
     const dim3 nblcks(((*n)+1024 - 1)/ 1024, 1, 1);
     const int nb = ((*n) + 1024 - 1)/ 1024;
     const hipStream_t stream = (hipStream_t)glb_cmd_queue;
+
+    if (*n < 1) return;
 
     HIP_CHECK(hipStreamSynchronize(stream));
 
@@ -642,6 +686,8 @@ void hip_AA(void* AA, void* GG, void* diagx, int *n, int *m) {
     const int nb = ((*n) + 1024 - 1)/ 1024;
     const hipStream_t stream = (hipStream_t)glb_cmd_queue;
 
+    if (*n < 1) return;
+
     HIP_CHECK(hipStreamSynchronize(stream));
 
     if (nb > mma_red_s) {
@@ -675,6 +721,8 @@ void hip_AA(void* AA, void* GG, void* diagx, int *n, int *m) {
 
 void hip_dx(void* dx, void* delx, void* diagx, void* GG, void* dlambda,
        int* n, int* m) {
+    if (*n < 1) return;
+
     const dim3 nthrds(1024, 1, 1);
     const dim3 nblcks(((*n) + 1024 - 1) / 1024, 1, 1);
 
@@ -686,6 +734,8 @@ void hip_dx(void* dx, void* delx, void* diagx, void* GG, void* dlambda,
 
 void hip_dxsi(void* dxsi, void* xsi, void* dx, void* x,
     void* alpha, real* epsi, int* n) {
+    if (*n < 1) return;
+
     const dim3 nthrds(1024, 1, 1);
     const dim3 nblcks(((*n) + 1024 - 1) / 1024, 1, 1);
 
@@ -697,6 +747,8 @@ void hip_dxsi(void* dxsi, void* xsi, void* dx, void* x,
 
 void hip_deta(void* deta, void* eta, void* dx, void* x,
        void* beta, real* epsi, int* n) {
+    if (*n < 1) return;
+
     const dim3 nthrds(1024, 1, 1);
     const dim3 nblcks(((*n) + 1024 - 1) / 1024, 1, 1);
 
@@ -709,6 +761,8 @@ void hip_deta(void* deta, void* eta, void* dx, void* x,
 void hip_rex(void* rex, void* x, void* xlow, void* xupp, void* pij,
        void* p0j, void* qij, void* q0j, void* lambda, void* xsi, void* eta,
        int* n, int* m) {
+    if (*n < 1) return;
+
     const dim3 nthrds(1024, 1, 1);
     const dim3 nblcks(((*n) + 1024 - 1) / 1024, 1, 1);
 
@@ -720,6 +774,8 @@ void hip_rex(void* rex, void* x, void* xlow, void* xupp, void* pij,
 }
 
 void hip_rey(void* rey, void* c, void* d, void* y, void* lambda, void* mu, int* n) {
+    if (*n < 1) return;
+
     const dim3 nthrds(1024, 1, 1);
     const dim3 nblcks(((*n) + 1024 - 1) / 1024, 1, 1);
 
@@ -732,6 +788,8 @@ void hip_rey(void* rey, void* c, void* d, void* y, void* lambda, void* mu, int* 
 
  // a_d = b_d * c_d - d
 void hip_sub2cons(void *a, void *b, void *c, real *d, int *n) {
+  if (*n < 1) return;
+
   const dim3 nthrds(1024, 1, 1);
   const dim3 nblcks(((*n) + 1024 - 1) / 1024, 1, 1);
   hipLaunchKernelGGL(sub2cons_kernel<real>, nblcks, nthrds, 0,
@@ -743,6 +801,8 @@ void hip_sub2cons(void *a, void *b, void *c, real *d, int *n) {
 
 // sum(a^2)
 real hip_norm(void* a, int* n) {
+  if (*n < 1) return 0.0;
+
   const dim3 nthrds(1024, 1, 1);
   const dim3 nblcks(((*n) + 1024 - 1) / 1024, 1, 1);
   const int nb = ((*n) + 1024 - 1) / 1024;
@@ -777,6 +837,8 @@ real hip_norm(void* a, int* n) {
 
 void hip_dely(void* dely, void* c, void* d, void* y, void* lambda,
        real* epsi, int* n) {
+  if (*n < 1) return;
+
   const dim3 nthrds(1024, 1, 1);
   const dim3 nblcks(((*n) + 1024 - 1) / 1024, 1, 1);
   hipLaunchKernelGGL(dely_kernel<real>, nblcks, nthrds, 0,
@@ -787,6 +849,8 @@ void hip_dely(void* dely, void* c, void* d, void* y, void* lambda,
 
 
 real hip_maxval2(void* a, void* b, real* cons, int* n) {
+  if (*n < 1) return 0.0;
+
   const dim3 nthrds(1024, 1, 1);
   const dim3 nblcks(((*n) + 1024 - 1) / 1024, 1, 1);
   const int nb = ((*n) + 1024 - 1) / 1024;
@@ -820,6 +884,8 @@ real hip_maxval2(void* a, void* b, real* cons, int* n) {
 
 
 real hip_maxval3(void* a, void* b, void* c, real* cons, int* n) {
+  if (*n < 1) return 0.0;
+
   const dim3 nthrds(1024, 1, 1);
   const dim3 nblcks(((*n) + 1024 - 1) / 1024, 1, 1);
   const int nb = ((*n) + 1024 - 1) / 1024;
@@ -853,6 +919,8 @@ real hip_maxval3(void* a, void* b, void* c, real* cons, int* n) {
 
 void hip_kkt_rex(void* rex, void* df0dx, void* dfdx, void* xsi,
        void* eta, void* lambda, int* n, int* m) {
+  if (*n < 1) return;
+
   const dim3 nthrds(1024, 1, 1);
   const dim3 nblcks(((*n) + 1024 - 1) / 1024, 1, 1);
   hipLaunchKernelGGL(kkt_rex_kernel<real>, nblcks, nthrds, 0,
@@ -878,6 +946,8 @@ void mma_dip_kkt_hip(void* res, void* x, void* df0dx, void* dfdx,
 
 // a_d = max(b, c * d_d)
 void hip_maxcons(void* a, real* b, real* c, void* d, int* n) {
+  if (*n < 1) return;
+
   const dim3 nthrds(1024, 1, 1);
   const dim3 nblcks(((*n) + 1024 - 1) / 1024, 1, 1);
   hipLaunchKernelGGL(maxcons_kernel<real>, nblcks, nthrds, 0,
@@ -888,6 +958,8 @@ void hip_maxcons(void* a, real* b, real* c, void* d, int* n) {
 
 
 real hip_lcsc2(void *a, void*b, int *n) {
+  if (*n < 1) return 0.0;
+
   const dim3 nthrds(1024, 1, 1);
   const dim3 nblcks(((*n) + 1024 - 1) / 1024, 1, 1);
   const int nb = ((*n) + 1024 - 1) / 1024;
@@ -931,6 +1003,8 @@ void hip_mpisum(void *a, int *n) {
 
 
 void hip_add2inv2(void* a, void* b, real* c, int* n) {
+    if (*n < 1) return;
+
     const dim3 nthrds(1024, 1, 1);
     const dim3 nblcks(((*n) + 1024 - 1) / 1024, 1, 1);
     const hipStream_t stream = (hipStream_t)glb_cmd_queue;
@@ -941,6 +1015,8 @@ void hip_add2inv2(void* a, void* b, real* c, int* n) {
 }
 
 void hip_max2(void* a, real* b, void* c, real* d, int* n) {
+    if (*n < 1) return;
+
     const dim3 nthrds(1024, 1, 1);
     const dim3 nblcks(((*n) + 1024 - 1) / 1024, 1, 1);
     const hipStream_t stream = (hipStream_t)glb_cmd_queue;
@@ -978,6 +1054,8 @@ void hip_updateAA(void* AA, void* globaltmp_mm, void* s, void* lambda,
 
 void hip_dy(void* dy, void* dely, void* dlambda, void* d,
             void* mu, void* y, int* n) {
+    if (*n < 1) return;
+
     const dim3 nthrds(1024, 1, 1);
     const dim3 nblcks(((*n) + 1024 - 1) / 1024, 1, 1);
     const hipStream_t stream = (hipStream_t)glb_cmd_queue;
