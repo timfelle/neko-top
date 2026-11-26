@@ -154,6 +154,12 @@ additional coupling terms
     + \int_\Omega \mathbf{v} \cdot \mathbf{f}^\dagger.
 \f]
 
+\warning The case file currently supports a single scalar with its adjoint
+(`case.scalar` and `case.adjoint_scalar`). The array form `case.adjoint_scalars`
+is read, but any non-empty array stops the run after the whole initialisation,
+because the coupling term is not implemented for multiple scalars. See
+\ref adjoint_case_keys.
+
 \note If a given \f$\phi_i(\mathbf{x},t)\f$ is not contained in the
 objective, there will be no resulting forcing to drive the adjoint scalar
 equation, effectively yielding \f$\phi_i(\mathbf{x},t)^\dagger = \mathbf{0}\f$,

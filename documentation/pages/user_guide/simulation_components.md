@@ -10,6 +10,13 @@ The `steady` simulation component monitors the change between consecutive
 forward fields and freezes the forward fluid solve when the change is below a
 user-defined tolerance.
 
+\warning The `steady` component belongs to **steady** problems. A case file with
+`"unsteady": true` and a `steady` component is invalid: the unsteady adjoint
+restores the forward states one step at a time, and freezing the fluid part way
+through the run breaks that. The current code does not reject the combination
+at set-up, so it is the user's responsibility to avoid it; the case-file schema
+does reject it. See \ref unsteady_simulation.
+
 In case files, enable it under `case.simulation_components`:
 
 ```json
@@ -74,14 +81,26 @@ since the fluid is then only frozen once the scalar has converged too.
 | ----------------- | ------------ | --------- | --------------------------------------------------------------------------------- |
 | `type`            | string       | -         | Must be `"steady"`.                                                               |
 | `tol`             | real         | `1e-6`    | Convergence threshold for the field-increment norm.                               |
-| `log_frequency`   | integer      | `50`      | Write cadence (in timesteps) for convergence diagnostics.                         |
+| `log_frequency`   | integer      | `50`      | A row is written to the convergence file only on steps whose number is a multiple of `log_frequency`, and only on steps on which the component computes (see `compute_control`). Must not be `0` (integer modulo by zero at the first logged step); a negative value is accepted. |
 | `scalar_coupled`  | bool         | `false`   | If `true`, require both fluid and scalar convergence before freezing fluid.       |
-| `compute_control` | string       | inherited | Standard Neko simulation-component scheduling control. Typical value: `"tsteps"`. |
-| `compute_value`   | integer/real | inherited | Scheduling interval/value associated with `compute_control`. Typical value: `1`.  |
+| `compute_control` | string       | `"tsteps"` | Neko base key of every simulation component: when the component computes. One of Neko's controls, for example `"tsteps"`, `"simulationtime"`, `"nsamples"`, `"fluid_output"` or `"never"`. |
+| `compute_value`   | integer/real | `1`       | Neko base key: the interval associated with `compute_control` (an integer for `"tsteps"` and `"nsamples"`, a real for `"simulationtime"`). |
+
+The remaining keys of Neko's simulation-component base (`preprocess_control`,
+`preprocess_value`, `output_control`, `output_value`, `order`) are read as well;
+see the Neko documentation. Setting `"is_user": true` on a component makes
+Neko's factory return before allocating anything, so a `steady` entry with
+`is_user` is silently never created.
+
+Rows of the convergence file are thus sparser than `log_frequency` suggests
+when `compute_value` does not divide it. Rows are written while the fluid is
+not yet converged and, after the fluid has been frozen, while the scalar is
+followed.
 
 ### Output
 
-The component writes convergence data to `steady_state_data.csv` with header:
+The component writes convergence data to `steady_state_data.csv`, opened in
+the working directory (it ignores `case.output_directory`), with header:
 
 `iter,time,u,v,w,p,scalar`
 
@@ -92,6 +111,8 @@ zero, the increment of a frozen field.
 
 ### Limitations
 
-- The component currently supports at most one scalar field.
+- The component currently supports at most one scalar field: with more than
+  one scalar the set-up stops with "steady simcomp only works for a single
+  scalar".
 - For truly time-dependent optimization workflows, prefer the unsteady
   configuration described in \subpage unsteady_simulation.

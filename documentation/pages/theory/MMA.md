@@ -269,16 +269,18 @@ method (Svanberg).
 
 ## Implementation Details
 
-The implementation is encapsulated in the `mma_t` type and includes the following parameters that can be set in the case file:
+The implementation is encapsulated in the `mma_t` type and includes the following parameters that can be set in the case file. The names in the first column are relative to `optimization.solver`, so `mma.max_iter` is the key `optimization.solver.mma.max_iter`. The same keys, with their admissible values, are listed in \ref configuration-solver-mma. No other key is read from the `mma` object: in particular there is no `mma.m`, since the number \f$ m \f$ of constraints follows from `optimization.constraints`.
 
 | Name | Description | Default |
 |------|-------------|---------|
 | `mma.max_iter` | Max iterations for subproblem | `100` |
-| `mma.epsimin` | Smallest barrier parameter of the subsolvers, must be positive | \f$ 10^{-9} \sqrt{m + n} \f$ |
+| `mma.epsimin` | Smallest barrier parameter of the subsolvers, must be positive | \f$ 10^{-9} \sqrt{m + n} \f$, with \f$ n \f$ the global number of design variables |
 | `mma.asyinit` | Initial asymptote distance | `0.2` |
 | `mma.asyincr` | Asymptote expansion | `1.05` |
 | `mma.asydecr` | Asymptote contraction | `0.65` |
 | `mma.move_limit` | Move limit for updating the design variables | `0.2` |
+| `mma.xmin` | Global lower bound of all design variables | `0.0` |
+| `mma.xmax` | Global upper bound of all design variables | `1.0` |
 | `mma.a0` | MMA param | `1.0` |
 | `mma.a` | MMA param | `0.0` |
 | `mma.c` | MMA param | `1000.0` |
@@ -287,6 +289,8 @@ The implementation is encapsulated in the `mma_t` type and includes the followin
 | `mma.subsolver` | Subsolver type | `dip` |
 | `mma.scale` | Scaling factor applied to constraint functions \( f_i \) and their sensitivities. This does **not** affect the objective function \( f_0 \). It is used to improve numerical conditioning when constraint magnitudes and sensitivities differ significantly from those of the objective function. | `1.0` |
 | `mma.auto_scale` | If `true`, sensitivity and function values for the constraint \f$ f_i \f$ are scaled at each iteration with a different value such that we get \f$ f_1(x_k)= \f$`mma.scale`. This would be an adaptive scaling based on the value of the first constraint. | `false` |
+
+The convergence tolerance is not an `mma` key but `optimization.solver.tolerance` (default `1.0e-3`, read only by the MMA optimizer), next to `optimization.solver.max_iterations` and the other settings common to all optimizers.
 
 ---
 

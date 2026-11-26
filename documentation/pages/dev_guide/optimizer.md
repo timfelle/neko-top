@@ -68,9 +68,12 @@ loses settings, because `free`/`init_base` reset or overwrite fields that
 `optimizer_t%run` (`optimizer_run` in `optimizer.f90`) implements the loop
 shared by every optimizer:
 
-1. **Restart.** If an explicit `restart_file` was given, or a runtime
-   checkpoint (`optimizer_rt_checkpoint.<ext>`) exists at the default
-   checkpoint location, `load_checkpoint` restores the base state, calls
+1. **Restart.** If an explicit `restart_file` was given (the file must exist
+   and carry an `h5`, `hdf5` or `hf5` suffix, otherwise `load_checkpoint`
+   aborts), or a runtime checkpoint (`optimizer_rt_checkpoint.<ext>`) exists at
+   the default checkpoint location (looked up only when `max_runtime` is set),
+   or the checkpoint files of the checkpoint path hold an iteration (the highest
+   one is used), `load_checkpoint` restores the base state, calls
    `load_checkpoint_components`, and restores the design — setting
    `this%current_iteration` to the checkpointed iteration.
 2. **Continuation restore.** If restarting (`current_iteration > 0`), the

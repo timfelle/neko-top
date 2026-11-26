@@ -198,8 +198,9 @@ high level case structure reads
 
 ```.json
 {
-    "version": 1.0
+    "version": 1.0,
     "case": {
+        "time": {},
         "numerics": {},
         "fluid": {},
         "scalar": {},
@@ -210,7 +211,6 @@ high level case structure reads
         "adjoint_scalar": {}
     },
     "optimization": {
-        "domain": {},
         "design": {},
         "solver": {},
         "objectives": [],
@@ -218,6 +218,11 @@ high level case structure reads
     }
 }
 ```
+
+The optimization domain is part of the design, `optimization.design.domain`,
+and not a key of `optimization` itself. The keys of each section are listed in
+the user guide, see \ref configuration and \ref adjoint_case_keys, and can be
+checked with the validator described in \ref validating_case_files.
 
 ### Case
 The top level of the case file allows the user to prescribe details on the
@@ -229,8 +234,10 @@ numerics and case set up.
     "output_checkpoints": false,
     "output_at_end": false,
     "output_boundary": false,
-    "end_time": 8.0,
-    "timestep": 2e-4,
+    "time": {
+        "end_time": 8.0,
+        "timestep": 2e-4
+    },
     "numerics": {
         "time_order": 1,
         "polynomial_order": 5,
@@ -245,13 +252,14 @@ and instead rely on the output samplers provided by `neko-top` to alleviate
 excessive outputs when looping between the forward and adjoint runs.
 
 Here we have prescribed: 
-- a time-step \f$\Delta t = 2\times 10^{-4} \f$ (`"timestep": 2e-4`)
+- a time-step \f$\Delta t = 2\times 10^{-4} \f$ (`"timestep": 2e-4`, under
+  `case.time`)
 - a first order time integration scheme (`"time_order": 1`)
-- a polynomial order of 6 (`"polynomial_order": 6`)
+- a polynomial order of 5 (`"polynomial_order": 5`)
 - the use of overintegration when evaluating the convective terms (`"dealias": true`)
 
 \attention Despite intending to solve the steady Navier-Stokes equation,
-Currently an `end_time` must be prescribed in `neko`. More details regarding
+currently an `end_time` (under `case.time`) must be prescribed in `neko`. More details regarding
 steady state solutions can be found in [Simulation components](@ref simulation_components)  but there are
 intentions to include steady state functionality directly within `neko`,
 streamlining this process.
@@ -263,7 +271,6 @@ state simulation component
 "simulation_components": [
     {
         "type": "steady",
-        "is_user": true,
         "tol": 1e-7,
         "compute_control": "tsteps",
         "compute_value": 1
@@ -271,9 +278,14 @@ state simulation component
 ]
 ```
 
+Do not set `"is_user": true` on this component: Neko's factory then skips the
+entry before creating anything, so the component would silently never run.
+
 \attention Currently certain features of `neko` are not supported by `neko-top`
 due to a lack of adjoint support. Relevant to this section, it should be noted
-that variable time-stepping is not supported.
+that variable time-stepping (`case.time.variable_timestep`) and
+`case.time.exact_output_time` are rejected for unsteady problems, see
+\ref unsteady_simulation.
 
 ### Fluid
 The fluid section of the case file allows the user to prescribe fluid properties,
@@ -282,28 +294,32 @@ solvers, boundary conditions and initial conditions.
 ```.json
 "fluid": {
     "scheme": "pnpn",
-    "Re": 2,
+    "Re": 2.0,
     "initial_condition": {
         "type": "uniform",
         "value": [ 0.0, 0.0, 0.0 ]
     },
     "velocity_solver": {
         "type": "cg",
-        "preconditioner": "jacobi",
+        "preconditioner": {
+            "type": "jacobi"
+        },
         "projection_space_size": 0,
         "absolute_tolerance": 1e-4,
         "max_iterations": 50
     },
     "pressure_solver": {
         "type": "gmres",
-        "preconditioner": "hsmg",
+        "preconditioner": {
+            "type": "hsmg"
+        },
         "projection_space_size": 0,
         "absolute_tolerance": 1e-4,
         "max_iterations": 50
     },
     "boundary_conditions": [
         {
-            "type": "user_velocity_pointwise",
+            "type": "user_velocity",
             "zone_indices": [1]
         },
         {
@@ -320,7 +336,8 @@ solvers, boundary conditions and initial conditions.
 ```
 
 The key details which are prescribed are:
-- a significantly low Reynolds number (`"Re": 2`)
+- a significantly low Reynolds number (`"Re": 2.0`, a JSON real: the integer
+  `2` would abort, since the adjoint reads `Re` as a real)
 - an initial \f$ \mathbf{u}|_{t=0} = \mathbf{0}\f$
 
 ```.json
@@ -347,7 +364,7 @@ The key details which are prescribed are:
 - a user defined inflow condition on \f$\Gamma_\text{in}\f$
 
 ```.json
-"type": "user_velocity_pointwise",
+"type": "user_velocity",
 "zone_indices": [1]
 ```
 
@@ -357,8 +374,12 @@ however the interested reader can find more information
 
 \attention
 It should be noted that some features in `neko` are not supported in `neko-top`
-due to a lack of adjoint support. Relevant to this section, it should be noted
-that the use of projections or gradient jump penalty are not supported.
+due to a lack of adjoint support. Relevant to this section, the adjoint reads
+the projection settings of the fluid solvers (`projection_space_size` and
+`projection_hold_steps`) and this tutorial sets the sizes to `0`, i.e. no
+projection. A gradient jump penalty has no adjoint counterpart: nothing rejects
+it in the case file, but the sensitivities would not account for it. See
+\ref adjoint_case_keys for the adjoint's own keys.
 
 To prescribe user defined conditions, such as the condition on
 \f$\Gamma_\text{in}\f$ users can provide additional fortran code. In this
@@ -366,35 +387,17 @@ tutorial we will provide an additional `user.f90`. Further details on the `neko`
 user interface can be found
 [here](https://neko.cfd/docs/release/d6/def/user-file.html).
 
-In this tutorial we wish to prescribe a paraboloid as an inflow condition, this
-is achieved by asserting `user%fluid_user_if => user_inflow_eval` and providing
-the following code excerpt:
+In this tutorial we wish to prescribe a paraboloid as an inflow condition. The
+boundary condition type `"user_velocity"` takes its values from the routine
+registered as `user%dirichlet_conditions`, which fills the velocity components
+on the boundary zone; the same routine, `user_bc` of the `user.f90` included
+below, fills the scalar inflow condition for the scalar's `"user_dirichlet"`
+boundary condition. For the fluid the paraboloid is
 
 ```fortran
-!> user-defined boundary condition
-subroutine user_inflow_eval(u, v, w, x, y, z, nx, ny, nz, ix, iy, iz, &
-     ie, t, tstep)
-  real(kind=rp), intent(inout) :: u
-  real(kind=rp), intent(inout) :: v
-  real(kind=rp), intent(inout) :: w
-  real(kind=rp), intent(in) :: x
-  real(kind=rp), intent(in) :: y
-  real(kind=rp), intent(in) :: z
-  real(kind=rp), intent(in) :: nx
-  real(kind=rp), intent(in) :: ny
-  real(kind=rp), intent(in) :: nz
-  integer, intent(in) :: ix
-  integer, intent(in) :: iy
-  integer, intent(in) :: iz
-  integer, intent(in) :: ie
-  real(kind=rp), intent(in) :: t
-  integer, intent(in) :: tstep
-
-  ! Inflow velocity profile is a paraboloid
-  u = -0.5_rp * (y - 1.0_rp)**2 - 0.5_rp * (z - 1.0_rp)**2 + 1.0_rp
-  v = 0._rp
-  w = 0._rp
-end subroutine user_inflow_eval
+u%x(idx, 1, 1, 1) = -0.5_rp * (y - 1.0_rp)**2 - 0.5_rp * (z - 1.0_rp)**2 + 1.0_rp
+v%x(idx, 1, 1, 1) = 0._rp
+w%x(idx, 1, 1, 1) = 0._rp
 ```
 
 ### Scalar
@@ -407,7 +410,9 @@ scalar properties, solvers, boundary conditions and initial conditions.
     "Pe": 5000.0,
     "solver": {
         "type": "cg",
-        "preconditioner": "jacobi",
+        "preconditioner": {
+            "type": "jacobi"
+        },
         "projection_space_size": 0,
         "absolute_tolerance": 1e-6,
         "max_iterations": 50
@@ -417,12 +422,12 @@ scalar properties, solvers, boundary conditions and initial conditions.
     },
     "boundary_conditions": [
         {
-            "type": "user_pointwise",
+            "type": "user_dirichlet",
             "zone_indices": [1]
         },
         {
             "type": "neumann",
-            "flux": 0,
+            "flux": 0.0,
             "zone_indices": [2, 3, 4, 5, 6]
         }
     ]
@@ -443,19 +448,19 @@ The key details which are prescribed are:
 
 ```.json
 "type": "neumann",
-"flux": 0,
+"flux": 0.0,
 "zone_indices": [2, 3, 4, 5, 6]
 ```
 
 - a user defined scalar inflow condition on \f$ \Gamma_\text{in}\f$
 
 ```.json
-"type": "user_pointwise",
+"type": "user_dirichlet",
 "zone_indices": [1]
 ```
 
 The user defined scalar inflow condition and scalar initial condition are 
-prescribed with `user%scalar_user_bc` and `user%scalar_user_ic`. Here we wish
+prescribed with `user%dirichlet_conditions` and `user%initial_conditions`. Here we wish
 to prescribe a separation between the two scalar species where 
 \f$\phi = 0\f$ represents one species and \f$\phi = 1\f$ represents the other.
 It is well understood that spectral methods struggle to represent discontinuities,
@@ -476,12 +481,12 @@ found in [Adjoint sensitivity analysis](@ref adjoint).
     "boundary_conditions": [
         {
             "type": "dirichlet",
-            "value": 0,
+            "value": 0.0,
             "zone_indices": [1]
         },
         {
             "type": "neumann",
-            "flux": 0,
+            "flux": 0.0,
             "zone_indices": [2, 3, 4, 5, 6]
         }
     ],
@@ -508,17 +513,24 @@ found in [Adjoint sensitivity analysis](@ref adjoint).
 }
 ```
 \note An important feature to be aware of in the `neko-top` adjoint system is that
-unless a parameter is specified, the adjoint will adopt the same parameters
-as their primal counterparts. For instance, by not specifying a solver type
-for the adjoint fluid, `neko-top` will use the same solver types used in the
-fluid.
+the adjoint *solvers* adopt the settings of their primal counterparts unless
+they are specified: by not specifying a solver type for the adjoint fluid,
+`neko-top` will use the solver type of the fluid. This holds for the solver
+settings only. The boundary conditions and the initial conditions of the
+adjoint are never taken from the primal, so `boundary_conditions` and
+`initial_condition` of `adjoint_fluid` and `adjoint_scalar` must be written
+(the initial condition is read at every design iteration, with no fallback).
+The adjoint pressure solver cannot be configured at all: it always uses
+`case.fluid.pressure_solver`. The material properties and source terms of the
+adjoint scalar come from `case.scalar` as well. All of this is detailed in
+\ref adjoint_case_keys.
 
 The key details which are prescribed are:
 - \f$ \phi^\dagger = 0\f$ on \f$ \Gamma_\text{in} \f$
 
 ```.json
 "type": "dirichlet",
-"value": 0,
+"value": 0.0,
 "zone_indices": [1]
 ```
 
@@ -527,7 +539,7 @@ The key details which are prescribed are:
 
 ```.json
 "type": "neumann",
-"flux": 0,
+"flux": 0.0,
 "zone_indices": [2, 3, 4, 5, 6]
 ```
 
@@ -593,16 +605,22 @@ In this tutorial we must define \f$\Omega_\text{opt}\f$ and
 ```
 
 Assigning \f$\Omega_\text{opt}\f$ to the optimization domain is performed in
-the `optimization` section of the case file
+the `design` of the `optimization` section of the case file
 
 ```.json
 "optimization": {
-    "domain": {
-        "type": "point_zone",
-        "zone_name": "optimization_domain"
+    "design": {
+        "domain": {
+            "type": "point_zone",
+            "zone_name": "optimization_domain"
+        }
     }
 }
 ```
+
+\attention The domain belongs to the design, `optimization.design.domain`. A
+`domain` written directly under `optimization` is never read, and the design
+then silently covers the full domain.
 
 ### Objectives and constraint {#mixer_objectives}
 Various objectives and constraints can be provided as lists in the `objectives`
@@ -620,9 +638,9 @@ constraints by prescribing
     {
         "type": "scalar_mixing",
         "mask_name": "objective_domain",
-        "phi_ref": 0.5,
+        "target_concentration": 0.5,
         "weight": 1.0
-    },
+    }
 ],
 "constraints": [ ]
 ```
@@ -639,7 +657,8 @@ Multiple constraints on the other hand are also entered in a list but are
 handled through the MMA functionality discussed in [The Method of Moving Asymptotes (MMA)](@ref MMA).
 
 Since the scalar \f$ \phi \in [0,1]\f$, we set a target value for the scalar
-concentration to \f$ \phi = 0.5\f$ (`"phi_ref": 0.5`) and assert the area of
+concentration to \f$ \phi = 0.5\f$ (`"target_concentration": 0.5`; the key is
+not `phi_ref`, which nothing reads) and assert the area of
 interest is in \f$ \Omega_{mix}\f$ (`"mask_name": "objective_domain"`).
 
 
@@ -666,7 +685,7 @@ which can be prescribed with
         },
         {
             "type": "RAMP",
-            "f_max": 1000
+            "f_max": 1000.0
         }
     ]
 }
@@ -675,8 +694,8 @@ which can be prescribed with
 \note It is important to note that the order in which the mappings occur in
 the case file is the order in which they will be executed.
 
-Here we have prescribed a spatial filter with radius 1 followed by a RAMP mapping
-with maximum Brinkman amplitude 1000.
+Here we have prescribed a spatial filter with radius 0.01 followed by a RAMP
+mapping with maximum Brinkman amplitude 1000.
 
 The mapping cascade takes care of both mapping the design forward and performing
 the chain rule backward, i.e. 
@@ -689,8 +708,9 @@ the chain rule backward, i.e.
 ### Optimization parameters {#mixer_MMA}
 The optimization algorithm used to solve optimization problem is prescribed
 in the `"solver"` section of the case file.
-Currently on the MMA algorithm is implemented and more details can be found
-in [The Method of Moving Asymptotes (MMA)](@ref MMA).
+Two optimizers are available, `"mma"` and `"steepest_descent"`, see
+\ref configuration-solver. Here we use the MMA algorithm, of which more details
+can be found in [The Method of Moving Asymptotes (MMA)](@ref MMA).
 
 In this tutorial we we select the MMA algorithm by prescribing
 
@@ -700,7 +720,6 @@ In this tutorial we we select the MMA algorithm by prescribing
     "max_iterations": 100,
     "tolerance": 1.0e-3,
     "mma": {
-        "m": 0,
         "scale": 1000.0,
         "xmin": 0.0,
         "xmax": 1.0
@@ -711,8 +730,10 @@ In this tutorial we we select the MMA algorithm by prescribing
 The key parameters selected are
 - a maximum of 100 optimization iterations (`"max_iterations": 100`)
 - a convergence criterion of 1.0e-3 (`"tolerance": 1.0e-3`)
-- no constraints (`"m": 0`)
-- a scaling factor of 1000 for the objective function (`"scale": 1000.0`)
+- a scaling factor of 1000 (`"scale": 1000.0`). It scales the constraint
+  values and their sensitivities only, not the objective function
+- no constraints: the `constraints` list is empty, and no `mma` key is needed
+  for it (there is no `mma.m` key)
 - assert that \f$ \rho \in [0,1] \f$
 
 ```.json
@@ -826,12 +847,20 @@ key components
     - the steady state forward solution `forward_fields0.nek5000`
     - the steady state adjoint solution `adjoint_fields0.nek5000`
     - the design field `design0.nek5000`
+    - the sensitivity `sensitivity0.nek5000`
 
-Within `design0.nek5000` there are 3 fields labeled `x_velocity`, `y_velocity`
-and `z_velocity`, these fields correspond to:
-    - `x_velocity`: The unmapped design field \f$\rho \in [0,1]\f$
-    - `y_velocity`: The mapped design field \f$\chi \in [0,\chi_{\text{max}}]\f$
-    - `z_velocity`: The sensitivity \f$\partial \mathcal{F}/\partial\f$
+With the default `fld` output format (`case.fluid.output_format`,
+`case.adjoint_fluid.output_format` and `optimization.design.output_format`)
+each of these `.nek5000` files is the metadata file of a series of `.fld`
+data files, which is what ParaView opens.
+
+The design file holds two fields: the unmapped design field
+\f$\rho \in [0,1]\f$ and the mapped design field
+\f$\chi \in [0,\chi_{\text{max}}]\f$. With `verbose_design` the
+intermediate stages of the mapping cascade are written as well. The
+sensitivity \f$\partial \mathcal{F}/\partial \rho\f$ is written to its own
+file, and with `verbose_sensitivity` the stages of the backward cascade too,
+see \ref design_types.
 
 Included in this example is a folder `passive_scalar/post_processing`
 containing:

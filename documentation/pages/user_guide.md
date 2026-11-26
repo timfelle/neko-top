@@ -17,3 +17,7 @@ writing JSON files, and the PFUnit library, which is used for unit testing.
   - [Creating a new case](@ref examples-new)
   - [Case files and meshes](@ref examples-data)
   - [Advanced example setups](@ref examples-advanced)
+- \subpage validating_case_files
+  - [Running the validator](@ref validating_case_files_run)
+  - [Where Neko's schemas are found](@ref validating_case_files_neko)
+  - [What the schemas check](@ref validating_case_files_scope)

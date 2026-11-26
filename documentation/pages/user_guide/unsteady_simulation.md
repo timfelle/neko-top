@@ -9,7 +9,7 @@ implementation is responsible for storing enough forward information and then
 restoring or reconstructing the forward state when the adjoint run asks for it.
 
 At the user level, unsteady problems declare a `state_recovery` block at the
-top level of the case file:
+top level of the case file (a sibling of `case` and `optimization`):
 
 ```json
 "unsteady": true,
@@ -18,13 +18,29 @@ top level of the case file:
 }
 ```
 
+`unsteady` is a boolean at the top level of the case file and defaults to
+`false`. A case file without it, or with `false`, is a steady problem: its
+`state_recovery` block, if present, is never read.
+
+With `"unsteady": true` the `state_recovery` block is required: without it the
+set-up stops because the parameter is missing. The block is read by the
+state-recovery factory, whose `type` is `"checkpoint"`, or its alias
+`"simulation_checkpoint"`; it defaults to `"checkpoint"` when `type` is absent.
 The available implementation is `checkpoint`, which restarts the forward
 problem from stored checkpoints.
 
 Unsteady problems need a fixed timestep. The adjoint restores the forward
 states one step at a time and assumes every step had the same `dt`, so a case
-that sets `case.time.variable_timestep` together with `"unsteady": true` stops
-with an error.
+that sets `case.time.variable_timestep` to `true` together with
+`"unsteady": true` stops with an error. The same holds for
+`case.time.exact_output_time` set to `true`: Neko fits time steps to the output
+times only with a variable timestep, so an unsteady problem rejects it as well.
+Both keys are read at `case.time.*`; for steady problems the time-step
+controller of Neko still applies and both keys are allowed.
+
+\note The block is checked together with the rest of the case file by
+`documentation/schemas/state-recovery.schema.json`, see
+\ref validating_case_files.
 
 ## Checkpoint based state recovery
 
@@ -52,13 +68,17 @@ checkpoint.
 
 | Parameter          | Type           | Default        | Description                                                               |
 | ------------------ | -------------- | -------------- | ------------------------------------------------------------------------- |
-| `enabled`          | `bool`         | `false`        | Whether checkpointing is enabled.                                         |
-| `algorithm`        | `string`       | `"linear"`     | The checkpointing algorithm to use. Currently only "linear" is supported. |
-| `n_memory`         | `int`          | `10`           | The number of checkpoints to store in memory.                             |
+| `type`             | `string`       | `"checkpoint"` | The state recovery implementation: `"checkpoint"` or its alias `"simulation_checkpoint"`. |
+| `algorithm`        | `string`       | `"linear"`     | The checkpointing algorithm to use. Currently only "linear" is supported; `"LINEAR"` and `"Linear"` are accepted spellings. Anything else aborts. |
+| `n_memory`         | `int`          | `10`           | The number of checkpoints to store in memory. Must be at least `1`: `0` is a modulo by zero at the first save.                             |
+| `path`             | `string`       | `"checkpoints/"` | The directory the checkpoint files are written to; it is created if it does not exist. |
 | `filename`         | `string`       | `"checkpoint"` | The base name for checkpoint files.                                       |
-| `format`           | `string`       | `"chkp"`       | The file format for checkpoint files. Currently "chkp" is supported.      |
+| `format`           | `string`       | `"chkp"`       | The file format for checkpoint files. `"hdf5"` writes an HDF5 `.h5` file; any other string, including `"chkp"`, writes a Neko `.chkp` file.      |
 | `keep_checkpoints` | `bool`         | `false`        | Whether to keep checkpoint files after the simulation.                    |
-| `extra_fields`     | `string array` | `[]`           | A list of extra fields to include in the checkpoint.                      |
+| `extra_fields`     | `string array` | `[]`           | A list of extra fields to include in the checkpoint. Each name must already be registered as a field when the block is read; an unknown name aborts. |
+
+There is no `enabled` key: nothing reads one, and the block is active whenever
+`unsteady` is `true`.
 
 ### Linear algorithm
 

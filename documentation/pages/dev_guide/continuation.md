@@ -91,10 +91,19 @@ type(continuation_scheduler_t), public, target :: nekotop_continuation
 ```fortran
 call nekotop_continuation%init(json)
 ```
-Reads `optimization.solver.continuation_iterations` in the case file as the
-default frequency of updating all parameters registered in the scheduler. Note
-that individual frequency for can be registered in the json file as
-`{parameters_name}_iterations` in the case file.
+Reads `optimization.solver.continuation_iterations` in the case file, an
+integer that defaults to `1`, as the default number of iterations for which each
+value of a registered parameter is held. Note that an individual number of
+iterations can be given in the case file, next to the parameter, as
+`{parameters_name}_iterations`. A number of iterations of `0` or below is not
+rejected: `update` then returns early for that parameter, which silently stays
+at its first value.
+
+The parameters that are registered from a case file are `r` of the PDE filter,
+`f_max` (linear, RAMP, Borrvall & Petersson, SIMP), `q` (RAMP, Borrvall &
+Petersson), `p` (SIMP) and `beta` (Heaviside) of the mappings, and the `weight`
+of the three objectives. Each is given in the case file either as a real, or as
+an array of reals; an integer is rejected, and so is any other type.
 
 
 ## 5. Registering Parameters
@@ -105,10 +114,17 @@ It is possible to use `json_get_or_register` function in the scheduler to read
 the parameter form the json file. Note that if the parameter in the json is an
 array, then it will automatically register in the scheduler as well. If a single
 scalar is given in the json, then this function will work as a single call of
-`json_get_or_default`.
+`json_get_or_default` (or `json_get`, when no default is given).
 ```fortran
-call nekotop_continuation%json_get_or_register(json, name, target, default_value)
+call nekotop_continuation%json_get_or_register(json, name, target, value, default_value)
 ```
+`target` is the variable that the scheduler updates, `value` returns the
+initial value (the scalar, or the first entry of the array), and
+`default_value` is optional: without it, a parameter that is absent from the
+case file stops the run with "`name` not found and no default provided". With
+an array the entries are read with Neko's constants lookup, and the optional
+`{name}_iterations` is read as an integer. An empty array is not rejected and
+its first entry is read out of bounds.
 
 ## 6. Update Mechanism
 ```fortran
@@ -118,17 +134,16 @@ call nekotop_continuation%update(iter)
 
 
 ## 7. JSON Integration
-The following utility function helps to read a parameter with continuation
-strategy form the case file:
-```fortran
-call json_get_with_continuation(json, name, values, default_value, iter)
-```
-If the parameter is a single scalar, this will be a constant parameter in the
-optimization loop and will not be registered to `nekotop_continuation`. If it is
-an array, then it will be registered with these values with
-`optimization.solver.continuation_iterations` as the default value for its
-frequency, unless the individual frequency is defined for that particular
-parameter as `{parameters_name}_iterations`.
+The routine that reads a parameter with a continuation strategy from the case
+file is `json_get_or_register`, described in section 5. If the parameter is a
+single scalar, it is a constant parameter in the optimization loop and is not
+registered to `nekotop_continuation`. If it is an array, it is registered with
+these values and `optimization.solver.continuation_iterations` as the default
+number of iterations per value, unless the individual number is given for that
+particular parameter as `{parameters_name}_iterations`.
+
+The case-file side of this is described, for users, in
+\ref mapping_continuation and \ref objectives_weight_continuation.
 
 
 ## 8. Integration Points

@@ -12,14 +12,36 @@ The overall structure of the case file is the following
 {
     "version": "1.0",
     "case": { ... },
-    "optimization": { 
+    "unsteady": false,
+    "state_recovery": { ... },
+    "optimization": {
         "design": { ... },
         "solver": { ... },
         "objectives": [ ... ],
         "constraints": [ ... ]
-    }    
+    }
 }
 ```
+
+The keys of the `optimization` object are:
+
+- `design` is **required** and holds everything about the design, including
+  its `domain` (`optimization.design.domain`); see \ref design_types. A
+  `domain` written directly under `optimization` is never read.
+- `solver` is required, with the optimizer's `type`; see
+  \ref configuration-solver.
+- `objectives` and `constraints` are optional lists, see
+  \ref objectives_and_constraints.
+
+`unsteady` (default `false`) and `state_recovery` (required when `unsteady` is
+`true`) are keys at the root of the case file, see \ref unsteady_simulation.
+
+The `case` object is Neko's, with the Neko-TOP additions described in
+\ref adjoint_case_keys (an optimization run needs `case.adjoint_fluid`, and a
+case with a scalar also needs `case.adjoint_scalar`). Neko's own schemas
+describe the rest of `case`. All of the keys on these pages are checked by the
+case-file schemas, which the user can run on a case file before starting a run,
+see \ref validating_case_files.
 
 ## Optimization Solver settings {#configuration-solver}
 
@@ -38,10 +60,21 @@ their own options in a nested object named after the type.
 | Json entry            | Description                                                             | Admissible Values                 | Default value      |
 | ---------------------- | ------------------------------------------------------------------------ | ------------------------------------ | --------------------- |
 | `type`                | Selects the optimizer.                                                  | `"mma"` or `"steepest_descent"`   | *(required)*        |
-| `max_iterations`      | Maximum number of outer optimization iterations.                       | Integer, `> 0`                     | `100`               |
-| `enable_output`       | Write the convergence log (`optimization_data.csv`) and the simulation output at every iteration. | `.true.` or `.false.` | `.true.`            |
-| `stop_design_change`  | Stop once the maximum design change drops strictly below this value.   | Real, `> 0`                        | machine epsilon     |
-| `max_runtime`         | Maximum wall-clock runtime, as a duration string (e.g. `1-12:00:00` for one day and twelve hours). Empty disables the limit. | String                | `""` (disabled)     |
+| `max_iterations`      | Maximum number of outer optimization iterations. Not validated; `0` evaluates only the initial design (several test cases use it). | Integer, `>= 0`                     | `100`               |
+| `enable_output`       | Write the convergence log (`optimization_data.csv`) and the simulation output at every iteration. | `true` or `false` | `true`            |
+| `stop_design_change`  | Stop once the maximum design change drops strictly below this value. Not validated; a value of `0` or below can never stop the run, since the change is never negative. | Real                        | machine epsilon     |
+| `max_runtime`         | Maximum wall-clock runtime, as a duration string. Empty disables the limit; `"0"` does **not** (see below). | String                | `""` (disabled)     |
+| `continuation_iterations` | Default number of optimization iterations for which each entry of an array-valued continuation parameter is held, see \ref continuation. A value of `0` or below disables every schedule that does not set its own `<name>_iterations`: those parameters stay at their first entry, silently. | Integer | `1` |
+| `tolerance`           | **MMA only.** The run is converged when the maximum-norm KKT residual of the MMA update is strictly below this value. Not read by `steepest_descent`. | Real | `1.0e-3` |
+
+`max_runtime` is parsed by Neko's duration reader. It accepts seconds as an
+integer or real (`"5400"`, `"5400.5"`), `"mm:ss"`, `"hh:mm:ss"` and
+`"dd-hh:mm:ss"` (for example `"1-12:00:00"` is one day and twelve hours), with
+non-negative fields; it must be a JSON string, a JSON number is rejected. A
+duration of zero seconds does not disable the limit: the optimizer then stops
+after its first iteration and writes `optimizer_rt_checkpoint.h5`, which a
+later run does not look for. Use the empty string, or omit the key, to have no
+limit.
 
 Restart and checkpoint keys (`restart_file`, `checkpoint.*`) are likewise read
 the same way by every optimizer; see
@@ -67,11 +100,11 @@ settings under `optimization.solver.mma`.
 
 | Json entry   | Description                                             | Admissible Values     | Default value                                      |
 | ------------ | ------------------------------------------------------- | --------------------- | -------------------------------------------------- |
-| `max_iter`   | Maximum number of iterations in the MMA subsolver.      | Integer, `> 0`        | `100`                                              |
-| `epsimin`    | Minimum barrier parameter used by MMA.                  | Real, `> 0`           | `1.0e-9 * sqrt(m + n_global)`                      |
-| `asyinit`    | Initial asymptote distance factor.                      | Real, `> 0`           | `0.2`                                              |
-| `asyincr`    | Asymptote increase factor.                              | Real, `> 0`           | `1.05`                                             |
-| `asydecr`    | Asymptote decrease factor.                              | Real, `> 0`           | `0.65`                                             |
+| `max_iter`   | Maximum number of iterations in the MMA subsolver. Not validated: `0` or below means the subsolver loops run no iterations. | Integer        | `100`                                              |
+| `epsimin`    | Minimum barrier parameter used by MMA. A value of `0` or below stops the set-up with "MMA: epsimin must be positive". | Real, `> 0`           | `1.0e-9 * sqrt(m + n_global)`, with `m` the number of constraints and `n_global` the number of design variables |
+| `asyinit`    | Initial asymptote distance factor. Not validated.       | Real, normally `> 0`  | `0.2`                                              |
+| `asyincr`    | Asymptote increase factor. Not validated.               | Real, normally `> 0`  | `1.05`                                             |
+| `asydecr`    | Asymptote decrease factor. Not validated.               | Real, normally `> 0`  | `0.65`                                             |
 | `move_limit` | Per-iteration move cap around current design variables. | Real                  | `0.2`                                              |
 | `backend`    | MMA execution backend.                                  | `"cpu"` or `"device"` | `"cpu"` (or `"device"` when `NEKO_BCKND_DEVICE=1`) |
 | `subsolver`  | Interior-point variant used in MMA subproblems.         | `"dip"` or `"pdip"`   | `"dip"`                                            |
@@ -81,8 +114,18 @@ settings under `optimization.solver.mma`.
 | `a`          | MMA vector coefficient \f$a_i\f$ (applied uniformly).   | Real                  | `0.0`                                              |
 | `c`          | MMA vector coefficient \f$c_i\f$ (applied uniformly).   | Real                  | `1000.0`                                           |
 | `d`          | MMA vector coefficient \f$d_i\f$ (applied uniformly).   | Real                  | `0.0`                                              |
-| `scale`      | Constraint scaling target value.                        | Real, `> 0`           | `1.0`                                              |
-| `auto_scale` | Enable adaptive scaling of constraints each iteration.  | `.true.` or `.false.` | `.false.`                                          |
+| `scale`      | Constraint scaling target value. It scales the constraint values and their sensitivities only, not the objective. Not validated. | Real, normally `> 0` | `1.0`                                              |
+| `auto_scale` | Enable adaptive scaling of constraints each iteration.  | `true` or `false`     | `false`                                            |
+
+\note There is no `mma.m` key: the number of constraints follows from
+`optimization.constraints`. For an unconstrained problem MMA adds one dummy
+constraint of its own. A `"mma": {"m": 0}` entry, as found in older case files,
+is never read.
+
+\note On a restart from a checkpoint the values of `a0`, `a`, `c`, `d`, `xmin`
+and `xmax` stored in the checkpoint silently replace those of the case file,
+whereas a change to `max_iter`, `asyinit`, `asyincr`, `asydecr`, `epsimin`,
+`move_limit`, `backend` or `subsolver` stops the restart with an error.
 
 #### MMA configuration options
 - `subsolver` selects the interior-point variant used inside MMA (`dip`/`pdip`).
@@ -283,10 +326,15 @@ checkpoint file to restart from in the case file under
 `optimization.solver.restart_file`. When this parameter is set, the
 optimization will be restarted from the specified checkpoint file. Please note
 that the checkpoint file must be compatible with the current case file and
-Neko-TOP version in order for the restart to work correctly. If a runtime-based
-checkpoint exists and the user has not specified a checkpoint file to restart
-from, the optimization will automatically restart from the runtime-based
-checkpoint.
+Neko-TOP version in order for the restart to work correctly. If the user has
+not specified a checkpoint file to restart from, the optimizer looks for one
+itself, in this order: when `max_runtime` is set, the runtime-based checkpoint
+`optimizer_rt_checkpoint` of the checkpoint path; otherwise (or if that does not
+exist) the checkpoint with the highest iteration number, searching downwards
+from `max_iterations`, among those named after `checkpoint.path`,
+`checkpoint.base` and `checkpoint.format`. The optimization then restarts
+automatically from the file found, which lets a job that is requeued after a
+crash or a runtime stop carry on.
 
 On a restart, any \ref continuation "continuation" parameters are first
 restored to the values they held at the checkpointed iteration, before the
@@ -298,11 +346,12 @@ section of the case file.
 
 | Parameter             | Type    | Default                | Description                                                                                                                                                                                               |
 | --------------------- | ------- | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `restart_file`        | string  | `""`                   | Filename of a checkpoint file to restart from. If this parameter is set, the optimization will be restarted from the specified checkpoint file.                                                           |
-| `checkpoint.interval` | integer | -1                     | Interval (in iterations) at which checkpoints are emitted. If set to a positive value, a checkpoint will be emitted every `checkpoint.interval` iterations. If set to -1, no checkpoints will be emitted. |
+| `restart_file`        | string  | `""`                   | Filename of a checkpoint file to restart from. If this parameter is set, the optimization will be restarted from the specified checkpoint file. The file must exist, and its suffix must be `.h5`, `.hdf5` or `.hf5` (`.hdf` is not accepted here, although `checkpoint.format` accepts `"hdf"`); otherwise the restart stops with an error. |
+| `checkpoint.interval` | integer | -1                     | Interval (in iterations) at which checkpoints are emitted. If set to a positive value, a checkpoint will be emitted every `checkpoint.interval` iterations. Any value of `0` or below, not only `-1`, emits no interval checkpoints. |
 | `checkpoint.path`     | string  | `"./checkpoints/"`     | Path where checkpoint files will be saved.                                                                                                                                                                 |
 | `checkpoint.base`     | string  | `"optimizer_checkpoint"` | Base name for checkpoint files.                                                                                                                                                                          |
 | `checkpoint.format`   | string  | `"hdf5"`               | Format for checkpoint files. Accepted spellings are `"h5"`, `"hdf5"`, `"hf5"` and `"hdf"`, all of which write an HDF5 file.                                                                                |
+| `checkpoint.overwrite` | boolean | `false`               | Whether an existing checkpoint file of the same name is overwritten when a checkpoint is written. |
 
 ## Adjoint over-integration (dealiasing) {#configuration-adjoint-dealias}
 
@@ -322,12 +371,12 @@ of them is switched independently:
 
 **All five keys default to `case.numerics.dealias`**, i.e. the adjoint follows
 whatever the forward problem does. Setting any of the keys explicitly overrides
-that default for that contribution alone. If `case.numerics.dealias` is itself
-absent, the fallback is `true`; on every supported Neko-TOP configuration this
-branch is not expected to be exercised, since
-`adjoint_fluid_scheme_incompressible.f90` reads `case.numerics.dealias`
-unconditionally and its `init` runs before the design or the objectives are
-constructed.
+that default for that contribution alone. `case.numerics.dealias` has to be
+present in the case file: the design, the `brinkman_dissipation` objective and
+the augmented Lagrangian read it without a fallback (`json_get`), so it is
+required even where all five keys are written out, and a case file without it
+stops the set-up with a missing-parameter error. `case.adjoint_scalar.dealias_coupling_term` defaults to
+`case.numerics.dealias`, and to `true` when neither is present.
 
 \note **This is a behavioural change, and it is not limited to the adjoint.**
 These keys previously defaulted to `true` in isolation, regardless of
@@ -359,8 +408,10 @@ longer consulted.
 The individual components are described in greater detail in the linked
 sections.
 
+- \subpage adjoint_case_keys
 - \subpage design_types
 - \subpage mapping_cascade
 - \subpage objectives_and_constraints
 - \subpage simulation_components
 - \subpage unsteady_simulation
+- \ref validating_case_files

@@ -10,7 +10,7 @@ Objectives and constraints enter the `.case` file in `neko-top` as lists
 
 ```
 {
-    "version": 1.0
+    "version": 1.0,
     "case": {},
     "optimization": {
         "objectives": [],
@@ -18,6 +18,11 @@ Objectives and constraints enter the `.case` file in `neko-top` as lists
     }
 }
 ```
+
+Both lists are optional: a case file that omits either simply has no
+objectives, or no constraints. Each entry is an object whose `type` selects
+the objective or constraint; its keys are listed in the sections below. The
+case-file schemas check these keys, see \ref validating_case_files.
 
 In `neko-top` multiple objectives can be prescribed in a list, resulting in
 a multi-objective optimization problem which is handled by a weighted sum of all
@@ -44,6 +49,19 @@ and constraints
 have currently been implemented in `neko-top`·
 
 ## Objectives {#objectives}
+
+### Continuation of the weight {#objectives_weight_continuation}
+The `weight` of every objective may be given as an array of reals instead of a
+single real. The first entry is the initial weight, and the weight then steps
+through the array as the optimization proceeds: each value is held for the
+number of iterations given by the objective's `weight_iterations` key, which
+defaults to `optimization.solver.continuation_iterations` (itself `1` when
+absent), and the last value is held from then on. A number of iterations of
+`0` or below disables the schedule: the weight stays at its first entry.
+`weight_iterations` is only read when `weight` is an array. The mechanism is
+described in \ref continuation. Every array-valued weight is logged under the
+column name `weight`, so two objectives with array weights produce two columns
+of the same name in `optimization_data.csv`.
 
 ### Time integration for unsteady objectives {#objectives_time_integration}
 For unsteady simulations, the instantaneous objective is averaged over time,
@@ -149,9 +167,9 @@ and has the following input parameters:
 
 | Name | Description  | Admissible values | Default value |
 |------|--------------|-------------------|---------------|
-| `weight`| The weight used in the objective. | Real | `1.0` |
+| `weight`| The weight used in the objective. An array is stepped through by continuation, see \ref objectives_weight_continuation. | Real or array of reals | `1.0` |
 | `mask_name` | The name of the `point_zone` indicating \f$\Omega_\text{obj}\f$. | String | `""`|
-| `name`| The name that will appear in `objective_data.csv` | String | `Dissipation`|
+| `name`| The name that will appear in `optimization_data.csv` | String | `Viscous dissipation`|
 | `start_time` | Start of the active time window for unsteady accumulation. | Real | `0.0` |
 | `end_time` | End of the active time window for unsteady accumulation. | Real | `+\infty` |
 
@@ -195,9 +213,9 @@ based on lubrication theory written by Gersborg-Hansen et al.
 
 | Name | Description  | Admissible values | Default value |
 |------|--------------|-------------------|---------------|
-| `weight`| The weight used in the objective. | Real | `1.0` |
+| `weight`| The weight used in the objective. An array is stepped through by continuation, see \ref objectives_weight_continuation. | Real or array of reals | `1.0` |
 | `mask_name` | The name of the `point_zone` indicating \f$\Omega_\text{obj}\f$. | String | `""`|
-| `name`| The name that will appear in `objective_data.csv` | String | `Out of plane stresses`|
+| `name`| The name that will appear in `optimization_data.csv` | String | `Brinkman dissipation`|
 | `dealias_forcing`| If the objective is integrated on the over-integration (Gauss-Legendre) points rather than the GLL points. Must equal `dealias_sensitivity`. See [Adjoint over-integration](@ref configuration-adjoint-dealias) | logical | `case.numerics.dealias`|
 | `dealias_sensitivity`| Must equal `dealias_forcing`. See [Adjoint over-integration](@ref configuration-adjoint-dealias) | logical | `case.numerics.dealias`|
 | `start_time` | Start of the active time window for unsteady accumulation. | Real | `0.0` |
@@ -233,12 +251,21 @@ and has the following input parameters:
 
 | Name | Description  | Admissible values | Default value |
 |------|--------------|-------------------|---------------|
-| `weight`| The weight used in the objective. | Real | `1.0` |
+| `weight`| The weight used in the objective. An array is stepped through by continuation, see \ref objectives_weight_continuation. | Real or array of reals | `1.0` |
 | `mask_name` | The name of the `point_zone` indicating \f$\Omega_\text{obj}\f$. | String | `""`|
 | `target_concentration` | \f$\phi_\text{ref}\f$ in the above equation. | Real | `0.5`|
-| `name`| The name that will appear in `objective_data.csv` | String | `Scalar Mixing`|
+| `scalar_name` | The name of the primal scalar the objective is evaluated on. | String | `"s"` |
+| `name`| The name that will appear in `optimization_data.csv` | String | `Scalar Mixing`|
 | `start_time` | Start of the active time window for unsteady accumulation. | Real | `0.0` |
 | `end_time` | End of the active time window for unsteady accumulation. | Real | `+\infty` |
+
+\attention The key for the target concentration is `target_concentration`. The
+code reads no key named `phi_ref`, so a case file that writes `phi_ref` still
+runs, silently, with the default `0.5`, and the schema rejects the key.
+
+\note The objective needs an adjoint scalar: without `case.adjoint_scalar`
+the set-up stops with "adjoint passive scalar not initialized". See
+\ref adjoint_case_keys.
 
 ## Constraints {#constraints}
 
@@ -258,9 +285,11 @@ denotes the volume of the optimization domain.
 The constraint can be used to enforce either a minimum or maximum volume, i.e.
 \f$ \mathcal{C} > \mathcal{C}_\text{min} \f$ or \f$ \mathcal{C} < \mathcal{C}_\text{max} \f$.
 
-\note Currently the volume constraint can only be applied to the unfiltered
-material indicator function, but in the future we aim to allow it to be prescribed
-to intermediate stages of the mapping cascade.
+\note Without a `mapping` key the volume constraint is evaluated on the
+unfiltered material indicator function. With one, the constraint builds its own
+mapping cascade from that list and evaluates the volume on the mapped design.
+It cannot be attached to an intermediate stage of the design's own cascade.
+The volume constraint only works with the `brinkman` design.
 
 The constraint can be selected by prescribing `"type": "volume"` 
 and has the following input parameters:
@@ -269,7 +298,7 @@ and has the following input parameters:
 | Name | Description  | Admissible values | Default value |
 |------|--------------|-------------------|---------------|
 | `limit` | \f$ \mathcal{C}_\text{min} \f$ or \f$ \mathcal{C}_\text{max} \f$  in the above equation | Real | - |
-| `is_max` | Indicate whether a minimum or maximum volume constraint should be applied. | `.true.` or `.false.` | `.false.` |
-| `mask_name` | The name of the `point_zone` indicating \f$\Omega_\text{obj}\f$. | String | `""`|
-| `name`| The name that will appear in `objective_data.csv` | String | `Volume constraint`|
-| `mapping`| A potential to, for instance, compute the volume based on a filtered design. For more information please refer to @ref mixer_mapping| Json | `""`|
+| `is_max` | Indicate whether a minimum or maximum volume constraint should be applied. | `true` or `false` | `false` |
+| `mask_name` | The name of the `point_zone` indicating \f$\Omega_\text{opt}\f$, the domain over which the volume is measured. | String | `""`|
+| `name`| The name that will appear in `optimization_data.csv` | String | `Volume constraint`|
+| `mapping`| A mapping cascade applied to the design before the volume is evaluated, for instance a filter, so that the volume is computed from a filtered design. The entries are those of the design's `mapping` list, see \ref mapping_cascade. | Array of mapping objects | omitted (no mapping) |

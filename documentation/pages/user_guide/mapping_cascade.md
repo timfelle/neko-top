@@ -42,7 +42,7 @@ file under the list `"mapping"`, for example:
                 },
                 {
                     "type": "RAMP",
-                    "f_max": 1000
+                    "f_max": 1000.0
                 }
             ],
 ```
@@ -52,7 +52,35 @@ the case file is the order in which they will be executed. In the above example
 this corresponds to applying a filter first, and then a RAMP mapping.
 
 \note Currently the mapping cascade is only applicable to the `"brinkman"` type
-design.
+design. The list is read from `optimization.design.mapping`, and the
+`"brinkman"` design needs it: without the key no cascade is set up and the
+first forward mapping of the design dereferences an unset coefficient pointer
+(a crash, not a diagnostic). The volume constraint (see
+\ref objectives_and_constraints) can additionally carry a `mapping` list of its
+own, in the same format.
+
+\attention Every real-valued parameter in the tables below must be written as a
+JSON real, for example `1000.0` and not `1000`: the parameter is read as a real
+or an array of reals, and a JSON integer stops the set-up with an error.
+
+\note The `type` of a mapping is one of `"linear"`, `"PDE_filter"`, `"RAMP"`,
+`"Borrvall_Petersson"`, `"SIMP"` and `"heaviside_mapping"`. The spelling
+`"heaviside_projection"` is accepted as an alias of `"heaviside_mapping"`.
+
+## Parameters stepped by continuation {#mapping_continuation}
+
+The following parameters accept an array of reals instead of a single real, and
+are then stepped through by the continuation scheduler (see \ref continuation):
+`r` of the PDE filter, `f_max` of the linear, RAMP, Borrvall & Petersson and
+SIMP mappings, `q` of the RAMP and Borrvall & Petersson mappings, `p` of the
+SIMP mapping and `beta` of the Heaviside mapping. The first entry is the
+initial value. Each value is held for `<name>_iterations` iterations (for
+example `beta_iterations`), which defaults to
+`optimization.solver.continuation_iterations`, and the last value is held from
+then on. `<name>_iterations` is only read when `<name>` is an array. A number of
+iterations of `0` or below disables the schedule and the parameter keeps its
+first entry. An empty array is not rejected, and is read out of bounds.
+`f_min` is always a single real.
 
 \note The intermediate forward and backward mapping fields written by the
 Brinkman design use the `verbose_design`, `verbose_sensitivity`,
@@ -104,12 +132,17 @@ following input parameters:
 
 | Name                 | Description                                                       | Admissible values         | Default value  |
 | -------------------- | ----------------------------------------------------------------- | ------------------------- | -------------- |
-| `r`                  | Physical filter radius. Internally scaled as \f$r/(2\sqrt{3})\f$. | Real                      | -              |
-| `tol`                | The desired tolerance used when solving the system.               | Real                      | `0.0000000001` |
+| `r`                  | Physical filter radius. Internally scaled as \f$r/(2\sqrt{3})\f$. | Real, or array of reals (continuation) | *(required)* |
+| `tol`                | The desired tolerance used when solving the system.               | Real                      | `1.0e-10`      |
 | `max_iter`           | Maximum number of iterations when solving the system.             | Integer                   | `200`          |
-| `solver`             | Numerical solver used to solve the system.                        | `cg`, `gmres`             | `cg`           |
-| `preconditioner`     | Pre-conditioner used to solve the system.                         | `ident`, `hsmg`, `jacobi` | `jacobi`       |
+| `solver`             | Krylov solver used to solve the system. Any single-field Krylov type of Neko is accepted, for example `cg` or `gmres`; the coupled types (`coupled_cg`, `fused_coupled_cg`, `coupled_bicgstab`) abort. | String | `cg` |
+| `preconditioner`     | Preconditioner used to solve the system. Only the Jacobi family is initialised by the filter. | `jacobi`, `ident` | `jacobi`       |
 | `strict_convergence` | Stop with an error when a filter solve does not converge.         | `true` or `false`         | `false`        |
+
+\note `hsmg` and `phmg` are not usable as the filter preconditioner. They are
+allocated by Neko's preconditioner factory but the filter initialises only the
+Jacobi family (`filter_precon_factory`, `PDE_filter_mapping.f90`), so they would
+be used uninitialised. Use `jacobi` or `ident`.
 
 Since the Helmholtz operator is Symmetric Positive Definite (SPD), `CG` is recommended.
 The convergence rate is highly dependent on the filter radius; larger radii typically improve the condition number.
@@ -120,7 +153,9 @@ filter radius and the magnitude of the field being filtered.
 A filter solve that does not reach it within
 `max_iter` iterations is reported with a warning in the log, and the
 unconverged result is used. With `"strict_convergence": true` the run stops
-with an error instead. The filter does not follow
+with an error instead. A solve can then never be reported as converged, and the
+run therefore stops at the first filter application, with the `cheby` solver,
+with `max_iter` below 2, or with a `tol` of `0` or below. The filter does not follow
 `case.fluid.strict_convergence`; set the key on each filter that needs it.
 
 ## Linear mapping {#mapping_linear}
@@ -135,7 +170,7 @@ following input parameters:
 
 | Name    | Description                               | Admissible values | Default value |
 | ------- | ----------------------------------------- | ----------------- | ------------- |
-| `f_max` | \f$f_\text{max}\f$ in the above equation. | Real              | -             |
+| `f_max` | \f$f_\text{max}\f$ in the above equation. | Real, or array of reals (continuation) | *(required)* |
 | `f_min` | \f$f_\text{min}\f$ in the above equation. | Real              | `0.0`         |
 
 ## RAMP mapping {#mapping_RAMP}
@@ -157,9 +192,9 @@ following input parameters:
 
 | Name    | Description                               | Admissible values | Default value |
 | ------- | ----------------------------------------- | ----------------- | ------------- |
-| `f_max` | \f$f_\text{max}\f$ in the above equation. | Real              | -             |
+| `f_max` | \f$f_\text{max}\f$ in the above equation. | Real, or array of reals (continuation) | *(required)* |
 | `f_min` | \f$f_\text{min}\f$ in the above equation. | Real              | `0.0`         |
-| `q`     | \f$q\f$ in the above equation.            | Real              | `1.0`         |
+| `q`     | \f$q\f$ in the above equation.            | Real, or array of reals (continuation) | `1.0`         |
 
 ## Borrvall & Petersson mapping {#mapping_Borrvall_Petersson}
 A mapping based on the material interpolation of
@@ -180,9 +215,9 @@ has the following input parameters:
 
 | Name    | Description                               | Admissible values | Default value |
 | ------- | ----------------------------------------- | ----------------- | ------------- |
-| `f_max` | \f$f_\text{max}\f$ in the above equation. | Real              | -             |
+| `f_max` | \f$f_\text{max}\f$ in the above equation. | Real, or array of reals (continuation) | *(required)* |
 | `f_min` | \f$f_\text{min}\f$ in the above equation. | Real              | `0.0`         |
-| `q`     | \f$q\f$ in the above equation.            | Real              | `1.0`         |
+| `q`     | \f$q\f$ in the above equation.            | Real, or array of reals (continuation) | `1.0`         |
 
 ## SIMP mapping {#mapping_SIMP}
 A mapping based on the [SIMP](https://doi.org/10.1007/BF01650949) taking the following form
@@ -199,9 +234,9 @@ following input parameters:
 
 | Name    | Description                               | Admissible values | Default value |
 | ------- | ----------------------------------------- | ----------------- | ------------- |
-| `f_max` | \f$f_\text{max}\f$ in the above equation. | Real              | -             |
+| `f_max` | \f$f_\text{max}\f$ in the above equation. | Real, or array of reals (continuation) | *(required)* |
 | `f_min` | \f$f_\text{min}\f$ in the above equation. | Real              | `0.0`         |
-| `p`     | \f$p\f$ in the above equation.            | Real              | `1.0`         |
+| `p`     | \f$p\f$ in the above equation.            | Real, or array of reals (continuation) | `1.0`         |
 
 ## Heaviside mapping {#mapping_heaviside_mapping}
 A smooth Heaviside mapping taking the form,
@@ -218,5 +253,12 @@ has the following input parameters:
 
 | Name   | Description                                 | Admissible values | Default value |
 | ------ | ------------------------------------------- | ----------------- | ------------- |
-| `beta` | Projection sharpness parameter \f$\beta\f$. | Real, `> 0`       | `8.0`         |
+| `beta` | Projection sharpness parameter \f$\beta\f$. | Real, `> 0`, or array of reals (continuation) | *(required)* |
 | `eta`  | Projection threshold parameter \f$\eta\f$.  | Real in `[0,1]`   | `0.5`         |
+
+`beta` has no default: a mapping without it stops the set-up with the error
+"beta not found and no default provided". The initial value (the first entry of
+an array) is checked to be positive, and `eta` to lie in `[0,1]`, when the
+mapping is created. Later entries of a `beta` array are not checked at that
+point; a later entry of `0.0` stops the run when it is reached, with "invalid
+denominator in heaviside mapping".
