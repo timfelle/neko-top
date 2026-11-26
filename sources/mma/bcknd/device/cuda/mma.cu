@@ -52,6 +52,15 @@
 #include "mma_kernel.h"
 
 
+/*
+ * A rank without design variables calls the wrappers below with n = 0, and a
+ * grid of zero blocks is an invalid launch. The wrappers over n entries
+ * therefore launch nothing for n < 1: the elementwise ones and the reductions
+ * into an output array return at once, and the reductions to a scalar return
+ * 0, the value their reduction starts from. The callers zero the output
+ * arrays of those reductions first, so that such a rank adds zero to their
+ * sums over the ranks.
+ */
 extern "C" {
 
   int mma_red_s = 0;
@@ -288,6 +297,8 @@ extern "C" {
 
   void delta_1dbeam_cuda(void* Delta, real* L_total, real* Le,
                        int* offset, int* n) {
+    if (*n < 1) return;
+
     const dim3 nthrds(1024, 1, 1);
     const dim3 nblcks(((*n) + 1024 - 1) / 1024, 1, 1);
     delta_1dbeam_kernel<real> <<<nblcks, nthrds, 0, (cudaStream_t)glb_cmd_queue>>>
@@ -300,6 +311,7 @@ extern "C" {
      const dim3 nblcks(((*n)+1024 - 1)/ 1024, 1, 1);
      const int nb = ((*n) + 1024 - 1)/ 1024;
      const cudaStream_t stream = (cudaStream_t) glb_cmd_queue;
+     if (*n < 1) return;
      CUDA_CHECK(cudaStreamSynchronize(stream));
      if(nb > mma_red_s){
         mma_red_s = nb;
@@ -327,6 +339,8 @@ extern "C" {
 
   void mma_Ljjxinv_cuda(void* Ljjxinv, void* pjlambda, void* qjlambda, void* x,
      void* low, void* upp, void* alpha, void* beta, int* n) {
+    if (*n < 1) return;
+
     const dim3 nthrds(1024, 1, 1);
     const dim3 nblcks(((*n) + 1024 - 1) / 1024, 1, 1);
     mma_Ljjxinv_kernel<real> <<<nblcks, nthrds, 0, (cudaStream_t)glb_cmd_queue>>>
@@ -337,6 +351,8 @@ extern "C" {
 
   void mma_dipsolvesub1_cuda(void* x, void* pjlambda, void* qjlambda,
      void* low, void* upp, void* alpha, void* beta, int* n) {
+    if (*n < 1) return;
+
     const dim3 nthrds(1024, 1, 1);
     const dim3 nblcks(((*n) + 1024 - 1) / 1024, 1, 1);
     mma_dipsolvesub1_kernel<real> <<<nblcks, nthrds, 0, (cudaStream_t)glb_cmd_queue>>>
@@ -347,6 +363,8 @@ extern "C" {
 
   void mattrans_v_mul_cuda(void* output, void* pij, void* lambda,
        int* m, int* n) {
+    if (*n < 1) return;
+
     const dim3 nthrds(1024, 1, 1);
     const dim3 nblcks(((*n) + 1024 - 1) / 1024, 1, 1);
     mattrans_v_mul_kernel<real> <<<nblcks, nthrds, 0, (cudaStream_t)glb_cmd_queue>>>
@@ -365,6 +383,8 @@ extern "C" {
     const dim3 nblcks((N + 1023) / 1024, 1, 1);
     const int nb = (N + 1023) / 1024;
     const cudaStream_t stream = (cudaStream_t)glb_cmd_queue;
+
+    if (N < 1) return;
 
     if (nb > mma_red_s) {
         mma_red_s = nb;
@@ -412,6 +432,8 @@ extern "C" {
    void mma_gensub3_cuda(void* x, void* df0dx, void* dfdx, void* low,
        void* upp, void* xmin, void* xmax, void* alpha, void* beta,
        void* p0j, void* q0j, void* pij, void* qij, int* n, int* m) {
+    if (*n < 1) return;
+
     const dim3 nthrds(1024, 1, 1);
     const dim3 nblcks(((*n) + 1024 - 1) / 1024, 1, 1);
 
@@ -428,6 +450,8 @@ extern "C" {
   void mma_gensub3_dip_cuda(void* x, void* df0dx, void* dfdx, void* low,
        void* upp, void* xmin, void* xmax, void* alpha, void* beta,
        void* p0j, void* q0j, void* pij, void* qij, int* n, int* m) {
+    if (*n < 1) return;
+
     const dim3 nthrds(1024, 1, 1);
     const dim3 nblcks(((*n) + 1024 - 1) / 1024, 1, 1);
 
@@ -443,6 +467,8 @@ extern "C" {
 
   void mma_gensub2_cuda(void* low, void* upp, void* x, void* xold1,
        void* xold2, void* xdiff, real* asydecr, real* asyincr, int* n) {
+    if (*n < 1) return;
+
     const dim3 nthrds(1024, 1, 1);
     const dim3 nblcks(((*n) + 1024 - 1) / 1024, 1, 1);
 
@@ -456,6 +482,8 @@ extern "C" {
 
   void mma_gensub1_cuda(void* low, void* upp, void* x, void* xmin, void* xmax,
        real* asyinit, int* n) {
+    if (*n < 1) return;
+
     const dim3 nthrds(1024, 1, 1);
     const dim3 nblcks(((*n) + 1024 - 1) / 1024, 1, 1);
     mma_sub1_kernel<real> <<<nblcks, nthrds, 0, (cudaStream_t)glb_cmd_queue>>>
@@ -465,6 +493,8 @@ extern "C" {
   }
 
   void cuda_mma_max(void* xsi, void* x, void* alpha, int* n) {
+    if (*n < 1) return;
+
     const dim3 nthrds(1024, 1, 1);
     const dim3 nblcks(((*n) + 1024 - 1) / 1024, 1, 1);
 
@@ -479,6 +509,8 @@ extern "C" {
     const dim3 nblcks(((*n)+1024 - 1)/ 1024, 1, 1);
     const int nb = ((*n) + 1024 - 1)/ 1024;
     const cudaStream_t stream = (cudaStream_t) glb_cmd_queue;
+
+    if (*n < 1) return;
 
     if ( nb > mma_red_s){
        mma_red_s = nb;
@@ -509,6 +541,7 @@ extern "C" {
   }
 
   void cuda_sub2cons2(void* a, void* b, void* c, void* d, real* e, int* n) {
+    if (*n < 1) return;
 
     const dim3 nthrds(1024, 1, 1);
     const dim3 nblcks(((*n) + 1024 - 1) / 1024, 1, 1);
@@ -520,6 +553,7 @@ extern "C" {
 
  //max abs values of input
  real cuda_maxval(void* a, int* n) {
+    if (*n < 1) return 0.0;
 
     const dim3 nthrds(1024, 1, 1);
     const dim3 nblcks(((*n) + 1024 - 1) / 1024, 1, 1);
@@ -554,6 +588,7 @@ extern "C" {
   void cuda_delx(void* delx, void* x, void* xlow, void* xupp, void* pij,
        void* qij, void* p0j, void* q0j, void* alpha, void* beta, void* lambda,
        real* epsi, int* n, int* m) {
+    if (*n < 1) return;
 
     const dim3 nthrds(1024, 1, 1);
     const dim3 nblcks(((*n) + 1024 - 1) / 1024, 1, 1);
@@ -567,6 +602,8 @@ extern "C" {
 
   void cuda_GG(void* GG, void* x, void* xlow, void* xupp,
        void* pij, void* qij, int* n, int* m) {
+    if (*n < 1) return;
+
     const dim3 nthrds(1024, 1, 1);
     const dim3 nblcks(((*n) + 1024 - 1) / 1024, 1, 1);
     GG_kernel <real> <<<nblcks, nthrds, 0, (cudaStream_t)glb_cmd_queue >>>
@@ -578,6 +615,8 @@ extern "C" {
   void cuda_diagx(void* diagx, void* x, void* xsi,void* xlow, void* xupp,
        void* p0j, void* q0j, void* pij, void* qij, void* alpha, void* beta,
        void* eta, void* lambda, int *n, int *m) {
+    if (*n < 1) return;
+
     const dim3 nthrds(1024, 1, 1);
     const dim3 nblcks(((*n) + 1024 - 1) / 1024, 1, 1);
     diagx_kernel <real> <<<nblcks, nthrds, 0, (cudaStream_t)glb_cmd_queue >>>
@@ -592,6 +631,7 @@ extern "C" {
     const dim3 nblcks(((*n)+1024 - 1)/ 1024, 1, 1);
     const int nb = ((*n) + 1024 - 1)/ 1024;
     const cudaStream_t stream = (cudaStream_t) glb_cmd_queue;
+    if (*n < 1) return;
     CUDA_CHECK(cudaStreamSynchronize(stream));
     if(nb > mma_red_s){
        mma_red_s = nb;
@@ -619,6 +659,7 @@ extern "C" {
     const dim3 nblcks(((*n)+1024 - 1)/ 1024, 1, 1);
     const int nb = ((*n) + 1024 - 1)/ 1024;
     const cudaStream_t stream = (cudaStream_t) glb_cmd_queue;
+    if (*n < 1) return;
     CUDA_CHECK(cudaStreamSynchronize(stream));
     if(nb > mma_red_s){
        mma_red_s = nb;
@@ -646,6 +687,8 @@ extern "C" {
 
   void cuda_dx(void* dx,void* delx, void* diagx, void* GG, void* dlambda,
        int* n, int* m) {
+    if (*n < 1) return;
+
     const dim3 nthrds(1024, 1, 1);
     const dim3 nblcks(((*n) + 1024 - 1) / 1024, 1, 1);
     dx_kernel <real> <<<nblcks, nthrds, 0, (cudaStream_t)glb_cmd_queue >>>
@@ -656,6 +699,8 @@ extern "C" {
 
   void cuda_dxsi(void* dxsi, void* xsi, void* dx,void* x,
     void* alpha, real*epsi, int* n) {
+    if (*n < 1) return;
+
     const dim3 nthrds(1024, 1, 1);
     const dim3 nblcks(((*n) + 1024 - 1) / 1024, 1, 1);
     dxsi_kernel <real> <<<nblcks, nthrds, 0, (cudaStream_t)glb_cmd_queue >>>
@@ -666,6 +711,8 @@ extern "C" {
 
   void cuda_deta(void* deta, void* eta, void* dx, void* x,
        void* beta, real* epsi, int* n) {
+    if (*n < 1) return;
+
     const dim3 nthrds(1024, 1, 1);
     const dim3 nblcks(((*n) + 1024 - 1) / 1024, 1, 1);
     deta_kernel <real> <<<nblcks, nthrds, 0, (cudaStream_t)glb_cmd_queue >>>
@@ -677,6 +724,8 @@ extern "C" {
   void cuda_rex(void* rex, void* x, void* xlow, void* xupp, void* pij,
        void* p0j, void* qij, void* q0j, void* lambda, void* xsi, void* eta,
        int* n, int* m) {
+    if (*n < 1) return;
+
     const dim3 nthrds(1024, 1, 1);
     const dim3 nblcks(((*n) + 1024 - 1) / 1024, 1, 1);
     RexCalculation_kernel<real> <<<nblcks, nthrds, 0,
@@ -688,6 +737,8 @@ extern "C" {
 
   void cuda_rey(void* rey, void* c, void* d, void* y, void* lambda, void* mu,
        int* n) {
+    if (*n < 1) return;
+
     const dim3 nthrds(1024, 1, 1);
     const dim3 nblcks(((*n) + 1024 - 1) / 1024, 1, 1);
     rey_calculation_kernel<real> <<<nblcks, nthrds, 0,
@@ -698,6 +749,8 @@ extern "C" {
 
 
   void cuda_sub2cons(void * a,void * b,void * c, real *d, int * n) {
+    if (*n < 1) return;
+
     const dim3 nthrds(1024, 1, 1);
     const dim3 nblcks(((*n)+1024 - 1)/ 1024, 1, 1);
     sub2cons_kernel<real><<<nblcks, nthrds, 0,(cudaStream_t) glb_cmd_queue>>>
@@ -706,6 +759,8 @@ extern "C" {
   }
 
   real cuda_norm(void* a, int* n) {
+    if (*n < 1) return 0.0;
+
     const dim3 nthrds(1024, 1, 1);
     const dim3 nblcks(((*n)+1024 - 1)/ 1024, 1, 1);
     const int nb = ((*n) + 1024 - 1)/ 1024;
@@ -732,6 +787,8 @@ extern "C" {
 
   void cuda_dely(void* dely, void* c, void* d, void* y, void* lambda,
        real* epsi, int* n) {
+    if (*n < 1) return;
+
     const dim3 nthrds(1024, 1, 1);
     const dim3 nblcks(((*n) + 1024 - 1) / 1024, 1, 1);
     dely_kernel<real> <<<nblcks, nthrds, 0, (cudaStream_t)glb_cmd_queue >>>
@@ -740,6 +797,8 @@ extern "C" {
   }
 
   real cuda_maxval2(void* a, void* b, real* cons, int* n) {
+    if (*n < 1) return 0.0;
+
     const dim3 nthrds(1024, 1, 1);
     const dim3 nblcks(((*n)+1024 - 1)/ 1024, 1, 1);
     const int nb = ((*n) + 1024 - 1)/ 1024;
@@ -765,6 +824,8 @@ extern "C" {
   }
 
   real cuda_maxval3(void* a, void* b, void* c, real* cons, int* n) {
+    if (*n < 1) return 0.0;
+
     const dim3 nthrds(1024, 1, 1);
     const dim3 nblcks(((*n)+1024 - 1)/ 1024, 1, 1);
     const int nb = ((*n) + 1024 - 1)/ 1024;
@@ -791,6 +852,8 @@ extern "C" {
 
   void cuda_kkt_rex(void* rex, void* df0dx, void* dfdx, void* xsi,
        void* eta, void* lambda, int* n, int* m) {
+    if (*n < 1) return;
+
     const dim3 nthrds(1024, 1, 1);
     const dim3 nblcks(((*n) + 1024 - 1) / 1024, 1, 1);
     kkt_rex_kernel <real> <<<nblcks, nthrds, 0, (cudaStream_t)glb_cmd_queue >>>
@@ -813,6 +876,8 @@ extern "C" {
   }
 
   void cuda_maxcons(void* a, real* b, real* c, void* d, int* n) {
+    if (*n < 1) return;
+
     const dim3 nthrds(1024, 1, 1);
     const dim3 nblcks(((*n) + 1024 - 1) / 1024, 1, 1);
     maxcons_kernel <real> <<<nblcks, nthrds, 0, (cudaStream_t)glb_cmd_queue >>>
@@ -821,6 +886,8 @@ extern "C" {
   }
 
   real cuda_lcsc2(void *a, void*b, int *n) {
+    if (*n < 1) return 0.0;
+
     const dim3 nthrds(1024, 1, 1);
     const dim3 nblcks(((*n)+1024 - 1)/ 1024, 1, 1);
     const int nb = ((*n) + 1024 - 1)/ 1024;
@@ -855,6 +922,8 @@ extern "C" {
   }
 
   void cuda_add2inv2(void* a, void *b, real* c, int* n) {
+    if (*n < 1) return;
+
     const dim3 nthrds(1024, 1, 1);
     const dim3 nblcks(((*n) + 1024 - 1) / 1024, 1, 1);
     add2inv2_kernel <real> <<<nblcks, nthrds, 0, (cudaStream_t)glb_cmd_queue >>>
@@ -863,6 +932,8 @@ extern "C" {
   }
 
   void cuda_max2(void* a, real* b, void* c, real* d, int* n) {
+    if (*n < 1) return;
+
     const dim3 nthrds(1024, 1, 1);
     const dim3 nblcks(((*n) + 1024 - 1) / 1024, 1, 1);
     max2_kernel <real> <<<nblcks, nthrds, 0, (cudaStream_t)glb_cmd_queue >>>
@@ -892,6 +963,8 @@ extern "C" {
 
   void cuda_dy(void* dy, void* dely, void* dlambda,void* d, void* mu,
        void* y,  int* n) {
+    if (*n < 1) return;
+
     const dim3 nthrds(1024, 1, 1);
     const dim3 nblcks(((*n) + 1024 - 1) / 1024, 1, 1);
     dy_kernel <real> <<<nblcks, nthrds, 0, (cudaStream_t)glb_cmd_queue >>>
