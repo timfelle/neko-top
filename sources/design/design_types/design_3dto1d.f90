@@ -57,7 +57,8 @@ module design_3dto1d
   use vector, only: vector_t
   use math, only: copy
 
-  use mpi_f08, only: mpi_exscan, mpi_sum, MPI_INTEGER, MPI_Allreduce
+  use mpi_f08, only: mpi_exscan, mpi_sum, MPI_INTEGER, MPI_Allreduce, &
+       MPI_Gather, MPI_Gatherv
   use comm, only: pe_rank, pe_size, neko_comm, mpi_real_precision
 
   use fld_file_output, only: fld_file_output_t
@@ -210,10 +211,9 @@ contains
        end do
     endif
 
-    if (NEKO_BCKND_DEVICE .eq. 1) then
-       call device_memcpy(this%values%x, this%values%x_d, local_size, &
-            DEVICE_TO_HOST, sync = .false.)
-    end if
+    ! MPI_Gatherv reads the host buffer, so the copy must have completed
+    call this%values%copy_from(DEVICE_TO_HOST, sync = .true.)
+
     ! Now gather the actual data with proper displacement handling
     call MPI_Gatherv(this%values%x, local_size, mpi_real_precision, &
          global_values, recvcounts, displs, mpi_real_precision, &
