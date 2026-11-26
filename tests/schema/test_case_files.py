@@ -42,6 +42,11 @@ EXPECTED_REJECTED = {
     "tests/unit/sensitivity/unsteady_variable_timestep_without_timestep.case":
     ("variable_timestep",
      "the same abort, without the `timestep` that caps the first step"),
+    "tests/unit/sensitivity/unsteady_exact_output_time.case": (
+        "exact_output_time",
+        "an unsteady run with case.time.exact_output_time aborts "
+        "(simulation.f90:289-297) before Neko asks for a variable timestep; "
+        "the case also has the other problems of its group"),
     "tests/unit/sensitivity/brinkman_dissipation_dealias_mismatch.case": (
         "dealias_sensitivity",
         "dealias_sensitivity and dealias_forcing differ "

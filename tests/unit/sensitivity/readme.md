@@ -130,8 +130,11 @@ Currently, we have added tests for the following components:
   checks that the adjoint's clock did stop short, so that the check cannot
   pass vacuously.
 - The guards against a variable timestep in an unsteady problem
-  (`unsteady_variable_timestep.case`) and against a variable timestep
-  without the `timestep` that caps its first step
+  (`unsteady_variable_timestep.case`), against `exact_output_time` in an
+  unsteady problem (`unsteady_exact_output_time.case`, which must stop at
+  set-up with Neko-TOP's error, not at the first forward run with Neko's
+  `exact_output_time requires variable_timestep`) and against a variable
+  timestep without the `timestep` that caps its first step
   (`variable_timestep_without_timestep.case`). They are not in `test_list`:
   each passes only if the run stops with its error.
 - `brinkman_dissipation_objective_t`, unsteady
