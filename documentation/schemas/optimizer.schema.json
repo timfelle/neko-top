@@ -7,11 +7,11 @@
       "$ref": "urn:neko:schema:common#/$defs/integerOrRef"
     },
     "enableOutput": {
-      "description": "Write optimiser output. Default true. With false the optimiser skips `optimization_data.csv` and the per-iteration forward and adjoint field output; the design and sensitivity files are always written (mma_optimizer.f90:136-137,198-205,252-257; optimizer.f90:520,547).",
+      "description": "Write optimiser output. Default true. With false the optimiser skips `optimization_data.csv` and the per-iteration forward and adjoint field output; the design and sensitivity files are always written (mma_optimizer.f90:137-138,199-206,253-258; optimizer.f90:521,548).",
       "type": "boolean"
     },
     "maxRuntime": {
-      "description": "Wall-clock limit as `S`, `M:S`, `H:M:S` or `D-H:M:S`; empty disables it. Default empty. The seconds-only form may be a Fortran list-directed real with a non-negative exponent (`1e3`, `5.`, `+5`, `3.6e+3`), and blanks around the string are allowed. A negative exponent (`1e-3`) aborts, because any `-` is read as the days separator. In the `M:S`, `H:M:S` and `D-H:M:S` forms the fields are plain digits here; the code also accepts list-directed forms there (`1:3e1`, `1:.5`, `+1:00:00`), which this schema does not. A duration of 0 s (`0`, `0:00`) is accepted, but the optimiser then stops after its first iteration, because the runtime-checkpoint lookup only treats a limit above 0 as enabled (optimizer.f90:342,655).",
+      "description": "Wall-clock limit as `S`, `M:S`, `H:M:S` or `D-H:M:S`; empty disables it. Default empty. The seconds-only form may be a Fortran list-directed real with a non-negative exponent (`1e3`, `5.`, `+5`, `3.6e+3`), and blanks around the string are allowed. A negative exponent (`1e-3`) aborts, because any `-` is read as the days separator. In the `M:S`, `H:M:S` and `D-H:M:S` forms the fields are plain digits here; the code also accepts list-directed forms there (`1:3e1`, `1:.5`, `+1:00:00`), which this schema does not. A duration of 0 s (`0`, `0:00`) is accepted, but the optimiser then stops after its first iteration, because the runtime-checkpoint lookup only treats a limit above 0 as enabled (optimizer.f90:342,656).",
       "$comment": "optimizer.f90:428-429 calls read_duration, which trims the string and does a list-directed read of the seconds (neko src/common/utils.f90:598,662); the empty string returns early (utils.f90:499). Neko's `job_timelimit` pattern, which uses the same parser, is stricter; it is not referenced because the property path is not a $defs entry and the pattern has no empty alternative. The exponent has no `-` for the reason given above: neko src/common/utils.f90:607-612 reports 'Bad format' for `1e-3`, and optimizer.f90:429 passes no ierr, so it aborts.",
       "type": "string",
       "pattern": "^ *(?:$|(?:[+]?(?:[0-9]+\\.?[0-9]*|\\.[0-9]+)(?:[eEdD][+]?[0-9]+)?) *$|[0-9]+:(?:[0-5]?[0-9](?:\\.[0-9]*)?) *$|[0-9]+:[0-5]?[0-9]:(?:[0-5]?[0-9](?:\\.[0-9]*)?) *$|[0-9]+-(?:[01]?[0-9]|2[0-3]):[0-5]?[0-9]:(?:[0-5]?[0-9](?:\\.[0-9]*)?) *$)"
@@ -22,7 +22,7 @@
     },
     "restartFile": {
       "description": "Optimiser checkpoint to restart from; the file must exist and end in `h5`, `hdf5` or `hf5`. At most 256 characters. Default none, but an empty value does not mean a fresh start when checkpoints of an earlier run are present: the optimiser then restarts from `<checkpoint.path>/optimizer_rt_checkpoint.h5` (only if `max_runtime` is set) or from the newest `<checkpoint.path>/<checkpoint.base>_NNNNN.h5` with NNNNN up to `max_iterations`, even when `checkpoint.interval` is <= 0 (optimizer.f90:342-376).",
-      "$comment": "optimizer.f90:1000-1012. The name is stored in character(len=256) (optimizer.f90:86) and cut silently: a longer path is looked up under its first 256 characters (optimizer.f90:435, :987, :999).",
+      "$comment": "optimizer.f90:1001-1013. The name is stored in character(len=256) (optimizer.f90:86) and cut silently: a longer path is looked up under its first 256 characters (optimizer.f90:435, :987, :999).",
       "type": "string",
       "pattern": "^$|\\.(h5|hdf5|hf5)$",
       "maxLength": 256,
@@ -34,8 +34,8 @@
       ]
     },
     "checkpoint": {
-      "description": "Optimiser checkpointing. Shared by every solver (optimizer.f90:415-449).",
-      "$comment": "path and base are stored in character(len=256) (optimizer.f90:89-90), but the file name `path + '/' + base + '_NNNNN.h5'` is built by an internal write into one character(len=256) (optimizer.f90:826-828,857-861), which aborts with 'End of record' when it is longer, in every fresh run: init_base builds it to look for earlier checkpoints (:363-366), even with checkpointing disabled. Expressed here: the default of the key that is absent (path `./checkpoints/`, 14 characters; base `optimizer_checkpoint`, 20) bounds the other. A sum of two given lengths cannot be expressed, and neither can the runtime checkpoint `optimizer_rt_checkpoint`, which with a non-empty `max_runtime` needs `path` plus a missing '/' to be at most 230 characters (:350-351).",
+      "description": "Optimiser checkpointing. Shared by every solver (optimizer.f90:415-450).",
+      "$comment": "path and base are stored in character(len=256) (optimizer.f90:89-90), but the file name `path + '/' + base + '_NNNNN.h5'` is built by an internal write into one character(len=256) (optimizer.f90:827-829,858-862), which aborts with 'End of record' when it is longer, in every fresh run: init_base builds it to look for earlier checkpoints (:363-366), even with checkpointing disabled. Expressed here: the default of the key that is absent (path `./checkpoints/`, 14 characters; base `optimizer_checkpoint`, 20) bounds the other. A sum of two given lengths cannot be expressed, and neither can the runtime checkpoint `optimizer_rt_checkpoint`, which with a non-empty `max_runtime` needs `path` plus a missing '/' to be at most 230 characters (:350-351).",
       "type": "object",
       "allOf": [
         {
@@ -100,7 +100,7 @@
         },
         "format": {
           "description": "`h5`, `hdf5`, `hf5` or `hdf`. Default `hdf5`.",
-          "$comment": "optimizer.f90:851",
+          "$comment": "optimizer.f90:852",
           "enum": [
             "h5",
             "hdf5",
@@ -120,12 +120,12 @@
       "additionalProperties": false
     },
     "continuationIterations": {
-      "description": "Default iterations per step of every continuation array. Default 1. A value <= 0 (without a per-key value) disables the schedule: the parameter is never updated from its array and keeps its first value (continuation_scheduler.f90:88-91,153,248).",
+      "description": "Default iterations per step of every continuation array. Default 1. A value <= 0 (without a per-key value) disables the schedule: the parameter is never updated from its array and keeps its first value (continuation_scheduler.f90:90-93,170,274).",
       "$ref": "urn:neko-top:schema:common#/$defs/continuationIterations"
     },
     "mmaSolver": {
       "description": "Method of moving asymptotes.",
-      "$comment": "sources/optimizer/mma_optimizer.f90:131-136, sources/mma/mma.f90:281-302",
+      "$comment": "sources/optimizer/mma_optimizer.f90:132-137, sources/mma/mma.f90:281-309",
       "type": "object",
       "required": [
         "type"
@@ -142,8 +142,8 @@
           "type": "object",
           "properties": {
             "epsimin": {
-              "description": "Minimum subproblem tolerance; positive (mma.f90:501-502 aborts otherwise). Default 1.0e-9 * sqrt(m + n).",
-              "$comment": "mma.f90:501-503 checks only > 0.",
+              "description": "Minimum subproblem tolerance; positive (mma.f90:508-509 aborts otherwise). Default 1.0e-9 * sqrt(m + n).",
+              "$comment": "mma.f90:508-510 checks only > 0.",
               "$ref": "urn:neko:schema:common#/$defs/positiveNumberOrRef"
             },
             "max_iter": {
@@ -164,7 +164,7 @@
             },
             "backend": {
               "description": "`cpu` or `device`. Default `device` in a device build, `cpu` otherwise.",
-              "$comment": "mma.f90:496 aborts for other values; `device` aborts in a build without a device backend (device_mma_math.f90:755).",
+              "$comment": "mma.f90:503 aborts for other values; `device` aborts in a build without a device backend (device_mma_math.f90:755).",
               "enum": [
                 "cpu",
                 "device"
@@ -243,7 +243,7 @@
     },
     "steepestDescentSolver": {
       "description": "Steepest descent. It cannot handle constraints.",
-      "$comment": "sources/optimizer/steepest_descent_optimizer.f90:179-242. `tolerance` is read for mma only (mma_optimizer.f90:134). Constraints are rejected in the optimisation schema.",
+      "$comment": "sources/optimizer/steepest_descent_optimizer.f90:180-245. `tolerance` is read for mma only (mma_optimizer.f90:135). Constraints are rejected in the optimisation schema.",
       "type": "object",
       "required": [
         "type"
@@ -260,7 +260,7 @@
               "$ref": "urn:neko:schema:common#/$defs/numberOrRef"
             },
             "xmax": {
-              "description": "Upper design bound; must exceed xmin (abort at steepest_descent_optimizer.f90:215). Default 1.0.",
+              "description": "Upper design bound; must exceed xmin (abort at steepest_descent_optimizer.f90:218). Default 1.0.",
               "$ref": "urn:neko:schema:common#/$defs/numberOrRef"
             },
             "step_length": {
@@ -314,7 +314,7 @@
               "additionalProperties": false,
               "allOf": [
                 {
-                  "$comment": "steepest_descent_optimizer.f90:200-206,226-235 abort when initial < min or max < initial, with the defaults initial 0.1, min 0.001, max 0.1 for an absent key. A comparison of keys that are all given cannot be expressed.",
+                  "$comment": "steepest_descent_optimizer.f90:203-209,229-238 abort when initial < min or max < initial, with the defaults initial 0.1, min 0.001, max 0.1 for an absent key. A comparison of keys that are all given cannot be expressed.",
                   "if": {
                     "not": {
                       "required": [
@@ -371,7 +371,7 @@
           "additionalProperties": false,
           "allOf": [
             {
-              "$comment": "steepest_descent_optimizer.f90:194-197,214-217 abort when xmin >= xmax, with the defaults xmin 0.0 and xmax 1.0 for an absent key. A comparison of two given values cannot be expressed.",
+              "$comment": "steepest_descent_optimizer.f90:195-200,217-220 abort when xmin >= xmax, with the defaults xmin 0.0 and xmax 1.0 for an absent key. A comparison of two given values cannot be expressed.",
               "if": {
                 "not": {
                   "required": [

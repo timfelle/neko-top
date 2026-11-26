@@ -4,7 +4,7 @@
   "$defs": {
     "initialDistribution": {
       "description": "Initial design field, discriminated by `type`.",
-      "$comment": "sources/design/bcknd/set_optimization_ic.f90:100-123. The `field` type is not accepted: set_optimization_ic.f90:262 aborts without a `.fNNNNN` suffix, and with one :267 passes `trim(file_name)` as the output argument of filename_chsuffix (an expression, never written back), so the suffix reaches `f%init` at :270 and neko src/io/file.f90:133 aborts with an unknown file format.",
+      "$comment": "sources/design/bcknd/set_optimization_ic.f90:101-125. The `field` type is not accepted: set_optimization_ic.f90:264 aborts without a `.fNNNNN` suffix, and with one :269 passes `trim(file_name)` as the output argument of filename_chsuffix (an expression, never written back), so the suffix reaches `f%init` at :272 and neko src/io/file.f90:133 aborts with an unknown file format.",
       "oneOf": [
         {
           "type": "object",
@@ -116,11 +116,11 @@
           "type": "boolean"
         },
         "verbose_design": {
-          "description": "Write every forward cascade stage of the design. When false, only the first unmapped stage and the mapped Brinkman amplitude are written (the design is written every iteration either way, mapping_handler.f90:165-176,184-196 configure the writers; optimizer.f90:520,547 write every iteration). Default false.",
+          "description": "Write every forward cascade stage of the design. When false, only the first unmapped stage and the mapped Brinkman amplitude are written (the design is written every iteration either way, mapping_handler.f90:165-176,184-196 configure the writers; optimizer.f90:521,548 write every iteration). Default false.",
           "type": "boolean"
         },
         "verbose_sensitivity": {
-          "description": "Write every backward chain-rule stage of the sensitivity as well as the final sensitivity. When false, only the final sensitivity is written (the sensitivity is written every iteration either way, mapping_handler.f90:198-221 configure the writers; optimizer.f90:520,547 write every iteration). Default false.",
+          "description": "Write every backward chain-rule stage of the sensitivity as well as the final sensitivity. When false, only the final sensitivity is written (the sensitivity is written every iteration either way, mapping_handler.f90:198-221 configure the writers; optimizer.f90:521,548 write every iteration). Default false.",
           "type": "boolean"
         },
         "output_precision": {
@@ -137,7 +137,7 @@
         },
         "output_format": {
           "description": "Output format. Default `fld`. `bp` and `adios2` both write `.bp` and need an ADIOS2-enabled Neko.",
-          "$comment": "design_brinkman.f90:284 passes the string to field_output_t%init (mapping_handler.f90:180,205,216), which builds the suffix `.<format>` (neko src/io/field_output.f90:83-86). Other file_t suffixes (csv, vtk, chkp, nmsh, stl) abort on the first write (vtk_file.f90:141, csv_file.f90:96, chkp_file.f90:293, nmsh_file.f90:93), because the design is always written (optimizer.f90:520,547); `rea` silently writes nothing (neko src/io/rea_file.f90:452-456), `re2` and `map` abort (re2_file.f90:243, map_file.f90:93), and any other value aborts at file_t init (file.f90:133).",
+          "$comment": "design_brinkman.f90:284 passes the string to field_output_t%init (mapping_handler.f90:180,205,216), which builds the suffix `.<format>` (neko src/io/field_output.f90:83-86). Other file_t suffixes (csv, vtk, chkp, nmsh, stl) abort on the first write (vtk_file.f90:141, csv_file.f90:96, chkp_file.f90:293, nmsh_file.f90:93), because the design is always written (optimizer.f90:521,548); `rea` silently writes nothing (neko src/io/rea_file.f90:452-456), `re2` and `map` abort (re2_file.f90:243, map_file.f90:93), and any other value aborts at file_t init (file.f90:133).",
           "enum": [
             "fld",
             "nek5000",

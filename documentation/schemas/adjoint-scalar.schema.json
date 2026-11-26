@@ -53,7 +53,7 @@
     },
     "solver": {
       "description": "Solver of the adjoint scalar. Each key that is absent here is read from `case.scalar.solver`.",
-      "$comment": "Neko's linear solver objects are open (registered Krylov types define their own keys), so this one is too. sources/adjoint/adjoint_scalar_scheme.f90:288-316,376-385.",
+      "$comment": "Neko's linear solver objects are open (registered Krylov types define their own keys), so this one is too. sources/adjoint/adjoint_scalar_scheme.f90:289-317,377-386.",
       "type": "object",
       "properties": {
         "type": {
@@ -89,7 +89,7 @@
     },
     "adjointScalar": {
       "description": "`case.adjoint_scalar`: the adjoint of the scalar transport equation (a single scalar).",
-      "$comment": "sources/adjoint/adjoint_case.f90:175-219, adjoint_scalar_scheme.f90, adjoint_scalar_pnpn.f90, neko_ext/neko_ext.f90:399-450.",
+      "$comment": "sources/adjoint/adjoint_case.f90:176-220, adjoint_scalar_scheme.f90, adjoint_scalar_pnpn.f90, neko_ext/neko_ext.f90:399-450.",
       "type": "object",
       "properties": {
         "enabled": {
@@ -101,7 +101,7 @@
           "$ref": "urn:neko:schema:common#/$defs/nonEmptyString"
         },
         "name": {
-          "description": "Name of the adjoint scalar. Default `<primal_name>_adj`. At most 66 characters and without `/` or blank (the log line and the checkpoint payload name abort otherwise: adjoint_scalar_scheme.f90:321, adjoint_scalar_pnpn.f90:263-265). While the adjoint scalar is enabled the schema rejects `abx1` and `abx2`, the scheme's own work fields, which the checkpoint payload registered under the adjoint name would list twice (a rule under `case` in the case-file schema).",
+          "description": "Name of the adjoint scalar. Default `<primal_name>_adj`. At most 66 characters and without `/` or blank (the log line and the checkpoint payload name abort otherwise: adjoint_scalar_scheme.f90:322, adjoint_scalar_pnpn.f90:264-266). While the adjoint scalar is enabled the schema rejects `abx1` and `abx2`, the scheme's own work fields, which the checkpoint payload registered under the adjoint name would list twice (a rule under `case` in the case-file schema).",
           "$ref": "urn:neko:schema:common#/$defs/nonEmptyString"
         },
         "solver": {
@@ -130,7 +130,7 @@
               "$ref": "urn:neko:schema:scalar#/$defs/scalarInitialCondition"
             },
             {
-              "$comment": "adjoint_case.f90:332 and neko_ext.f90:438 abort on a `user` adjoint scalar initial condition.",
+              "$comment": "adjoint_case.f90:333 and neko_ext.f90:438 abort on a `user` adjoint scalar initial condition.",
               "required": [
                 "type"
               ],
@@ -151,7 +151,7 @@
       "additionalProperties": false,
       "allOf": [
         {
-          "$comment": "adjoint_scalar_scheme.f90:321 writes 'Name       : ' (13 characters) // name into the 79-character log buffer (neko src/common/log.f90:46): a name over 66 characters gives 'End of record'; from 76 characters on, field_series lag names also collide. checkpoint_payload_validate_name aborts for a '/' in the name or a blank one (adjoint_scalar_pnpn.f90:263-267; neko src/common/checkpoint_payload.f90:165-170,600-605).",
+          "$comment": "adjoint_scalar_scheme.f90:322 writes 'Name       : ' (13 characters) // name into the 79-character log buffer (neko src/common/log.f90:46): a name over 66 characters gives 'End of record'; from 76 characters on, field_series lag names also collide. checkpoint_payload_validate_name aborts for a '/' in the name or a blank one (adjoint_scalar_pnpn.f90:264-268; neko src/common/checkpoint_payload.f90:165-170,600-605).",
           "if": {
             "not": {
               "required": [
@@ -174,7 +174,7 @@
           }
         },
         {
-          "$comment": "The default name is primal_name//'_adj' (adjoint_scalar_scheme.f90:281-285), which must also fit in 66 characters.",
+          "$comment": "The default name is primal_name//'_adj' (adjoint_scalar_scheme.f90:282-286), which must also fit in 66 characters.",
           "if": {
             "allOf": [
               {

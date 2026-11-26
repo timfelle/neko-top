@@ -16,7 +16,7 @@
     },
     "scalarOptimizing": {
       "description": "Restrictions on `case.scalar` while the adjoint scalar is enabled.",
-      "$comment": "adjoint_scalar_scheme.f90:355-358 aborts when `variable_material_properties` is present. `variable_material_properties` is what the adjoint guards, and Neko no longer reads it. `Pe`, `lambda` and `cp` go through the constants lookup (:610-637), like Neko's own, so Neko's definitions apply.",
+      "$comment": "adjoint_scalar_scheme.f90:356-359 aborts when `variable_material_properties` is present. `variable_material_properties` is what the adjoint guards, and Neko no longer reads it. `Pe`, `lambda` and `cp` go through the constants lookup (:611-638), like Neko's own, so Neko's definitions apply.",
       "type": "object",
       "properties": {
         "variable_material_properties": false

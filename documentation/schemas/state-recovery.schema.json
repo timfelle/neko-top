@@ -4,7 +4,7 @@
   "$defs": {
     "stateRecovery": {
       "description": "`state_recovery`: how the forward state is recovered for the adjoint of an unsteady run.",
-      "$comment": "sources/state_recovery/state_recover_fctry.f90:54-75, sources/state_recovery/checkpoint/checkpoint.f90:152-161.",
+      "$comment": "sources/state_recovery/state_recover_fctry.f90:54-75, sources/state_recovery/checkpoint/checkpoint.f90:153-162.",
       "type": "object",
       "properties": {
         "type": {
@@ -16,7 +16,7 @@
         },
         "algorithm": {
           "description": "Checkpointing strategy; only the linear one exists. Default `linear`.",
-          "$comment": "checkpoint.f90:220",
+          "$comment": "checkpoint.f90:221",
           "enum": [
             "linear",
             "LINEAR",
@@ -25,7 +25,7 @@
         },
         "n_memory": {
           "description": "Checkpoints kept in memory; at least 1. Default 10.",
-          "$comment": "checkpoint_linear.f90:69: 0 divides by zero on the first save; checkpoint.f90:425: a negative value allocates no slots and fails later.",
+          "$comment": "checkpoint_linear.f90:69: 0 divides by zero on the first save; checkpoint.f90:426: a negative value allocates no slots and fails later.",
           "$ref": "urn:neko:schema:common#/$defs/positiveIntegerOrRef"
         },
         "path": {
@@ -43,7 +43,7 @@
             "chkp",
             "hdf5"
           ],
-          "$comment": "A deliberate copy of Neko's inline `case.checkpoint_format` enum (no $defs entry to reference): both go to chkp_output_t%init (checkpoint.f90:155-156, neko src/io/chkp_output.f90:69-74), where `hdf5` gives `.h5` and anything else `.chkp`, so another value would silently run as `chkp`; the enum rejects it."
+          "$comment": "A deliberate copy of Neko's inline `case.checkpoint_format` enum (no $defs entry to reference): both go to chkp_output_t%init (checkpoint.f90:156-157, neko src/io/chkp_output.f90:69-74), where `hdf5` gives `.h5` and anything else `.chkp`, so another value would silently run as `chkp`; the enum rejects it."
         },
         "keep_checkpoints": {
           "description": "Keep the files after the run. Default false.",
@@ -51,7 +51,7 @@
         },
         "extra_fields": {
           "description": "Names of further registered fields to checkpoint. They must exist when the simulation is initialised, which excludes the design fields (`design_indicator`, `brinkman_amplitude`, `sensitivity`) and the mapping fields (`<type>_mapping`, `<type>_mapping_2`, ...), registered only after the lookup.",
-          "$comment": "checkpoint.f90:160-165 looks every name up in the registry inside sim%init (simulation.f90:299-301), before the drivers create the design (topopt.f90:93,96); design_brinkman.f90:365-367 and mapping.f90:176-184 register those fields. A name that no startup routine registers aborts with 'Field ... could not be found in the registry' (neko src/registries/registry.f90:562); that cannot be checked here, except for these fixed names.",
+          "$comment": "checkpoint.f90:161-166 looks every name up in the registry inside sim%init (simulation.f90:299-301), before the drivers create the design (topopt.f90:90,97); design_brinkman.f90:365-367 and mapping.f90:176-184 register those fields. A name that no startup routine registers aborts with 'Field ... could not be found in the registry' (neko src/registries/registry.f90:562); that cannot be checked here, except for these fixed names.",
           "type": "array",
           "items": {
             "$ref": "urn:neko:schema:common#/$defs/nonEmptyString",

@@ -30,7 +30,7 @@
           "const": "pnpn"
         },
         "full_stress_formulation": {
-          "$comment": "adjoint_fluid_pnpn.f90:316-318 aborts when it is true.",
+          "$comment": "adjoint_fluid_pnpn.f90:317-319 aborts when it is true.",
           "const": false
         },
         "nut_field": false,
@@ -77,7 +77,7 @@
           }
         }
       },
-      "$comment": "`nut_field` (adjoint_fluid_pnpn.f90:338-342) and `flow_rate_force` (adjoint_fluid_scheme_incompressible.f90:242-243) abort when present. `Re`, `mu`, `rho` and the solver keys that the adjoint reads from `case.fluid` go through the constants lookup, like Neko's own, so Neko's definitions apply and nothing is restated here."
+      "$comment": "`nut_field` (adjoint_fluid_pnpn.f90:339-343) and `flow_rate_force` (adjoint_fluid_scheme_incompressible.f90:245-246) abort when present. `Re`, `mu`, `rho` and the solver keys that the adjoint reads from `case.fluid` go through the constants lookup, like Neko's own, so Neko's definitions apply and nothing is restated here."
     }
   }
 }

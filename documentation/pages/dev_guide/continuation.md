@@ -115,6 +115,15 @@ The constants are looked up when the parameters are read, so
 initialised (`sim%init`), which is what registers the constants. The drivers
 `sources/drivers/topopt.f90` and `sources/drivers/topopt-user.f90` do so.
 
+`init` also deallocates the array of registered parameters (it starts from an
+empty one). User code, that is the startup or `user_setup` of a user file, must
+therefore not register continuation parameters before the driver calls
+`nekotop_continuation%init`: that call runs after `sim%init`, and it resets the
+registered parameters, so anything registered earlier is lost. (In
+`sources/drivers/topopt-user.f90`, `user_setup` is called even before
+`sim%init`.) Register parameters only after `nekotop_continuation%init` has
+run.
+
 
 ## 5. Registering Parameters
 ```fortran

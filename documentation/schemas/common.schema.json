@@ -3,7 +3,7 @@
   "$id": "urn:neko-top:schema:common",
   "$defs": {
     "continuationReal": {
-      "$comment": "Read by json_get_or_register: a JSON real, an array of JSON reals, or a constants name, which the lookup resolves to a real or to an array of reals (a name is accepted for either, as the schema cannot see the constant). An integer, boolean or object aborts (continuation_scheduler.f90:160); array elements must be reals (case_file_utils.f90:347 in Neko); an empty array reads values(1) of a zero-size array (continuation_scheduler.f90:153).",
+      "$comment": "Read by json_get_or_register: a JSON real, an array of JSON reals, or a constants name, which the lookup resolves to a real or to an array of reals (a name is accepted for either, as the schema cannot see the constant). An integer, boolean or object aborts (continuation_scheduler.f90:185); array elements must be reals (case_file_utils.f90:347 in Neko); an empty array reads values(1) of a zero-size array (continuation_scheduler.f90:170).",
       "description": "A real, a non-empty array of reals stepped through by the continuation scheduler, or the name of a real or vector constant.",
       "oneOf": [
         {
@@ -18,7 +18,7 @@
       ]
     },
     "continuationIterations": {
-      "$comment": "Read with the integer lookup (continuation_scheduler.f90:155): a JSON integer or the name of an integer constant. Values <= 0 are accepted and disable the schedule (continuation_scheduler.f90:248).",
+      "$comment": "Read with the integer lookup (continuation_scheduler.f90:172): a JSON integer or the name of an integer constant. Values <= 0 are accepted and disable the schedule (continuation_scheduler.f90:274).",
       "$ref": "urn:neko:schema:common#/$defs/integerOrRef"
     },
     "pointZoneName": {
