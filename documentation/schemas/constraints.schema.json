@@ -16,7 +16,7 @@
         },
         "limit": {
           "description": "Limit on the design's volume fraction of the `mask_name` zone (of the whole domain when `mask_name` is empty), not an absolute volume: the constraint value is limit - volume / volume_domain (volume_constraint.f90:186-204,247-250). A minimum unless `is_max`. Required, a JSON real.",
-          "$ref": "urn:neko:schema:common#/$defs/realNumber"
+          "$ref": "urn:neko:schema:common#/$defs/numberOrRef"
         },
         "is_max": {
           "description": "Treat `limit` as a maximum. Default false.",

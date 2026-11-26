@@ -26,7 +26,7 @@
         "n_memory": {
           "description": "Checkpoints kept in memory; at least 1. Default 10.",
           "$comment": "checkpoint_linear.f90:69: 0 divides by zero on the first save; checkpoint.f90:425: a negative value allocates no slots and fails later.",
-          "$ref": "urn:neko:schema:common#/$defs/positiveInteger"
+          "$ref": "urn:neko:schema:common#/$defs/positiveIntegerOrRef"
         },
         "path": {
           "description": "Directory of the checkpoint files. Default `checkpoints/`.",

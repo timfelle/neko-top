@@ -52,7 +52,7 @@ The adjoint needs a three-dimensional mesh and the Pn/Pn fluid scheme
 | Key | Type | Default | Notes |
 |---|---|---|---|
 | `initial_condition` | object | - (required) | Same form as `case.fluid.initial_condition`, with `type` one of `uniform`, `expression`, `blasius`, `point_zone` or `field`. The type `user` aborts. The set-up falls back to `case.fluid.initial_condition` when the key is missing, but the reset before every design iteration does not, so the key must be present. |
-| `boundary_conditions` | array | - | Adjoint boundary conditions. Never taken from `case.fluid`. Every labelled zone of the mesh needs exactly one. The types are `velocity_value`, `no_slip`, `outflow`, `normal_outflow`, `outflow+dong`, `normal_outflow+dong`, `user_velocity`, `user_pressure` and `blasius_profile`; `symmetry`, `shear_stress` and `wall_model` abort. `zone_indices` is a literal array of integers. |
+| `boundary_conditions` | array | - | Adjoint boundary conditions. Never taken from `case.fluid`. Every labelled zone of the mesh needs exactly one. The types are `velocity_value`, `no_slip`, `outflow`, `normal_outflow`, `outflow+dong`, `normal_outflow+dong`, `user_velocity`, `user_pressure` and `blasius_profile`; `symmetry`, `shear_stress` and `wall_model` abort. `zone_indices` is an array of integers or the name of an integer array constant (see \ref validating_case_files_constants). |
 
 \warning `user_velocity_pointwise` is listed as a known type but its factory
 branch is commented out: the zone counts as assigned and silently gets a natural
@@ -66,8 +66,8 @@ the adjoint discards it: only the zone masks are used.
 |---|---|---|---|
 | `velocity_solver.type` | string | falls back to `case.fluid.velocity_solver.type` | Krylov solver of the adjoint velocity. |
 | `velocity_solver.preconditioner` | object | falls back to `case.fluid.velocity_solver.preconditioner` | An object with a `type`, for example `{"type": "jacobi"}`. A bare string is not accepted. |
-| `velocity_solver.absolute_tolerance` | real | falls back to `case.fluid.velocity_solver.absolute_tolerance` | A JSON real; a constants name is not accepted. |
-| `velocity_solver.max_iterations` | integer | falls back to `case.fluid.velocity_solver.max_iterations`, else `1000` | A JSON integer. |
+| `velocity_solver.absolute_tolerance` | real | falls back to `case.fluid.velocity_solver.absolute_tolerance` | A JSON real, or the name of a real constant. |
+| `velocity_solver.max_iterations` | integer | falls back to `case.fluid.velocity_solver.max_iterations`, else `1000` | A JSON integer, or the name of an integer constant. |
 | `velocity_solver.monitor` | bool | falls back to `case.fluid.velocity_solver.monitor`, else `false` | |
 | `velocity_solver.projection_space_size` | integer | falls back to `case.fluid.velocity_solver.projection_space_size`, else `0` | A non-zero value builds a velocity projection space for the adjoint. |
 | `velocity_solver.projection_hold_steps` | integer | falls back to `case.fluid.velocity_solver.projection_hold_steps`, else `5` | |
@@ -78,9 +78,9 @@ the adjoint discards it: only the zone masks are used.
 `case.adjoint_fluid`: only the two projection keys above are read there. Its
 `type`, `preconditioner`, `absolute_tolerance`, `max_iterations` (default
 `800`) and `monitor` are always read from `case.fluid.pressure_solver`. The
-tolerance and iteration limit of the adjoint solvers are read as literals, so a
-constants name (which Neko accepts for the primal) is not accepted for them
-while optimising.
+tolerance and iteration limit of the adjoint solvers, and the projection keys,
+accept a JSON number or the name of a constant of the right kind, as Neko does
+for the primal solvers (see \ref validating_case_files_constants).
 
 ### Freezing, source terms and output
 
@@ -96,7 +96,7 @@ while optimising.
 | `output_control` | string | `"never"` | `"org"`, `"never"`, `"tsteps"`, `"nsamples"` or `"simulationtime"`. With `"never"` the adjoint field is still written once at the end of every adjoint run when `case.output_at_end` is true (its default). |
 | `output_value` | integer or real | - | Read for `"tsteps"` and `"nsamples"` (an integer) and `"simulationtime"` (a real), where it is required. |
 | `norm_output_control` | string | `"never"` | When to write the adjoint norm. |
-| `norm_output_value` | real | `1.0` | Read only when `norm_output_control` is not `"never"`. |
+| `norm_output_value` | real | `1.0` | A JSON real or the name of a real constant. Read only when `norm_output_control` is not `"never"`. |
 | `norm_output_file` | string | `"adjoint_norm.csv"` | A `.csv` file; read only when `norm_output_control` is not `"never"`. |
 
 \note The forward output of an optimization run (`forward_fields`) takes its
@@ -125,7 +125,7 @@ coupling term is not implemented for multiple scalars.
 | `enabled` | bool | `true` | Disable the adjoint scalar. A scalar problem that is optimised needs it enabled. |
 | `primal_name` | string | `"s"` | Name of the primal scalar field. It is looked up in the registry by name, so it must equal `case.scalar.name` (Neko's default is `"s"`). |
 | `name` | string | `<primal_name>_adj` | Name of the adjoint scalar field. At most 66 characters, no `/`, not blank; it must not be `abx1` or `abx2`. A name that is already a field in the registry makes the adjoint reuse that field silently, so do not choose one that is. |
-| `solver.type`, `solver.preconditioner`, `solver.absolute_tolerance`, `solver.max_iterations`, `solver.monitor`, `solver.projection_space_size`, `solver.projection_hold_steps` | as `case.scalar.solver` | each falls back to the same key of `case.scalar.solver`; `max_iterations` else `1000`, `monitor` else `false`, `projection_space_size` else `0`, `projection_hold_steps` else `5` | As for the adjoint velocity solver, `preconditioner` is an object with a `type`, and the tolerance and iteration limit are read as literals. |
+| `solver.type`, `solver.preconditioner`, `solver.absolute_tolerance`, `solver.max_iterations`, `solver.monitor`, `solver.projection_space_size`, `solver.projection_hold_steps` | as `case.scalar.solver` | each falls back to the same key of `case.scalar.solver`; `max_iterations` else `1000`, `monitor` else `false`, `projection_space_size` else `0`, `projection_hold_steps` else `5` | As for the adjoint velocity solver, `preconditioner` is an object with a `type`, and the numeric keys accept a JSON number or the name of a constant. |
 | `advection` | bool | `true` | Never taken from `case.scalar.advection`. |
 | `dealias_coupling_term` | bool | `case.numerics.dealias`, else `true` | Over-integrate the adjoint scalar-velocity coupling term, see \ref configuration-adjoint-dealias. |
 | `boundary_conditions` | array | - | Never taken from `case.scalar`. Every labelled zone needs exactly one. The types are `dirichlet`, `neumann` and `user`; note that Neko's `user_dirichlet` is not an adjoint type. Write real values: `"value": 0.0` and `"flux": 0.0`, because a JSON integer (`0`) aborts. |
@@ -134,7 +134,8 @@ coupling term is not implemented for multiple scalars.
 The adjoint scalar takes the following from `case.scalar` only, and any copy
 under `case.adjoint_scalar` is ignored:
 
-- the material properties `Pe`, or `lambda` and `cp`, read as JSON reals;
+- the material properties `Pe`, or `lambda` and `cp`, each a JSON real or the
+  name of a real constant;
 - the `source_terms`, which are rebuilt on the adjoint scalar's right-hand side.
   A forcing source term of the primal scalar therefore also forces the adjoint
   equation, which is rarely what is intended.
@@ -171,10 +172,10 @@ rejects them. The authoritative list is `documentation/schemas/fluid.schema.json
   `flow_rate_force` aborts when present. `nut_field` is only accepted together
   with `full_stress_formulation`, which the adjoint rejects, so it cannot be
   used either.
-- `Re`, `mu` and `rho` are read as JSON reals (not constants names) unless a
-  user material-properties routine exists, and so are the solver tolerances,
-  iteration limits and projection sizes that the adjoint reads, and
-  `case.numerics.polynomial_order` and `dealiased_polynomial_order`.
+- Every numeric key that the adjoint reads (`Re`, `mu`, `rho`, the solver
+  tolerances, iteration limits and projection sizes, `Pe`, `lambda`, `cp`, the
+  orders of `case.numerics`) accepts a JSON number or the name of a constant,
+  see \ref validating_case_files_constants.
 - `case.numerics.oifs` must not be `true`.
 - `hsmg` as a preconditioner aborts for polynomial order 1.
 - A case with `"unsteady": true` needs a `state_recovery` block, must not set

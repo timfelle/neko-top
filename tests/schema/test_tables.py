@@ -298,8 +298,6 @@ REJECTED_AS_THE_CODE_ABORTS = [
     # continuation_scheduler.f90:160: an integer is neither real nor array.
     ("continuation_integer", S,
      {"optimization.design.mapping[2].f_max": 100}, "mapping[2]"),
-    ("continuation_string", S,
-     {"optimization.design.mapping[2].f_max": "big"}, "mapping[2]"),
     # continuation_scheduler.f90:153: an empty array reads values(1).
     ("continuation_empty_array", S,
      {"optimization.design.mapping[2].f_max": []}, "mapping[2]"),
@@ -489,8 +487,6 @@ REJECTED_AS_THE_CODE_ABORTS = [
      {"optimization.constraints[0].limit": DEL}, "constraints[0]"),
     ("volume_limit_integer", S,
      {"optimization.constraints[0].limit": 1}, "constraints[0]"),
-    ("volume_limit_constant", S,
-     {"optimization.constraints[0].limit": "V0"}, "constraints[0]"),
     # ---- design -----------------------------------------------------------
     # design.f90:262: simple always aborts in the shipped drivers.
     ("design_simple", S,
@@ -776,10 +772,6 @@ REJECTED_AS_THE_CODE_ABORTS = [
     ("adjoint_bc_wall_model", S,
      {"case.adjoint_fluid.boundary_conditions[0]":
       {"type": "wall_model", "zone_indices": [1]}}, "boundary_conditions[0]"),
-    # adjoint_fluid_pnpn.f90:1000: zone_indices is a literal array.
-    ("adjoint_bc_zone_indices_constant", S,
-     {"case.adjoint_fluid.boundary_conditions[0].zone_indices": "walls"},
-     "boundary_conditions[0]"),
     ("adjoint_bc_without_zone_indices", S,
      {"case.adjoint_fluid.boundary_conditions[0].zone_indices": DEL},
      "boundary_conditions[0]"),
@@ -811,9 +803,6 @@ REJECTED_AS_THE_CODE_ABORTS = [
     # adjoint_case.f90:468-477
     ("adjoint_norm_value_unread", S,
      {"case.adjoint_fluid.norm_output_value": 2.0}, "adjoint_fluid"),
-    ("adjoint_norm_value_constant", S,
-     {"case.adjoint_fluid.norm_output_control": "tsteps",
-      "case.adjoint_fluid.norm_output_value": "k"}, "adjoint_fluid"),
     ("adjoint_norm_file_suffix", S,
      {"case.adjoint_fluid.norm_output_control": "tsteps",
       "case.adjoint_fluid.norm_output_file": "norm.dat"}, "adjoint_fluid"),
@@ -821,13 +810,6 @@ REJECTED_AS_THE_CODE_ABORTS = [
      {"case.adjoint_fluid.output_format": "csv"}, "adjoint_fluid"),
     ("adjoint_fluid_unknown_key", S,
      {"case.adjoint_fluid.enabled": True}, "adjoint_fluid"),
-    # adjoint_fluid_scheme_incompressible.f90:211-336: literal reals/ints.
-    ("adjoint_velocity_solver_tolerance_constant", S,
-     {"case.adjoint_fluid.velocity_solver":
-      {"absolute_tolerance": "tol"}}, "adjoint_fluid.velocity_solver"),
-    ("adjoint_velocity_solver_max_iterations_constant", S,
-     {"case.adjoint_fluid.velocity_solver": {"max_iterations": "n"}},
-     "adjoint_fluid.velocity_solver"),
     # adjoint_fluid_pnpn_bc_fctry.f90:178: a known type that builds no BC;
     # the zone gets a natural condition. (Owner decision pending.)
     ("adjoint_bc_user_velocity_pointwise", S,
@@ -859,17 +841,6 @@ REJECTED_AS_THE_CODE_ABORTS = [
     # adjoint_case.f90:443-445: case.nsamples has no default.
     ("adjoint_output_control_org_without_nsamples", S,
      {"case.adjoint_fluid.output_control": "org"}, "$.case"),
-    # adjoint_scalar_scheme.f90:301-316: literal reads of the adjoint's own
-    # keys.
-    ("adjoint_scalar_solver_max_iterations_constant", S,
-     {"case.adjoint_scalar.solver": {"max_iterations": "n"}},
-     "adjoint_scalar.solver"),
-    ("adjoint_scalar_solver_projection_space_constant", S,
-     {"case.adjoint_scalar.solver": {"projection_space_size": "n"}},
-     "adjoint_scalar.solver"),
-    ("adjoint_scalar_solver_projection_hold_constant", S,
-     {"case.adjoint_scalar.solver": {"projection_hold_steps": "n"}},
-     "adjoint_scalar.solver"),
     ("adjoint_scalar_solver_monitor_string", S,
      {"case.adjoint_scalar.solver": {"monitor": "yes"}},
      "adjoint_scalar.solver"),
@@ -895,9 +866,6 @@ REJECTED_AS_THE_CODE_ABORTS = [
     ("adjoint_pressure_solver_projection_space_real", S,
      {"case.adjoint_fluid.pressure_solver": {"projection_space_size": 5.0}},
      "adjoint_fluid.pressure_solver"),
-    ("adjoint_pressure_solver_projection_constant", S,
-     {"case.adjoint_fluid.pressure_solver":
-      {"projection_hold_steps": "h"}}, "adjoint_fluid.pressure_solver"),
     # ---- adjoint scalar ---------------------------------------------------
     # adjoint_case.f90:309-312
     ("adjoint_scalar_without_initial_condition", S,
@@ -910,9 +878,6 @@ REJECTED_AS_THE_CODE_ABORTS = [
     ("adjoint_scalar_bc_user_dirichlet", S,
      {"case.adjoint_scalar.boundary_conditions[0].type": "user_dirichlet"},
      "adjoint_scalar.boundary_conditions[0]"),
-    ("adjoint_scalar_bc_zone_indices_constant", S,
-     {"case.adjoint_scalar.boundary_conditions[0].zone_indices": "inlet"},
-     "adjoint_scalar.boundary_conditions[0]"),
     # neko src/bc/dirichlet.f90:80: the value is a real or a name, not 0.
     ("adjoint_scalar_dirichlet_without_value", S,
      {"case.adjoint_scalar.boundary_conditions[0].value": DEL},
@@ -923,9 +888,6 @@ REJECTED_AS_THE_CODE_ABORTS = [
      "adjoint_scalar"),
     ("adjoint_scalar_unknown_key", S,
      {"case.adjoint_scalar.Pe": 5.0}, "adjoint_scalar"),
-    ("adjoint_scalar_solver_tolerance_constant", S,
-     {"case.adjoint_scalar.solver": {"absolute_tolerance": "tol"}},
-     "adjoint_scalar.solver"),
     # adjoint_scalar_scheme.f90:281,341: names that cannot match.
     ("adjoint_scalar_primal_name_mismatch_default", S,
      {"case.adjoint_scalar.primal_name": "temperature"}, "adjoint_scalar"),
@@ -943,37 +905,182 @@ REJECTED_AS_THE_CODE_ABORTS = [
 ]
 
 # --------------------------------------------------------------------------- #
-# Keys the code reads without a constants lookup: a JSON real (or integer)
-# only. (id, base, path, valid value, value that is a constants name or of
-# the wrong number kind)
+# Numeric keys that the code reads through a constants lookup (Neko's
+# json_get_or_lookup*): a literal of the kind the reader wants, or the name of
+# a constant. A lookup still rejects an integer literal for a real key
+# (neko src/common/json_utils.f90:510). (id, base, path, literal, name)
 # --------------------------------------------------------------------------- #
-LITERAL_ONLY_KEYS = [
+NUMERIC_KEYS = [
     ("design_initial_value", S,
      "optimization.design.initial_distribution.value", 0.5, "v0"),
+    ("design_base_value", U,
+     "optimization.design.initial_distribution.base_value", 0.5, "v0"),
+    ("design_zone_value", U,
+     "optimization.design.initial_distribution.zone_value", 0.5, "v1"),
     ("pde_filter_tol", S, "optimization.design.mapping[0].tol", 1.0e-8, "t"),
+    ("pde_filter_max_iter", S, "optimization.design.mapping[0].max_iter",
+     100, "n"),
     ("heaviside_eta", S, "optimization.design.mapping[1].eta", 0.4, "eta"),
+    ("ramp_f_min", S, "optimization.design.mapping[2].f_min", 0.1, "fmin"),
+    ("linear_f_min", S, "optimization.constraints[0].mapping[0].f_min", 0.1,
+     "fmin"),
     ("volume_limit", S, "optimization.constraints[0].limit", 0.2, "limit"),
     ("objective_start_time", S, "optimization.objectives[0].start_time",
      0.0, "t0"),
+    ("objective_end_time", S, "optimization.objectives[0].end_time",
+     1.0, "t1"),
+    ("mixing_target_concentration", S,
+     "optimization.objectives[0].target_concentration", 0.5, "target"),
     ("mma_scale", S, "optimization.solver.mma.scale", 10.0, "scale"),
     ("mma_xmax", S, "optimization.solver.mma.xmax", 1.0, "xmax"),
+    ("mma_epsimin", S, "optimization.solver.mma.epsimin", 1.0e-9, "eps"),
+    ("mma_max_iter", S, "optimization.solver.mma.max_iter", 100, "n"),
+    ("mma_move_limit", S, "optimization.solver.mma.move_limit", 0.2, "ml"),
     ("solver_tolerance", S, "optimization.solver.tolerance", 1.0e-6, "tol"),
+    ("solver_max_iterations", S, "optimization.solver.max_iterations", 10,
+     "n"),
+    ("solver_checkpoint_interval", S,
+     "optimization.solver.checkpoint.interval", 5, "n"),
     ("steady_tol", S, "case.simulation_components[0].tol", 1.0e-6, "tol"),
+    ("steady_log_frequency", S,
+     "case.simulation_components[0].log_frequency", 10, "n"),
+    ("state_recovery_n_memory", U, "state_recovery.n_memory", 20, "n"),
     ("root_norm_scaling", S, "norm_scaling", 0.5, "s"),
+    ("root_norm_target", S, "norm_target", 0.5, "s"),
+    ("root_norm_tolerance", S, "norm_tolerance", 1.0e-6, "s"),
     ("adjoint_norm_output_value", S,
      "case.adjoint_fluid.norm_output_value", 1.0, "n"),
     ("adjoint_velocity_tolerance", S,
      "case.adjoint_fluid.velocity_solver.absolute_tolerance", 1.0e-6, "t"),
+    ("adjoint_velocity_max_iterations", S,
+     "case.adjoint_fluid.velocity_solver.max_iterations", 50, "n"),
+    ("adjoint_velocity_projection_space", S,
+     "case.adjoint_fluid.velocity_solver.projection_space_size", 5, "n"),
+    ("adjoint_pressure_projection_hold", S,
+     "case.adjoint_fluid.pressure_solver.projection_hold_steps", 5, "h"),
+    ("adjoint_scalar_tolerance", S,
+     "case.adjoint_scalar.solver.absolute_tolerance", 1.0e-6, "t"),
+    ("adjoint_scalar_max_iterations", S,
+     "case.adjoint_scalar.solver.max_iterations", 50, "n"),
+    ("adjoint_scalar_projection_space", S,
+     "case.adjoint_scalar.solver.projection_space_size", 5, "n"),
+    ("adjoint_scalar_projection_hold", S,
+     "case.adjoint_scalar.solver.projection_hold_steps", 5, "h"),
+    ("fluid_re", S, "case.fluid.Re", 2.0, "Re"),
+    ("fluid_mu", S, "case.fluid.mu", 0.5, "mu"),
+    ("fluid_rho", S, "case.fluid.rho", 1.5, "rho"),
+    ("numerics_time_order", S, "case.numerics.time_order", 1, "order"),
+    ("numerics_polynomial_order", S, "case.numerics.polynomial_order", 5,
+     "p"),
+    ("numerics_dealiased_order", S,
+     "case.numerics.dealiased_polynomial_order", 8, "q"),
+    ("pressure_solver_tolerance", S,
+     "case.fluid.pressure_solver.absolute_tolerance", 1.0e-4, "ptol"),
+    ("pressure_solver_max_iterations", S,
+     "case.fluid.pressure_solver.max_iterations", 50, "pmax"),
+    ("pressure_solver_projection_space", S,
+     "case.fluid.pressure_solver.projection_space_size", 5, "k"),
+    ("velocity_solver_projection_hold", S,
+     "case.fluid.velocity_solver.projection_hold_steps", 5, "h"),
+    ("velocity_solver_tolerance", S,
+     "case.fluid.velocity_solver.absolute_tolerance", 1.0e-4, "vtol"),
+    ("velocity_solver_max_iterations", S,
+     "case.fluid.velocity_solver.max_iterations", 50, "vmax"),
+    ("scalar_pe", S, "case.scalar.Pe", 500.0, "Pe"),
+    ("scalar_lambda", S, "case.scalar.lambda", 0.5, "k"),
+    ("scalar_cp", S, "case.scalar.cp", 1.0, "c0"),
+    ("scalar_solver_tolerance", S, "case.scalar.solver.absolute_tolerance",
+     1.0e-6, "stol"),
+    ("scalar_solver_max_iterations", S, "case.scalar.solver.max_iterations",
+     50, "smax"),
+    ("scalar_solver_projection_space", S,
+     "case.scalar.solver.projection_space_size", 5, "sps"),
+    ("scalar_solver_projection_hold", S,
+     "case.scalar.solver.projection_hold_steps", 5, "sph"),
+    ("sd_step_length", U, "optimization.solver.steepest_descent.step_length",
+     0.5, "step"),
+    ("sd_move_limit_decrease", U,
+     "optimization.solver.steepest_descent.move_limit.decrease", 0.5, "d"),
+    ("sd_move_limit_increase", U,
+     "optimization.solver.steepest_descent.move_limit.increase", 1.5, "i"),
+    ("sd_stop_design_change", U, "optimization.solver.stop_design_change",
+     1.0e-8, "s"),
+    ("mma_stop_design_change", S, "optimization.solver.stop_design_change",
+     1.0e-8, "s"),
+    ("sd_xmax", U, "optimization.solver.steepest_descent.xmax", 0.9, "xmax"),
     ("adjoint_zone_indices", S,
      "case.adjoint_fluid.boundary_conditions[0].zone_indices", [1, 3, 4, 5, 6],
      "walls"),
+    ("adjoint_scalar_zone_indices", S,
+     "case.adjoint_scalar.boundary_conditions[0].zone_indices", [1],
+     "inlet"),
+    ("adjoint_scalar_user_zone_indices", S,
+     "case.adjoint_scalar.boundary_conditions[0].zone_indices", [1],
+     "inlet"),
+    ("continuation_f_max", S, "optimization.design.mapping[2].f_max", 100.0,
+     "big"),
+    ("continuation_f_max_array", S, "optimization.design.mapping[2].f_max",
+     [1.0, 10.0], "big"),
+    ("continuation_q", S, "optimization.design.mapping[2].q", 0.1, "q"),
+    ("continuation_r", S, "optimization.design.mapping[0].r", 0.1, "r"),
+    ("continuation_weight", S, "optimization.objectives[1].weight", 1.0,
+     "w"),
+    ("continuation_beta", S, "optimization.design.mapping[1].beta", 1.0,
+     "beta"),
+    ("continuation_beta_array", S, "optimization.design.mapping[1].beta",
+     [1.0, 2.0], "beta"),
 ]
 
-# The key is read only next to another one.
-LITERAL_PRE_EDITS = {
+# The key is read only next to another one, or replaces a default.
+NUMERIC_PRE_EDITS = {
     "adjoint_norm_output_value": {
         "case.adjoint_fluid.norm_output_control": "tsteps"},
+    "fluid_mu": {"case.fluid.Re": DEL, "case.fluid.rho": 1.5},
+    "fluid_rho": {"case.fluid.Re": DEL, "case.fluid.mu": 0.5},
+    "scalar_lambda": {"case.scalar.Pe": DEL, "case.scalar.cp": 1.0},
+    "scalar_cp": {"case.scalar.Pe": DEL, "case.scalar.lambda": 1.0},
+    # A scalar is no array: the per-array iteration count must go.
+    "continuation_r": {"optimization.design.mapping[0].r_iterations": DEL},
+    "continuation_weight": {
+        "optimization.objectives[1].weight_iterations": DEL},
+    "adjoint_scalar_user_zone_indices": {
+        "case.adjoint_scalar.boundary_conditions[0]":
+        {"type": "user", "zone_indices": [1]}},
 }
+
+# Constants names next to keys whose restriction depends on the value.
+# (id, base, edits)
+ACCEPTS_CONSTANT_NAMES = [
+    # A constants name may name a vector, so the per-array iteration counts
+    # (continuation_scheduler.f90:152-155) are accepted next to it.
+    ("f_max_name_with_iterations", S,
+     {"optimization.design.mapping[2].f_max": "big",
+      "optimization.design.mapping[2].f_max_iterations": 2}),
+    ("weight_name_with_iterations", S,
+     {"optimization.objectives[1].weight": "w",
+      "optimization.objectives[1].weight_iterations": 2}),
+    ("beta_name_with_iterations", S,
+     {"optimization.design.mapping[1].beta": "beta",
+      "optimization.design.mapping[1].beta_iterations": 2}),
+    ("iterations_name", S,
+     {"optimization.design.mapping[0].r_iterations": "n"}),
+    ("solver_continuation_iterations_name", S,
+     {"optimization.solver.continuation_iterations": "n"}),
+    # The primal solver keys that the adjoint reads when it has no block of
+    # its own.
+    ("primal_solver_names_without_adjoint_block", S,
+     {"case.fluid.velocity_solver.absolute_tolerance": "vtol",
+      "case.fluid.velocity_solver.max_iterations": "vmax",
+      "case.fluid.pressure_solver.absolute_tolerance": "ptol",
+      "case.fluid.pressure_solver.max_iterations": "pmax",
+      "case.scalar.solver.absolute_tolerance": "stol",
+      "case.scalar.solver.max_iterations": "smax"}),
+    ("dealiased_order_name_with_adjoint_scalar_advecting", S,
+     {"case.fluid.advection": False,
+      "case.numerics.dealiased_polynomial_order": "lxd"}),
+    ("dealiased_order_name_with_advection", U,
+     {"case.numerics.dealiased_polynomial_order": "lxd"}),
+]
 
 # Keys whose value goes through a constants lookup (Neko's reader): a name is
 # accepted. (id, base, path, name)
@@ -1129,52 +1236,6 @@ OPTIMIZING_RESTRICTIONS = [
     ("oifs", S, {"case.numerics.oifs": True}, "oifs"),
     ("oifs_without_advection", S,
      {"case.numerics.oifs": True, "case.fluid.advection": False}, "oifs"),
-    # adjoint_fluid_scheme_incompressible.f90:716,728,729
-    ("re_constant", S, {"case.fluid.Re": "Re"}, "case.fluid.Re"),
-    ("mu_rho_constants", S,
-     {"case.fluid.Re": DEL, "case.fluid.mu": "mu", "case.fluid.rho": 1.0},
-     "case.fluid.mu"),
-    # adjoint_fluid_pnpn.f90:309, adjoint_case.f90:136,
-    # advection_adjoint_fctry.f90:100
-    ("time_order_constant", S, {"case.numerics.time_order": "order"},
-     "time_order"),
-    ("polynomial_order_constant", S, {"case.numerics.polynomial_order": "p"},
-     "polynomial_order"),
-    ("dealiased_polynomial_order_constant", S,
-     {"case.numerics.dealiased_polynomial_order": "q"},
-     "dealiased_polynomial_order"),
-    # adjoint_fluid_pnpn.f90:411-420
-    ("pressure_solver_tolerance_constant", S,
-     {"case.fluid.pressure_solver.absolute_tolerance": "ptol"},
-     "pressure_solver"),
-    ("pressure_solver_max_iterations_constant", S,
-     {"case.fluid.pressure_solver.max_iterations": "pmax"},
-     "pressure_solver"),
-    ("pressure_solver_projection_constant", S,
-     {"case.fluid.pressure_solver.projection_space_size": "k"},
-     "pressure_solver"),
-    ("pressure_solver_projection_hold_constant", S,
-     {"case.fluid.pressure_solver.projection_hold_steps": "h"},
-     "pressure_solver"),
-    ("velocity_solver_projection_space_constant", S,
-     {"case.fluid.velocity_solver.projection_space_size": "k"},
-     "velocity_solver"),
-    ("velocity_solver_projection_hold_constant", S,
-     {"case.fluid.velocity_solver.projection_hold_steps": "h"},
-     "velocity_solver"),
-    # advection_adjoint_fctry.f90:100-101 with the advection on (U has no
-    # scalar, so the adjoint scalar does not matter there).
-    ("dealiased_order_constant_with_advection", U,
-     {"case.numerics.dealiased_polynomial_order": "lxd"},
-     "dealiased_polynomial_order"),
-    # adjoint_fluid_scheme_incompressible.f90:211-336: read from the primal
-    # solver while the adjoint's own block has no such key.
-    ("velocity_solver_tolerance_constant", S,
-     {"case.fluid.velocity_solver.absolute_tolerance": "vtol"},
-     "velocity_solver"),
-    ("velocity_solver_max_iterations_constant", S,
-     {"case.fluid.velocity_solver.max_iterations": "vmax"},
-     "velocity_solver"),
     # neko_ext.f90:170: the initial conditions are read at every iteration,
     # also when the case restarts.
     ("fluid_initial_condition_with_restart", S,
@@ -1197,17 +1258,10 @@ OPTIMIZING_RESTRICTIONS = [
     ("adjoint_scalar_with_disabled_scalar", S,
      {"case.scalar.enabled": False, "optimization.objectives[0]":
       {"type": "viscous_dissipation"}}, "scalar"),
-    # adjoint_scalar_scheme.f90:616-637
-    ("scalar_pe_constant", S, {"case.scalar.Pe": "Pe"}, "scalar.Pe"),
-    ("scalar_lambda_cp_constants", S,
-     {"case.scalar.Pe": DEL, "case.scalar.lambda": "k",
-      "case.scalar.cp": 1.0}, "scalar.lambda"),
     # adjoint_scalar_scheme.f90:355-358
     ("scalar_variable_material_properties", S,
      {"case.scalar.variable_material_properties": {"lambda": {"type": "x"}}},
      "case.scalar"),
-    ("scalar_solver_tolerance_constant", S,
-     {"case.scalar.solver.absolute_tolerance": "stol"}, "scalar.solver"),
     # adjoint_curl_curl.f90:128-134
     ("primal_symmetry_boundary", S,
      {"case.fluid.boundary_conditions[2]":
@@ -1228,18 +1282,6 @@ OPTIMIZING_RESTRICTIONS = [
       "case.adjoint_scalars": [{"primal_name": "s"}],
       "optimization.objectives[0]": {"type": "viscous_dissipation"}},
      "adjoint_scalars"),
-    # adjoint_scalar_scheme.f90:301-316,376-380: the primal scalar solver is
-    # read when the adjoint's own has no such key.
-    ("scalar_solver_max_iterations_constant", S,
-     {"case.scalar.solver.max_iterations": "smax"}, "scalar.solver"),
-    ("scalar_solver_projection_space_constant", S,
-     {"case.scalar.solver.projection_space_size": "sps"}, "scalar.solver"),
-    ("scalar_solver_projection_hold_constant", S,
-     {"case.scalar.solver.projection_hold_steps": "sph"}, "scalar.solver"),
-    # adjoint_scalar_scheme.f90:616-637: cp and the others are literal reals.
-    ("scalar_cp_integer", S,
-     {"case.scalar.Pe": DEL, "case.scalar.lambda": 1.0,
-      "case.scalar.cp": "c0"}, "scalar.cp"),
     # scalar_mixing_objective_function.f90:171
     ("scalar_mixing_without_adjoint_scalar", S,
      {"case.scalar.enabled": False, "case.adjoint_scalar.enabled": False},
@@ -1532,14 +1574,6 @@ REJECTED_AS_THE_CODE_ABORTS += [
     ("adjoint_scalar_bc_without_type", S,
      {"case.adjoint_scalar.boundary_conditions[0]": {"zone_indices": [1]}},
      "adjoint_scalar"),
-    ("adjoint_scalar_bc_user_zone_indices_constant", S,
-     {"case.adjoint_scalar.boundary_conditions[0]":
-      {"type": "user", "zone_indices": "inlet"}}, "adjoint_scalar"),
-    # advection_adjoint_fctry.f90:100-101 for the adjoint scalar's advection.
-    ("dealiased_order_constant_adjoint_scalar_advects",
-     S, {"case.fluid.advection": False,
-         "case.numerics.dealiased_polynomial_order": "lxd"},
-     "dealiased_polynomial_order"),
     # adjoint_case.f90:180-183,260: case.adjoint_scalars alone reads
     # case.scalars without `found`; a missing path leaves json-fortran in an
     # exception state and `case.time` is then reported missing.
@@ -1999,18 +2033,36 @@ def test_rejected_as_the_code_aborts(validator, name, base, edits, where):
         f"{name}: rejected, but not at {where}: {sorted(paths)}")
 
 
-@pytest.mark.parametrize("name, base, path, good, bad", LITERAL_ONLY_KEYS,
-                         ids=ids(LITERAL_ONLY_KEYS))
-def test_literal_only_keys(validator, name, base, path, good, bad):
-    pre = LITERAL_PRE_EDITS.get(name, {})
-    assert not errors(validator, build(base, dict(pre, **{path: good})))
-    assert error_paths(validator, build(base, dict(pre, **{path: bad})))
-    if isinstance(good, float):
+@pytest.mark.parametrize("name, base, path, literal, constant", NUMERIC_KEYS,
+                         ids=ids(NUMERIC_KEYS))
+def test_numeric_keys_accept_names(validator, name, base, path, literal,
+                                   constant):
+    pre = NUMERIC_PRE_EDITS.get(name, {})
+    found = errors(validator, build(base, dict(pre, **{path: literal})))
+    assert not found, f"{name}: the literal: {short(found)}"
+    found = errors(validator, build(base, dict(pre, **{path: constant})))
+    assert not found, f"{name}: the constants name: {short(found)}"
+    # An empty name is no name.
+    assert error_paths(validator, build(base, dict(pre, **{path: ""}))), (
+        f"{name}: an empty string is accepted")
+    if isinstance(literal, float):
         # json-fortran stores 1 and 1.0 as different types; the reader of a
-        # real rejects the integer (neko src/common/json_utils.f90:510).
+        # real rejects the integer (neko src/common/json_utils.f90:510), with
+        # or without the lookup.
         assert error_paths(
-            validator, build(base, dict(pre, **{path: int(good)}))), (
+            validator, build(base, dict(pre, **{path: int(literal)}))), (
             f"{name}: an integer is accepted where a real is read")
+    if isinstance(literal, int):
+        assert error_paths(
+            validator, build(base, dict(pre, **{path: literal + 0.5}))), (
+            f"{name}: a real is accepted where an integer is read")
+
+
+@pytest.mark.parametrize("name, base, edits", ACCEPTS_CONSTANT_NAMES,
+                         ids=ids(ACCEPTS_CONSTANT_NAMES))
+def test_accepts_constant_names(validator, name, base, edits):
+    found = errors(validator, build(base, edits))
+    assert not found, short(found)
 
 
 @pytest.mark.parametrize("name, base, path, value", LOOKUP_KEYS,
@@ -2171,27 +2223,3 @@ def test_common_solver_keys_are_defined_once(top_schemas):
         mma = schema["mmaSolver"]["properties"][key]
         sd = schema["steepestDescentSolver"]["properties"][key]
         assert mma == sd and list(mma) == ["$ref"], key
-
-
-# Reals of the optimisers that the code reads without a constants lookup.
-LITERAL_REALS_OF_THE_OPTIMISERS = [
-    ("sd_step_length", U, "optimization.solver.steepest_descent.step_length",
-     0.5, "step"),
-    ("sd_move_limit_decrease", U,
-     "optimization.solver.steepest_descent.move_limit.decrease", 0.5, "d"),
-    ("sd_stop_design_change", U, "optimization.solver.stop_design_change",
-     1.0e-8, "s"),
-    ("mma_stop_design_change", S, "optimization.solver.stop_design_change",
-     1.0e-8, "s"),
-    ("sd_xmax", U, "optimization.solver.steepest_descent.xmax", 0.9, "xmax"),
-]
-
-
-@pytest.mark.parametrize("name, base, path, good, bad",
-                         LITERAL_REALS_OF_THE_OPTIMISERS,
-                         ids=ids(LITERAL_REALS_OF_THE_OPTIMISERS))
-def test_literal_reals_of_the_optimisers(validator, name, base, path, good,
-                                         bad):
-    assert not errors(validator, build(base, {path: good}))
-    assert error_paths(validator, build(base, {path: bad}))
-    assert error_paths(validator, build(base, {path: int(good)}))

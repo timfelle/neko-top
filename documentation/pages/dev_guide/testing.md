@@ -147,8 +147,13 @@ rows red, so the rows are what keeps a rule from silently disappearing:
 - `REJECTED_AS_THE_CODE_ABORTS`: `(id, base, edits, where)` rows for values on
   which the code aborts, with a comment naming the source line. `where` is a
   fragment of the path at which the error must be reported.
-- `LITERAL_ONLY_KEYS` and `LOOKUP_KEYS`: for a key read as a literal real or
-  integer only, and for one that goes through Neko's constants lookup.
+- `NUMERIC_KEYS` and `ACCEPTS_CONSTANT_NAMES`: `NUMERIC_KEYS` rows are
+  `(id, base, path, literal, name)` for a numeric key read through Neko's
+  constants lookup; the test checks that the literal and the name are accepted,
+  that an empty name is not, and that the literal of the other number kind (an
+  integer for a real key) is rejected. `ACCEPTS_CONSTANT_NAMES` holds names
+  next to a rule that depends on the value, such as an `_iterations` key.
+  `LOOKUP_KEYS` holds the other keys that go through the lookup.
 - `OPTIMIZING_RESTRICTIONS`: for a restriction that applies only with an
   `optimization` object. Each row is checked twice: rejected with
   `optimization`, accepted without it (and accepted by Neko's own root).

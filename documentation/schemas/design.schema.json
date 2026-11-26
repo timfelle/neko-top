@@ -18,7 +18,7 @@
             },
             "value": {
               "description": "Uniform design value.",
-              "$ref": "urn:neko:schema:common#/$defs/realNumber"
+              "$ref": "urn:neko:schema:common#/$defs/numberOrRef"
             }
           },
           "additionalProperties": false
@@ -37,7 +37,7 @@
             },
             "base_value": {
               "description": "Value outside the zone.",
-              "$ref": "urn:neko:schema:common#/$defs/realNumber"
+              "$ref": "urn:neko:schema:common#/$defs/numberOrRef"
             },
             "zone_name": {
               "description": "Name of the point zone.",
@@ -45,7 +45,7 @@
             },
             "zone_value": {
               "description": "Value inside the zone.",
-              "$ref": "urn:neko:schema:common#/$defs/realNumber"
+              "$ref": "urn:neko:schema:common#/$defs/numberOrRef"
             }
           },
           "additionalProperties": false

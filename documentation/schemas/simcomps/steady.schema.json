@@ -12,15 +12,22 @@
         },
         "tol": {
           "description": "Convergence tolerance: the maximum over u, v, w, p (and the scalar) of ||f_new - f_old||_L2 / (dt * domain volume) must not exceed it. Default 1.0e-6.",
-          "$ref": "urn:neko:schema:common#/$defs/realNumber"
+          "$ref": "urn:neko:schema:common#/$defs/numberOrRef"
         },
         "log_frequency": {
           "description": "Steps between log lines; any integer but 0 (a negative value logs like its absolute value). Default 50.",
           "$comment": "steady_simcomp.f90:128 reads it with json_get_or_default and :276, :335 only use mod(tstep, log_frequency) == 0, so 0 divides by zero and nothing else aborts.",
-          "type": "integer",
-          "not": {
-            "const": 0
-          }
+          "oneOf": [
+            {
+              "type": "integer",
+              "not": {
+                "const": 0
+              }
+            },
+            {
+              "$ref": "urn:neko:schema:common#/$defs/constRef"
+            }
+          ]
         },
         "scalar_coupled": {
           "description": "Include the scalar in the convergence test. Default false.",

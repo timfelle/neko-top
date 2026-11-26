@@ -4,7 +4,7 @@
   "$defs": {
     "maxIterations": {
       "description": "Optimiser iterations; 0 evaluates only the initial design. Default 100.",
-      "type": "integer"
+      "$ref": "urn:neko:schema:common#/$defs/integerOrRef"
     },
     "enableOutput": {
       "description": "Write optimiser output. Default true. With false the optimiser skips `optimization_data.csv` and the per-iteration forward and adjoint field output; the design and sensitivity files are always written (mma_optimizer.f90:136-137,198-205,252-257; optimizer.f90:520,547).",
@@ -18,7 +18,7 @@
     },
     "stopDesignChange": {
       "description": "Stop when the design change falls below this. Default machine epsilon.",
-      "$ref": "urn:neko:schema:common#/$defs/realNumber"
+      "$ref": "urn:neko:schema:common#/$defs/numberOrRef"
     },
     "restartFile": {
       "description": "Optimiser checkpoint to restart from; the file must exist and end in `h5`, `hdf5` or `hf5`. At most 256 characters. Default none, but an empty value does not mean a fresh start when checkpoints of an earlier run are present: the optimiser then restarts from `<checkpoint.path>/optimizer_rt_checkpoint.h5` (only if `max_runtime` is set) or from the newest `<checkpoint.path>/<checkpoint.base>_NNNNN.h5` with NNNNN up to `max_iterations`, even when `checkpoint.interval` is <= 0 (optimizer.f90:342-376).",
@@ -110,7 +110,7 @@
         },
         "interval": {
           "description": "Iterations between checkpoints; values <= 0 disable them. Default -1.",
-          "type": "integer"
+          "$ref": "urn:neko:schema:common#/$defs/integerOrRef"
         },
         "overwrite": {
           "description": "Overwrite an existing checkpoint file (otherwise the run aborts). Default false.",
@@ -136,7 +136,7 @@
         },
         "tolerance": {
           "description": "Convergence tolerance. Default 1.0e-3.",
-          "$ref": "urn:neko:schema:common#/$defs/realNumber"
+          "$ref": "urn:neko:schema:common#/$defs/numberOrRef"
         },
         "mma": {
           "type": "object",
@@ -144,23 +144,23 @@
             "epsimin": {
               "description": "Minimum subproblem tolerance; positive (mma.f90:501-502 aborts otherwise). Default 1.0e-9 * sqrt(m + n).",
               "$comment": "mma.f90:501-503 checks only > 0.",
-              "$ref": "urn:neko:schema:common#/$defs/positiveRealNumber"
+              "$ref": "urn:neko:schema:common#/$defs/positiveNumberOrRef"
             },
             "max_iter": {
               "description": "Subsolver iterations. Default 100.",
-              "type": "integer"
+              "$ref": "urn:neko:schema:common#/$defs/integerOrRef"
             },
             "asyinit": {
               "description": "Initial asymptote distance. Default 0.2.",
-              "$ref": "urn:neko:schema:common#/$defs/realNumber"
+              "$ref": "urn:neko:schema:common#/$defs/numberOrRef"
             },
             "asyincr": {
               "description": "Asymptote increase factor. Default 1.05.",
-              "$ref": "urn:neko:schema:common#/$defs/realNumber"
+              "$ref": "urn:neko:schema:common#/$defs/numberOrRef"
             },
             "asydecr": {
               "description": "Asymptote decrease factor. Default 0.65.",
-              "$ref": "urn:neko:schema:common#/$defs/realNumber"
+              "$ref": "urn:neko:schema:common#/$defs/numberOrRef"
             },
             "backend": {
               "description": "`cpu` or `device`. Default `device` in a device build, `cpu` otherwise.",
@@ -180,35 +180,35 @@
             },
             "xmin": {
               "description": "Lower design bound. Default 0.0.",
-              "$ref": "urn:neko:schema:common#/$defs/realNumber"
+              "$ref": "urn:neko:schema:common#/$defs/numberOrRef"
             },
             "xmax": {
               "description": "Upper design bound. Default 1.0.",
-              "$ref": "urn:neko:schema:common#/$defs/realNumber"
+              "$ref": "urn:neko:schema:common#/$defs/numberOrRef"
             },
             "a0": {
               "description": "MMA constant a0. Default 1.0.",
-              "$ref": "urn:neko:schema:common#/$defs/realNumber"
+              "$ref": "urn:neko:schema:common#/$defs/numberOrRef"
             },
             "a": {
               "description": "MMA constant a. Default 0.0.",
-              "$ref": "urn:neko:schema:common#/$defs/realNumber"
+              "$ref": "urn:neko:schema:common#/$defs/numberOrRef"
             },
             "c": {
               "description": "MMA constant c, the cost of the artificial variable y. Default 1000.0.",
-              "$ref": "urn:neko:schema:common#/$defs/realNumber"
+              "$ref": "urn:neko:schema:common#/$defs/numberOrRef"
             },
             "d": {
               "description": "MMA constant d. Default 0.0.",
-              "$ref": "urn:neko:schema:common#/$defs/realNumber"
+              "$ref": "urn:neko:schema:common#/$defs/numberOrRef"
             },
             "move_limit": {
               "description": "Move limit. Values <= 0 disable it, and each update may use the whole `[xmin, xmax]` box (mma_cpu.f90:311-314, mma_device.f90:289-295). Default 0.2.",
-              "$ref": "urn:neko:schema:common#/$defs/realNumber"
+              "$ref": "urn:neko:schema:common#/$defs/numberOrRef"
             },
             "scale": {
               "description": "Scaling of the constraints. Default 1.0.",
-              "$ref": "urn:neko:schema:common#/$defs/realNumber"
+              "$ref": "urn:neko:schema:common#/$defs/numberOrRef"
             },
             "auto_scale": {
               "description": "Scale by the first constraint value. Default false.",
@@ -257,15 +257,15 @@
           "properties": {
             "xmin": {
               "description": "Lower design bound. Default 0.0.",
-              "$ref": "urn:neko:schema:common#/$defs/realNumber"
+              "$ref": "urn:neko:schema:common#/$defs/numberOrRef"
             },
             "xmax": {
               "description": "Upper design bound; must exceed xmin (abort at steepest_descent_optimizer.f90:215). Default 1.0.",
-              "$ref": "urn:neko:schema:common#/$defs/realNumber"
+              "$ref": "urn:neko:schema:common#/$defs/numberOrRef"
             },
             "step_length": {
               "description": "Step length; positive. Default 1.0.",
-              "$ref": "urn:neko:schema:common#/$defs/positiveRealNumber"
+              "$ref": "urn:neko:schema:common#/$defs/positiveNumberOrRef"
             },
             "move_limit": {
               "description": "Adaptive move limit.",
@@ -273,28 +273,42 @@
               "properties": {
                 "initial": {
                   "description": "Initial move limit; not below `min`. Default 0.1.",
-                  "$ref": "urn:neko:schema:common#/$defs/realNumber"
+                  "$ref": "urn:neko:schema:common#/$defs/numberOrRef"
                 },
                 "min": {
                   "description": "Smallest move limit; positive. Default 0.001.",
-                  "$ref": "urn:neko:schema:common#/$defs/positiveRealNumber"
+                  "$ref": "urn:neko:schema:common#/$defs/positiveNumberOrRef"
                 },
                 "max": {
                   "description": "Largest move limit; not below `initial`. Default 0.1.",
-                  "$ref": "urn:neko:schema:common#/$defs/realNumber"
+                  "$ref": "urn:neko:schema:common#/$defs/numberOrRef"
                 },
                 "decrease": {
                   "description": "Decrease factor, in (0, 1]. Default 0.7.",
-                  "type": "number",
-                  "x-neko-real": true,
-                  "exclusiveMinimum": 0,
-                  "maximum": 1
+                  "oneOf": [
+                    {
+                      "type": "number",
+                      "x-neko-real": true,
+                      "exclusiveMinimum": 0,
+                      "maximum": 1
+                    },
+                    {
+                      "$ref": "urn:neko:schema:common#/$defs/constRef"
+                    }
+                  ]
                 },
                 "increase": {
                   "description": "Increase factor, at least 1. Default 1.1.",
-                  "type": "number",
-                  "x-neko-real": true,
-                  "minimum": 1
+                  "oneOf": [
+                    {
+                      "type": "number",
+                      "x-neko-real": true,
+                      "minimum": 1
+                    },
+                    {
+                      "$ref": "urn:neko:schema:common#/$defs/constRef"
+                    }
+                  ]
                 }
               },
               "additionalProperties": false,

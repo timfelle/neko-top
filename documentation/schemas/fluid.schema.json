@@ -39,15 +39,6 @@
           "$comment": "adjoint_curl_curl.f90:136-139 aborts when it is true.",
           "const": false
         },
-        "Re": {
-          "$ref": "urn:neko:schema:common#/$defs/realNumber"
-        },
-        "mu": {
-          "$ref": "urn:neko:schema:common#/$defs/realNumber"
-        },
-        "rho": {
-          "$ref": "urn:neko:schema:common#/$defs/realNumber"
-        },
         "boundary_conditions": {
           "type": "array",
           "items": {
@@ -84,20 +75,9 @@
               ]
             }
           }
-        },
-        "pressure_solver": {
-          "$comment": "adjoint_fluid_pnpn.f90:411-422 reads the adjoint pressure solver's absolute_tolerance and max_iterations from here, without a constants lookup. projection_space_size and projection_hold_steps are read from here only when case.adjoint_fluid.pressure_solver has no such key (adjoint_fluid_scheme_incompressible.f90:215-229), which $defs/optimizing in the case-file schema expresses.",
-          "properties": {
-            "absolute_tolerance": {
-              "$ref": "urn:neko:schema:common#/$defs/realNumber"
-            },
-            "max_iterations": {
-              "$ref": "urn:neko:schema:common#/$defs/positiveInteger"
-            }
-          }
         }
       },
-      "$comment": "`nut_field` (adjoint_fluid_pnpn.f90:338-342) and `flow_rate_force` (adjoint_fluid_scheme_incompressible.f90:242-243) abort when present; `Re`, `mu` and `rho` are read as JSON reals without a constants lookup when there is no user material_properties routine (adjoint_fluid_scheme_incompressible.f90:700-729). A case with such a routine and a constants name for them would be accepted by the code, which a case file cannot show."
+      "$comment": "`nut_field` (adjoint_fluid_pnpn.f90:338-342) and `flow_rate_force` (adjoint_fluid_scheme_incompressible.f90:242-243) abort when present. `Re`, `mu`, `rho` and the solver keys that the adjoint reads from `case.fluid` go through the constants lookup, like Neko's own, so Neko's definitions apply and nothing is restated here."
     }
   }
 }

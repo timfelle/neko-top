@@ -16,27 +16,30 @@
         },
         "f_min": {
           "description": "Lower bound of the mapped range. Default 0.0.",
-          "$ref": "urn:neko:schema:common#/$defs/realNumber"
+          "$ref": "urn:neko:schema:common#/$defs/numberOrRef"
         },
         "f_max": {
           "description": "Upper bound of the mapped range (required). A real, or an array of reals that the continuation scheduler steps through.",
           "$ref": "urn:neko-top:schema:common#/$defs/continuationReal"
         },
         "f_max_iterations": {
-          "description": "Iterations per step of the `f_max` array. Read only when `f_max` is an array; defaults to `optimization.solver.continuation_iterations`. A value <= 0 disables the schedule: the parameter is never updated from the array and keeps its first value (continuation_scheduler.f90:153,248), so the other elements are unused.",
+          "description": "Iterations per step of the `f_max` array. Read only when `f_max` is an array or a constants name; defaults to `optimization.solver.continuation_iterations`. A value <= 0 disables the schedule: the parameter is never updated from the array and keeps its first value (continuation_scheduler.f90:153,248), so the other elements are unused.",
           "$ref": "urn:neko-top:schema:common#/$defs/continuationIterations"
         }
       },
       "allOf": [
         {
-          "$comment": "`f_max_iterations` is read only when `f_max` is an array (sources/continuation/continuation_scheduler.f90:152-155).",
+          "$comment": "`f_max_iterations` is read only when `f_max` is an array or a constants name (which may name a vector) (sources/continuation/continuation_scheduler.f90:152-155).",
           "if": {
             "required": [
               "f_max"
             ],
             "properties": {
               "f_max": {
-                "type": "array"
+                "type": [
+                  "array",
+                  "string"
+                ]
               }
             }
           },
@@ -63,14 +66,14 @@
         },
         "f_min": {
           "description": "Lower bound of the mapped range. Default 0.0.",
-          "$ref": "urn:neko:schema:common#/$defs/realNumber"
+          "$ref": "urn:neko:schema:common#/$defs/numberOrRef"
         },
         "f_max": {
           "description": "Upper bound of the mapped range (required). A real, or an array of reals that the continuation scheduler steps through.",
           "$ref": "urn:neko-top:schema:common#/$defs/continuationReal"
         },
         "f_max_iterations": {
-          "description": "Iterations per step of the `f_max` array. Read only when `f_max` is an array; defaults to `optimization.solver.continuation_iterations`. A value <= 0 disables the schedule: the parameter is never updated from the array and keeps its first value (continuation_scheduler.f90:153,248), so the other elements are unused.",
+          "description": "Iterations per step of the `f_max` array. Read only when `f_max` is an array or a constants name; defaults to `optimization.solver.continuation_iterations`. A value <= 0 disables the schedule: the parameter is never updated from the array and keeps its first value (continuation_scheduler.f90:153,248), so the other elements are unused.",
           "$ref": "urn:neko-top:schema:common#/$defs/continuationIterations"
         },
         "p": {
@@ -78,20 +81,23 @@
           "$ref": "urn:neko-top:schema:common#/$defs/continuationReal"
         },
         "p_iterations": {
-          "description": "Iterations per step of the `p` array. Read only when `p` is an array; defaults to `optimization.solver.continuation_iterations`. A value <= 0 disables the schedule: the parameter is never updated from the array and keeps its first value (continuation_scheduler.f90:153,248), so the other elements are unused.",
+          "description": "Iterations per step of the `p` array. Read only when `p` is an array or a constants name; defaults to `optimization.solver.continuation_iterations`. A value <= 0 disables the schedule: the parameter is never updated from the array and keeps its first value (continuation_scheduler.f90:153,248), so the other elements are unused.",
           "$ref": "urn:neko-top:schema:common#/$defs/continuationIterations"
         }
       },
       "allOf": [
         {
-          "$comment": "`f_max_iterations` is read only when `f_max` is an array (sources/continuation/continuation_scheduler.f90:152-155).",
+          "$comment": "`f_max_iterations` is read only when `f_max` is an array or a constants name (which may name a vector) (sources/continuation/continuation_scheduler.f90:152-155).",
           "if": {
             "required": [
               "f_max"
             ],
             "properties": {
               "f_max": {
-                "type": "array"
+                "type": [
+                  "array",
+                  "string"
+                ]
               }
             }
           },
@@ -102,14 +108,17 @@
           }
         },
         {
-          "$comment": "`p_iterations` is read only when `p` is an array (sources/continuation/continuation_scheduler.f90:152-155).",
+          "$comment": "`p_iterations` is read only when `p` is an array or a constants name (which may name a vector) (sources/continuation/continuation_scheduler.f90:152-155).",
           "if": {
             "required": [
               "p"
             ],
             "properties": {
               "p": {
-                "type": "array"
+                "type": [
+                  "array",
+                  "string"
+                ]
               }
             }
           },
@@ -136,14 +145,14 @@
         },
         "f_min": {
           "description": "Lower bound of the mapped range. Default 0.0.",
-          "$ref": "urn:neko:schema:common#/$defs/realNumber"
+          "$ref": "urn:neko:schema:common#/$defs/numberOrRef"
         },
         "f_max": {
           "description": "Upper bound of the mapped range (required). A real, or an array of reals that the continuation scheduler steps through.",
           "$ref": "urn:neko-top:schema:common#/$defs/continuationReal"
         },
         "f_max_iterations": {
-          "description": "Iterations per step of the `f_max` array. Read only when `f_max` is an array; defaults to `optimization.solver.continuation_iterations`. A value <= 0 disables the schedule: the parameter is never updated from the array and keeps its first value (continuation_scheduler.f90:153,248), so the other elements are unused.",
+          "description": "Iterations per step of the `f_max` array. Read only when `f_max` is an array or a constants name; defaults to `optimization.solver.continuation_iterations`. A value <= 0 disables the schedule: the parameter is never updated from the array and keeps its first value (continuation_scheduler.f90:153,248), so the other elements are unused.",
           "$ref": "urn:neko-top:schema:common#/$defs/continuationIterations"
         },
         "q": {
@@ -151,20 +160,23 @@
           "$ref": "urn:neko-top:schema:common#/$defs/continuationReal"
         },
         "q_iterations": {
-          "description": "Iterations per step of the `q` array. Read only when `q` is an array; defaults to `optimization.solver.continuation_iterations`. A value <= 0 disables the schedule: the parameter is never updated from the array and keeps its first value (continuation_scheduler.f90:153,248), so the other elements are unused.",
+          "description": "Iterations per step of the `q` array. Read only when `q` is an array or a constants name; defaults to `optimization.solver.continuation_iterations`. A value <= 0 disables the schedule: the parameter is never updated from the array and keeps its first value (continuation_scheduler.f90:153,248), so the other elements are unused.",
           "$ref": "urn:neko-top:schema:common#/$defs/continuationIterations"
         }
       },
       "allOf": [
         {
-          "$comment": "`f_max_iterations` is read only when `f_max` is an array (sources/continuation/continuation_scheduler.f90:152-155).",
+          "$comment": "`f_max_iterations` is read only when `f_max` is an array or a constants name (which may name a vector) (sources/continuation/continuation_scheduler.f90:152-155).",
           "if": {
             "required": [
               "f_max"
             ],
             "properties": {
               "f_max": {
-                "type": "array"
+                "type": [
+                  "array",
+                  "string"
+                ]
               }
             }
           },
@@ -175,14 +187,17 @@
           }
         },
         {
-          "$comment": "`q_iterations` is read only when `q` is an array (sources/continuation/continuation_scheduler.f90:152-155).",
+          "$comment": "`q_iterations` is read only when `q` is an array or a constants name (which may name a vector) (sources/continuation/continuation_scheduler.f90:152-155).",
           "if": {
             "required": [
               "q"
             ],
             "properties": {
               "q": {
-                "type": "array"
+                "type": [
+                  "array",
+                  "string"
+                ]
               }
             }
           },
@@ -209,14 +224,14 @@
         },
         "f_min": {
           "description": "Lower bound of the mapped range. Default 0.0.",
-          "$ref": "urn:neko:schema:common#/$defs/realNumber"
+          "$ref": "urn:neko:schema:common#/$defs/numberOrRef"
         },
         "f_max": {
           "description": "Upper bound of the mapped range (required). A real, or an array of reals that the continuation scheduler steps through.",
           "$ref": "urn:neko-top:schema:common#/$defs/continuationReal"
         },
         "f_max_iterations": {
-          "description": "Iterations per step of the `f_max` array. Read only when `f_max` is an array; defaults to `optimization.solver.continuation_iterations`. A value <= 0 disables the schedule: the parameter is never updated from the array and keeps its first value (continuation_scheduler.f90:153,248), so the other elements are unused.",
+          "description": "Iterations per step of the `f_max` array. Read only when `f_max` is an array or a constants name; defaults to `optimization.solver.continuation_iterations`. A value <= 0 disables the schedule: the parameter is never updated from the array and keeps its first value (continuation_scheduler.f90:153,248), so the other elements are unused.",
           "$ref": "urn:neko-top:schema:common#/$defs/continuationIterations"
         },
         "q": {
@@ -224,20 +239,23 @@
           "$ref": "urn:neko-top:schema:common#/$defs/continuationReal"
         },
         "q_iterations": {
-          "description": "Iterations per step of the `q` array. Read only when `q` is an array; defaults to `optimization.solver.continuation_iterations`. A value <= 0 disables the schedule: the parameter is never updated from the array and keeps its first value (continuation_scheduler.f90:153,248), so the other elements are unused.",
+          "description": "Iterations per step of the `q` array. Read only when `q` is an array or a constants name; defaults to `optimization.solver.continuation_iterations`. A value <= 0 disables the schedule: the parameter is never updated from the array and keeps its first value (continuation_scheduler.f90:153,248), so the other elements are unused.",
           "$ref": "urn:neko-top:schema:common#/$defs/continuationIterations"
         }
       },
       "allOf": [
         {
-          "$comment": "`f_max_iterations` is read only when `f_max` is an array (sources/continuation/continuation_scheduler.f90:152-155).",
+          "$comment": "`f_max_iterations` is read only when `f_max` is an array or a constants name (which may name a vector) (sources/continuation/continuation_scheduler.f90:152-155).",
           "if": {
             "required": [
               "f_max"
             ],
             "properties": {
               "f_max": {
-                "type": "array"
+                "type": [
+                  "array",
+                  "string"
+                ]
               }
             }
           },
@@ -248,14 +266,17 @@
           }
         },
         {
-          "$comment": "`q_iterations` is read only when `q` is an array (sources/continuation/continuation_scheduler.f90:152-155).",
+          "$comment": "`q_iterations` is read only when `q` is an array or a constants name (which may name a vector) (sources/continuation/continuation_scheduler.f90:152-155).",
           "if": {
             "required": [
               "q"
             ],
             "properties": {
               "q": {
-                "type": "array"
+                "type": [
+                  "array",
+                  "string"
+                ]
               }
             }
           },
@@ -285,10 +306,17 @@
         },
         "eta": {
           "description": "Projection threshold, in [0, 1]. Default 0.5.",
-          "type": "number",
-          "x-neko-real": true,
-          "minimum": 0,
-          "maximum": 1
+          "oneOf": [
+            {
+              "type": "number",
+              "x-neko-real": true,
+              "minimum": 0,
+              "maximum": 1
+            },
+            {
+              "$ref": "urn:neko:schema:common#/$defs/constRef"
+            }
+          ]
         },
         "beta": {
           "description": "Projection sharpness (required). The first value must be > 0 (a first array element <= 0 aborts, but the schema cannot check the first element alone), and no later value may be 0.0. A real, or an array of reals that the continuation scheduler steps through.",
@@ -304,24 +332,30 @@
                   "const": 0
                 }
               }
+            },
+            {
+              "$ref": "urn:neko:schema:common#/$defs/constRef"
             }
           ]
         },
         "beta_iterations": {
-          "description": "Iterations per step of the `beta` array. Read only when `beta` is an array; defaults to `optimization.solver.continuation_iterations`. A value <= 0 disables the schedule: the parameter is never updated from the array and keeps its first value (continuation_scheduler.f90:153,248), so the other elements are unused.",
+          "description": "Iterations per step of the `beta` array. Read only when `beta` is an array or a constants name; defaults to `optimization.solver.continuation_iterations`. A value <= 0 disables the schedule: the parameter is never updated from the array and keeps its first value (continuation_scheduler.f90:153,248), so the other elements are unused.",
           "$ref": "urn:neko-top:schema:common#/$defs/continuationIterations"
         }
       },
       "allOf": [
         {
-          "$comment": "`beta_iterations` is read only when `beta` is an array (sources/continuation/continuation_scheduler.f90:152-155).",
+          "$comment": "`beta_iterations` is read only when `beta` is an array or a constants name (which may name a vector) (sources/continuation/continuation_scheduler.f90:152-155).",
           "if": {
             "required": [
               "beta"
             ],
             "properties": {
               "beta": {
-                "type": "array"
+                "type": [
+                  "array",
+                  "string"
+                ]
               }
             }
           },
@@ -351,17 +385,17 @@
           "$ref": "urn:neko-top:schema:common#/$defs/continuationReal"
         },
         "r_iterations": {
-          "description": "Iterations per step of the `r` array. Read only when `r` is an array; defaults to `optimization.solver.continuation_iterations`. A value <= 0 disables the schedule: the parameter is never updated from the array and keeps its first value (continuation_scheduler.f90:153,248), so the other elements are unused.",
+          "description": "Iterations per step of the `r` array. Read only when `r` is an array or a constants name; defaults to `optimization.solver.continuation_iterations`. A value <= 0 disables the schedule: the parameter is never updated from the array and keeps its first value (continuation_scheduler.f90:153,248), so the other elements are unused.",
           "$ref": "urn:neko-top:schema:common#/$defs/continuationIterations"
         },
         "tol": {
           "description": "Tolerance of the filter solve. Default 1.0e-10. Above 0 with `strict_convergence`.",
           "$comment": "Every Krylov exit test is `rnorm < abs_tol` (neko src/krylov/bcknd/cpu/cg.f90:189,255,267), so a tolerance <= 0 is never met by a non-zero residual: the solve runs max_iter iterations and reports 'did not converge'. That only aborts with strict_convergence (PDE_filter_mapping.f90:289-291,412,425-430), which is where the rule is (allOf below); otherwise the run continues.",
-          "$ref": "urn:neko:schema:common#/$defs/realNumber"
+          "$ref": "urn:neko:schema:common#/$defs/numberOrRef"
         },
         "max_iter": {
           "description": "Maximum iterations of the filter solve. Default 200. At least 2 with `strict_convergence`.",
-          "type": "integer"
+          "$ref": "urn:neko:schema:common#/$defs/integerOrRef"
         },
         "solver": {
           "description": "Krylov solver of the filter. Default `cg`.",
@@ -387,14 +421,17 @@
       },
       "allOf": [
         {
-          "$comment": "`r_iterations` is read only when `r` is an array (sources/continuation/continuation_scheduler.f90:152-155).",
+          "$comment": "`r_iterations` is read only when `r` is an array or a constants name (which may name a vector) (sources/continuation/continuation_scheduler.f90:152-155).",
           "if": {
             "required": [
               "r"
             ],
             "properties": {
               "r": {
-                "type": "array"
+                "type": [
+                  "array",
+                  "string"
+                ]
               }
             }
           },

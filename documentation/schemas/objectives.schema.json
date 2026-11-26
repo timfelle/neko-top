@@ -18,7 +18,7 @@
           "$ref": "urn:neko-top:schema:common#/$defs/continuationReal"
         },
         "weight_iterations": {
-          "description": "Iterations per step of the `weight` array. Read only when `weight` is an array; defaults to `optimization.solver.continuation_iterations`.",
+          "description": "Iterations per step of the `weight` array. Read only when `weight` is an array or a constants name; defaults to `optimization.solver.continuation_iterations`.",
           "$ref": "urn:neko-top:schema:common#/$defs/continuationIterations"
         },
         "mask_name": {
@@ -31,23 +31,26 @@
         },
         "start_time": {
           "description": "Start of the evaluation window; used only by unsteady runs. Default 0.0.",
-          "$ref": "urn:neko:schema:common#/$defs/realNumber"
+          "$ref": "urn:neko:schema:common#/$defs/numberOrRef"
         },
         "end_time": {
           "description": "End of the evaluation window; used only by unsteady runs. Default: no end.",
-          "$ref": "urn:neko:schema:common#/$defs/realNumber"
+          "$ref": "urn:neko:schema:common#/$defs/numberOrRef"
         }
       },
       "allOf": [
         {
-          "$comment": "`weight_iterations` is read only when `weight` is an array (sources/continuation/continuation_scheduler.f90:152-155).",
+          "$comment": "`weight_iterations` is read only when `weight` is an array or a constants name (which may name a vector) (sources/continuation/continuation_scheduler.f90:152-155).",
           "if": {
             "required": [
               "weight"
             ],
             "properties": {
               "weight": {
-                "type": "array"
+                "type": [
+                  "array",
+                  "string"
+                ]
               }
             }
           },
@@ -76,7 +79,7 @@
           "$ref": "urn:neko-top:schema:common#/$defs/continuationReal"
         },
         "weight_iterations": {
-          "description": "Iterations per step of the `weight` array. Read only when `weight` is an array; defaults to `optimization.solver.continuation_iterations`.",
+          "description": "Iterations per step of the `weight` array. Read only when `weight` is an array or a constants name; defaults to `optimization.solver.continuation_iterations`.",
           "$ref": "urn:neko-top:schema:common#/$defs/continuationIterations"
         },
         "mask_name": {
@@ -89,15 +92,15 @@
         },
         "start_time": {
           "description": "Start of the evaluation window; used only by unsteady runs. Default 0.0.",
-          "$ref": "urn:neko:schema:common#/$defs/realNumber"
+          "$ref": "urn:neko:schema:common#/$defs/numberOrRef"
         },
         "end_time": {
           "description": "End of the evaluation window; used only by unsteady runs. Default: no end.",
-          "$ref": "urn:neko:schema:common#/$defs/realNumber"
+          "$ref": "urn:neko:schema:common#/$defs/numberOrRef"
         },
         "target_concentration": {
           "description": "Target scalar concentration. Default 0.5.",
-          "$ref": "urn:neko:schema:common#/$defs/realNumber"
+          "$ref": "urn:neko:schema:common#/$defs/numberOrRef"
         },
         "scalar_name": {
           "description": "Name of the scalar. Default `s`. The value is ignored while the case has one scalar and one adjoint scalar, the only configuration the code runs: get_scalar_indicies then returns (1, 1) without comparing names (neko_ext.f90:526-530). It is compared with the primal scalar names only with several scalars, which abort first (adjoint_case.f90:252-253).",
@@ -106,14 +109,17 @@
       },
       "allOf": [
         {
-          "$comment": "`weight_iterations` is read only when `weight` is an array (sources/continuation/continuation_scheduler.f90:152-155).",
+          "$comment": "`weight_iterations` is read only when `weight` is an array or a constants name (which may name a vector) (sources/continuation/continuation_scheduler.f90:152-155).",
           "if": {
             "required": [
               "weight"
             ],
             "properties": {
               "weight": {
-                "type": "array"
+                "type": [
+                  "array",
+                  "string"
+                ]
               }
             }
           },
@@ -142,7 +148,7 @@
           "$ref": "urn:neko-top:schema:common#/$defs/continuationReal"
         },
         "weight_iterations": {
-          "description": "Iterations per step of the `weight` array. Read only when `weight` is an array; defaults to `optimization.solver.continuation_iterations`.",
+          "description": "Iterations per step of the `weight` array. Read only when `weight` is an array or a constants name; defaults to `optimization.solver.continuation_iterations`.",
           "$ref": "urn:neko-top:schema:common#/$defs/continuationIterations"
         },
         "mask_name": {
@@ -155,11 +161,11 @@
         },
         "start_time": {
           "description": "Start of the evaluation window; used only by unsteady runs. Default 0.0.",
-          "$ref": "urn:neko:schema:common#/$defs/realNumber"
+          "$ref": "urn:neko:schema:common#/$defs/numberOrRef"
         },
         "end_time": {
           "description": "End of the evaluation window; used only by unsteady runs. Default: no end.",
-          "$ref": "urn:neko:schema:common#/$defs/realNumber"
+          "$ref": "urn:neko:schema:common#/$defs/numberOrRef"
         },
         "dealias_sensitivity": {
           "description": "Must equal `dealias_forcing` (an allOf rule enforces it); it has no effect of its own: it is read only to be compared with `dealias_forcing` (brinkman_dissipation_objective.f90:161-164). Default `case.numerics.dealias`.",
@@ -172,14 +178,17 @@
       },
       "allOf": [
         {
-          "$comment": "`weight_iterations` is read only when `weight` is an array (sources/continuation/continuation_scheduler.f90:152-155).",
+          "$comment": "`weight_iterations` is read only when `weight` is an array or a constants name (which may name a vector) (sources/continuation/continuation_scheduler.f90:152-155).",
           "if": {
             "required": [
               "weight"
             ],
             "properties": {
               "weight": {
-                "type": "array"
+                "type": [
+                  "array",
+                  "string"
+                ]
               }
             }
           },

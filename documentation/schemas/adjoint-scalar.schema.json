@@ -24,8 +24,8 @@
                   ]
                 },
                 "zone_indices": {
-                  "description": "Zone indices, a literal array of JSON integers.",
-                  "$ref": "urn:neko:schema:common#/$defs/integerArray"
+                  "description": "Zone indices, an array of JSON integers or the name of an integer array constant.",
+                  "$ref": "urn:neko:schema:common#/$defs/integerArrayOrRef"
                 },
                 "name": false
               }
@@ -43,8 +43,8 @@
               "const": "user"
             },
             "zone_indices": {
-              "description": "Zone indices, a literal array of JSON integers.",
-              "$ref": "urn:neko:schema:common#/$defs/integerArray"
+              "description": "Zone indices, an array of JSON integers or the name of an integer array constant.",
+              "$ref": "urn:neko:schema:common#/$defs/integerArrayOrRef"
             }
           },
           "additionalProperties": true
@@ -65,24 +65,24 @@
           "$ref": "urn:neko:schema:common#/$defs/preconditioner"
         },
         "absolute_tolerance": {
-          "description": "Absolute tolerance, a JSON real (no constants name).",
-          "$ref": "urn:neko:schema:common#/$defs/realNumber"
+          "description": "Absolute tolerance.",
+          "$ref": "urn:neko:schema:common#/$defs/numberOrRef"
         },
         "max_iterations": {
-          "description": "Maximum iterations, a JSON integer (no constants name). Default `case.scalar.solver.max_iterations`, else 1000.",
-          "$ref": "urn:neko:schema:common#/$defs/positiveInteger"
+          "description": "Maximum iterations. Default `case.scalar.solver.max_iterations`, else 1000.",
+          "$ref": "urn:neko:schema:common#/$defs/positiveIntegerOrRef"
         },
         "monitor": {
           "description": "Monitor the solve. Default `case.scalar.solver.monitor`, else false.",
           "type": "boolean"
         },
         "projection_space_size": {
-          "description": "Projection space size, a JSON integer (no constants name). Default `case.scalar.solver.projection_space_size`, else 0.",
-          "type": "integer"
+          "description": "Projection space size. Default `case.scalar.solver.projection_space_size`, else 0.",
+          "$ref": "urn:neko:schema:common#/$defs/integerOrRef"
         },
         "projection_hold_steps": {
-          "description": "Projection hold steps, a JSON integer (no constants name). Default `case.scalar.solver.projection_hold_steps`, else 5.",
-          "type": "integer"
+          "description": "Projection hold steps. Default `case.scalar.solver.projection_hold_steps`, else 5.",
+          "$ref": "urn:neko:schema:common#/$defs/integerOrRef"
         }
       },
       "additionalProperties": true

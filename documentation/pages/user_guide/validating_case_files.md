@@ -119,7 +119,7 @@ The schemas encode **structure and aborts**. For every key they check:
   where it sits: nesting is part of the check, so a `domain` under
   `optimization` instead of under `optimization.design` is reported;
 - its JSON type, including real versus integer, and whether a constants name
-  may stand in for a literal where the code allows it;
+  may stand in for a literal (see \ref validating_case_files_constants);
 - which keys are required, and which are required only together with others;
 - allowed values (enumerations) and simple ranges;
 - the combinations of settings on which the code stops at set-up or crashes,
@@ -132,6 +132,20 @@ Each rule carries a `$comment` in the schema file that cites the source line
 that justifies it, so a rule can be traced to the code (the schema files are in
 `documentation/schemas`: one per component, `case-file.schema.json` being the
 root that collects them).
+
+### Constants names {#validating_case_files_constants}
+
+A numeric key of the case file accepts either a literal or the name of an entry
+of `case.constants`, which is looked up when the case is read. The schema
+accepts a non-empty string wherever a name is allowed, and keeps the type of
+the literal: a key that the code reads as a real needs a real constant and a
+real literal (`1.0`, not `1`), a key that it reads as an integer needs an
+integer constant or literal. The continuation parameters (`f_max`, `p`, `q`,
+`beta`, `r`, `weight` of an objective) accept a real, an array of reals, or the
+name of a real or vector constant; their `_iterations` keys and
+`continuation_iterations` accept an integer or the name of an integer constant.
+`zone_indices` of the adjoint boundary conditions accept an array of integers
+or the name of an integer array constant.
 
 ### What they deliberately do not check {#validating_case_files_limits}
 
@@ -148,8 +162,10 @@ A schema that accepts a case file is not a guarantee that the run works:
 - **Runtime checks** cannot be expressed either: a solve that does not converge,
   a file that must exist, or the availability of an optional back end (HDF5,
   ADIOS2, a device).
-- **Things only a user routine can decide**, for example a user material
-  property with a constants name where the code otherwise needs a literal.
+- **Constants** that do not exist or are of the wrong kind: the schema accepts
+  any non-empty string where a constants name is allowed, and cannot see
+  `case.constants` (see \ref validating_case_files_constants).
+- **Things only a user routine can decide**, which the schema cannot see.
 
 The rules that were considered and left out for that reason are listed with
 their code behaviour in the schema tests (`ACCEPTED_AFTER_THE_TRIM` in

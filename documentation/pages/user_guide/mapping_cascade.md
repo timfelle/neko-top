@@ -62,6 +62,9 @@ own, in the same format.
 \attention Every real-valued parameter in the tables below must be written as a
 JSON real, for example `1000.0` and not `1000`: the parameter is read as a real
 or an array of reals, and a JSON integer stops the set-up with an error.
+Instead of a literal, a key may name a constant of `case.constants`: a real
+constant for a real key, and a real or vector constant for a continuation
+parameter, see \ref validating_case_files_constants.
 
 \note The `type` of a mapping is one of `"linear"`, `"PDE_filter"`, `"RAMP"`,
 `"Borrvall_Petersson"`, `"SIMP"` and `"heaviside_mapping"`. The spelling
