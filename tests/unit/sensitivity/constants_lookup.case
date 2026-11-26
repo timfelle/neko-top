@@ -7,7 +7,7 @@
             { "name": "brinkman_max", "value": 100.0 },
             { "name": "objective_weights", "value": [ 1.0, 10.0 ] },
             { "name": "weight_steps", "value": 1 },
-            { "name": "mma_c", "value": 1000.0 }
+            { "name": "mma_c", "value": 500.0 }
         ],
         "mesh_file": "box.nmsh",
         "output_checkpoints": false,

@@ -10,9 +10,15 @@
 !!   2. A vector constant is used as the array form: its first value is
 !!      returned and all of them are registered. `<name>_iterations` may name
 !!      an integer constant in turn.
-!!   3. An integer constant, or a name no constant has, raises an error.
+!!   3. An integer constant, or a name no constant has, raises an error,
+!!      each its own.
+!!   4. With a default value, as every mapping and objective passes, a name
+!!      takes the value of its constant all the same, and the default is
+!!      used only for a missing parameter.
 !!
 !! An error is redirected to a pFUnit exception, so that it can be caught.
+!! Neko writes the message of an error to the error unit and does not pass
+!! it on, so the tests connect that unit to a file while the scheduler reads.
 module test_continuation_scheduler
   use mpi
   use pfunit
@@ -25,7 +31,11 @@ module test_continuation_scheduler
   use neko_config, only: NEKO_BCKND_DEVICE
   use device, only: device_init, device_finalize
   use utils, only: throw_error, default_throw_error
+  use, intrinsic :: iso_fortran_env, only: error_unit
   implicit none
+
+  !> The file the error unit is connected to while the scheduler reads.
+  character(len=*), parameter :: error_file = 'continuation_errors.txt'
 
   @TestCase
   type, extends(MPITestCase) :: continuation_scheduler_tc
@@ -83,23 +93,49 @@ contains
   !! @param target The variable `p` may be registered for.
   !! @param value The value read.
   !! @param raised Whether an error was raised.
-  subroutine read_p(json_string, sched, target, value, raised)
+  !! @param message What was written to the error unit meanwhile.
+  !! @param default_value The default value to pass, if any.
+  subroutine read_p(json_string, sched, target, value, raised, message, &
+       default_value)
     character(len=*), intent(in) :: json_string
     type(continuation_scheduler_t), intent(inout) :: sched
     real(kind=rp), target, intent(inout) :: target
     real(kind=rp), intent(out) :: value
     logical, intent(out) :: raised
+    character(len=:), allocatable, intent(out) :: message
+    real(kind=rp), intent(in), optional :: default_value
     type(json_file) :: json
+    character(len=1024) :: line
+    integer :: unit, ios
 
     call json%initialize()
     call json%load_from_string(json_string)
     call sched%init(json)
 
     value = -1.0_rp
+    open(unit = error_unit, file = error_file, status = 'replace', &
+         action = 'write')
     throw_error => throw_to_pfunit
-    call sched%json_get_or_register(json, 'p', target, value)
+    call sched%json_get_or_register(json, 'p', target, value, default_value)
     raised = catch()
     throw_error => default_throw_error
+    close(error_unit)
+    ! Reconnect the error unit to the standard error. Appending keeps what a
+    ! file there holds; a pipe cannot be positioned, and needs no position.
+    open(unit = error_unit, file = '/dev/stderr', action = 'write', &
+         position = 'append', iostat = ios)
+    if (ios .ne. 0) then
+       open(unit = error_unit, file = '/dev/stderr', action = 'write')
+    end if
+
+    message = ''
+    open(newunit = unit, file = error_file, action = 'read')
+    do
+       read(unit, '(A)', iostat = ios) line
+       if (ios .ne. 0) exit
+       message = message // trim(line)
+    end do
+    close(unit, status = 'delete')
 
     call json%destroy()
   end subroutine read_p
@@ -111,9 +147,10 @@ contains
     real(kind=rp), target :: target
     real(kind=rp) :: value
     logical :: raised
+    character(len=:), allocatable :: message
     integer :: n_params
 
-    call read_p('{"p": "penalty"}', sched, target, value, raised)
+    call read_p('{"p": "penalty"}', sched, target, value, raised, message)
     n_params = sched%get_n_params()
     call sched%free()
 
@@ -129,10 +166,11 @@ contains
     real(kind=rp), target :: target
     real(kind=rp) :: value, values(3), after(3)
     logical :: raised
+    character(len=:), allocatable :: message
     integer :: n_params, iterations
 
     call read_p('{"p": "penalties", "p_iterations": "steps"}', sched, &
-         target, value, raised)
+         target, value, raised, message)
     n_params = sched%get_n_params()
     values = -1.0_rp
     iterations = -1
@@ -164,11 +202,15 @@ contains
     real(kind=rp), target :: target
     real(kind=rp) :: value
     logical :: raised
+    character(len=:), allocatable :: message
+    character(len=:), allocatable :: expected
 
-    call read_p('{"p": "steps"}', sched, target, value, raised)
+    call read_p('{"p": "steps"}', sched, target, value, raised, message)
     call sched%free()
 
     @assertTrue(raised, 'An integer constant raised no error')
+    expected = "the constant 'steps' is an integer"
+    @assertTrue(index(message, expected) > 0, message)
   end subroutine test_integer_constant_raises
 
   @test(npes=[1])
@@ -178,11 +220,84 @@ contains
     real(kind=rp), target :: target
     real(kind=rp) :: value
     logical :: raised
+    character(len=:), allocatable :: message
+    character(len=:), allocatable :: expected
 
-    call read_p('{"p": "no_such_constant"}', sched, target, value, raised)
+    call read_p('{"p": "no_such_constant"}', sched, target, value, raised, &
+         message)
     call sched%free()
 
     @assertTrue(raised, 'A missing constant raised no error')
+    expected = "no real or vector constant 'no_such_constant'"
+    @assertTrue(index(message, expected) > 0, message)
   end subroutine test_missing_constant_raises
+
+  @test(npes=[1])
+  subroutine test_default_real_constant(this)
+    class(continuation_scheduler_tc), intent(inout) :: this
+    type(continuation_scheduler_t) :: sched
+    real(kind=rp), target :: target
+    real(kind=rp) :: value
+    logical :: raised
+    character(len=:), allocatable :: message
+    integer :: n_params
+
+    call read_p('{"p": "penalty"}', sched, target, value, raised, message, &
+         default_value = 7.0_rp)
+    n_params = sched%get_n_params()
+    call sched%free()
+
+    @assertFalse(raised, 'A real constant raised an error')
+    @assertEqual(3.0_rp, value, 'Value of the real constant, not the default')
+    @assertEqual(0, n_params, 'A real constant was registered')
+  end subroutine test_default_real_constant
+
+  @test(npes=[1])
+  subroutine test_default_vector_constant(this)
+    class(continuation_scheduler_tc), intent(inout) :: this
+    type(continuation_scheduler_t) :: sched
+    real(kind=rp), target :: target
+    real(kind=rp) :: value, values(3)
+    logical :: raised
+    character(len=:), allocatable :: message
+    integer :: n_params, iterations
+
+    call read_p('{"p": "penalties", "p_iterations": "steps"}', sched, &
+         target, value, raised, message, default_value = 7.0_rp)
+    n_params = sched%get_n_params()
+    values = -1.0_rp
+    iterations = -1
+    if (n_params .eq. 1) then
+       values = sched%params(1)%values
+       iterations = sched%params(1)%iterations_per_value
+    end if
+    call sched%free()
+
+    @assertFalse(raised, 'A vector constant raised an error')
+    @assertEqual(1.0_rp, value, 'First value of the vector, not the default')
+    @assertEqual(1, n_params, 'Parameters registered')
+    @assertEqual([1.0_rp, 2.0_rp, 4.0_rp], values, 'Values registered')
+    @assertEqual(2, iterations, 'Iterations per value, from a constant')
+  end subroutine test_default_vector_constant
+
+  @test(npes=[1])
+  subroutine test_default_missing_parameter(this)
+    class(continuation_scheduler_tc), intent(inout) :: this
+    type(continuation_scheduler_t) :: sched
+    real(kind=rp), target :: target
+    real(kind=rp) :: value
+    logical :: raised
+    character(len=:), allocatable :: message
+    integer :: n_params
+
+    call read_p('{"q": "penalty"}', sched, target, value, raised, message, &
+         default_value = 7.0_rp)
+    n_params = sched%get_n_params()
+    call sched%free()
+
+    @assertFalse(raised, 'A missing parameter with a default raised an error')
+    @assertEqual(7.0_rp, value, 'The default of a missing parameter')
+    @assertEqual(0, n_params, 'A missing parameter was registered')
+  end subroutine test_default_missing_parameter
 
 end module test_continuation_scheduler

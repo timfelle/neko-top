@@ -175,3 +175,29 @@ set_tests_properties(unsteady_restart_sensitivity PROPERTIES
 )
 add_dependencies(Unit unsteady_restart_sensitivity)
 add_dependencies(unsteady_restart_sensitivity sensitivity_test_prepare)
+
+# ============================================================================ #
+# The numeric keys constants_lookup.case gives as the names of constants must
+# read the values of those constants, and the case must compute what its
+# literal twin computes, see constants_lookup.pf. The loop above copies the
+# case here.
+add_pfunit_ctest(constants_lookup_values
+    TEST_SOURCES constants_lookup.pf
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    LINK_LIBRARIES Neko-TOP::neko-top
+    MAX_PES 1
+)
+
+if (CMAKE_Fortran_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(constants_lookup_values PRIVATE
+        $<$<COMPILE_LANGUAGE:Fortran>:-Wno-unused-variable>
+    )
+endif()
+
+set_tests_properties(constants_lookup_values PROPERTIES
+    LABELS "sensitivity;unit"
+    ENVIRONMENT "NEKO_LOG_FILE=constants_lookup_values.log"
+    TIMEOUT 300
+)
+add_dependencies(Unit constants_lookup_values)
+add_dependencies(constants_lookup_values sensitivity_test_prepare)

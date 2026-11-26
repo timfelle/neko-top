@@ -1,0 +1,308 @@
+!> @file constants_lookup.pf
+!! @brief The values Neko-TOP reads from the names of constants.
+!!
+!! `constants_lookup.case` gives some of the numeric keys Neko-TOP reads as
+!! the names of entries of `case.constants`: the Reynolds number and the
+!! velocity solver tolerance of the adjoint, the penalty of the RAMP mapping,
+!! the weights of the objective and their iterations, and the MMA constant
+!! `c`. The test runs the case through the initialisation of the
+!! sensitivity tests, and then a literal twin of it, in which each name is
+!! replaced by its value from the list below, and no constants are given.
+!!
+!!   1. The values read from the names must be those of the list: the
+!!      viscosity and the velocity solver tolerance of the adjoint, the
+!!      weights the continuation scheduler steps through and their
+!!      iterations, and the MMA constant `c`.
+!!   2. The objective value and the sensitivity of the two runs must agree to
+!!      round-off. This holds the penalty of the mapping, which nothing else
+!!      shows.
+!!
+!! The list holds the values of the constants of the case, so changing one in
+!! the case without changing it here fails the test.
+module constants_lookup
+  use pfunit
+  use simulation_m, only: simulation_t
+  use brinkman_design, only: brinkman_design_t
+  use problem, only: problem_t
+  use adjoint_fluid_scheme_incompressible, only: &
+       adjoint_fluid_scheme_incompressible_t
+  use continuation_scheduler, only: nekotop_continuation
+  use mma, only: mma_t
+  use neko, only: neko_init
+  use neko_top, only: neko_top_register_types
+  use json_module, only: json_file
+  use json_utils, only: json_get, json_get_or_default
+  use json_utils_ext, only: json_read_file
+  use registry, only: neko_registry, neko_const_registry
+  use scratch_registry, only: neko_scratch_registry
+  use vector, only: vector_t
+  use matrix, only: matrix_t
+  use device, only: device_memcpy, DEVICE_TO_HOST
+  use neko_config, only: NEKO_BCKND_DEVICE
+  use math, only: glsc2, NEKO_EPS
+  use logger, only: neko_log
+  use num_types, only: rp, dp
+  implicit none
+
+  !> The case, which names constants.
+  character(len=*), parameter :: case_file = 'constants_lookup.case'
+
+  !> The values of the constants of the case.
+  real(kind=dp), parameter :: reynolds = 0.1_dp
+  real(kind=dp), parameter :: velocity_tolerance = 1.0e-9_dp
+  real(kind=dp), parameter :: brinkman_max = 100.0_dp
+  real(kind=dp), parameter :: objective_weights(2) = [1.0_dp, 10.0_dp]
+  integer, parameter :: weight_steps = 1
+  real(kind=dp), parameter :: mma_c = 500.0_dp
+
+  !> The tolerance of the relative differences between the two runs. They
+  !! take the same operations on the same data, so they agree to round-off.
+  real(kind=rp), parameter :: tolerance = 100.0_rp * NEKO_EPS
+
+  !> What a run reads and computes.
+  type :: run_result_t
+     !> The viscosity of the adjoint.
+     real(kind=rp) :: mu = -1.0_rp
+     !> The absolute tolerance of the velocity solver of the adjoint.
+     real(kind=rp) :: velocity_tolerance = -1.0_rp
+     !> The number of parameters registered for continuation.
+     integer :: n_params = -1
+     !> The weights the continuation scheduler steps through.
+     real(kind=rp), allocatable :: weights(:)
+     !> The iterations per weight.
+     integer :: weight_iterations = -1
+     !> The largest KKT residual of MMA, which is `c` before any iteration.
+     real(kind=rp) :: mma_residual = -1.0_rp
+     !> The objective value.
+     real(kind=rp) :: value = 0.0_rp
+     !> The sensitivity of the objective to the design.
+     real(kind=rp), allocatable :: sensitivity(:)
+  end type run_result_t
+
+  @TestCase
+  type, extends(MPITestCase) :: test_constants_lookup_case
+   contains
+     procedure :: setUp
+     procedure :: tearDown
+  end type test_constants_lookup_case
+
+  logical :: initialized = .false.
+
+contains
+
+  subroutine setUp(this)
+    class(test_constants_lookup_case), intent(inout) :: this
+
+    if (initialized) return
+    initialized = .true.
+
+    call neko_init()
+    call neko_top_register_types()
+  end subroutine setUp
+
+  subroutine tearDown(this)
+    class(test_constants_lookup_case), intent(inout) :: this
+  end subroutine tearDown
+
+  !> The names must resolve to the values of the constants, and the case
+  !! must compute what its literal twin computes.
+  @test(npes=[1])
+  subroutine constants_match_literals(this)
+    class(test_constants_lookup_case), intent(inout) :: this
+    type(run_result_t) :: named, literal
+    real(kind=rp), allocatable :: difference(:)
+    real(kind=rp) :: value_error, sensitivity_norm, sensitivity_error
+    real(kind=rp) :: expected
+    character(len=256) :: msg
+
+    ! The case first, so that no value of the literal run can reach it
+    call run_case(.true., named)
+    call run_case(.false., literal)
+
+    ! The values read from the names
+    expected = real(1.0_dp / reynolds, rp)
+    @assertEqual(expected, named%mu, tolerance, 'Adjoint mu')
+    expected = real(velocity_tolerance, rp)
+    @assertEqual(expected, named%velocity_tolerance, 'Velocity tolerance')
+    @assertEqual(1, named%n_params, 'Parameters for continuation')
+    @assertEqual(size(objective_weights), size(named%weights), 'Weights')
+    @assertEqual(real(objective_weights, rp), named%weights, 'Weights')
+    @assertEqual(weight_steps, named%weight_iterations, 'Weight iterations')
+    @assertEqual(real(mma_c, rp), named%mma_residual, 'MMA c')
+
+    ! The literal twin must read the same values, or it is no twin
+    @assertEqual(named%mu, literal%mu, 'Adjoint mu of the twin')
+    msg = 'Velocity tolerance of the twin'
+    @assertEqual(named%velocity_tolerance, literal%velocity_tolerance, msg)
+    @assertEqual(named%weights, literal%weights, 'Weights of the twin')
+    @assertEqual(named%mma_residual, literal%mma_residual, 'MMA c of the twin')
+
+    ! What the two runs compute
+    value_error = abs(named%value - literal%value) / &
+         max(abs(literal%value), NEKO_EPS)
+    difference = named%sensitivity - literal%sensitivity
+    sensitivity_norm = sqrt(glsc2(literal%sensitivity, &
+         literal%sensitivity, size(literal%sensitivity)))
+    sensitivity_error = sqrt(glsc2(difference, difference, &
+         size(difference))) / max(sensitivity_norm, NEKO_EPS)
+
+    write(msg, '(A,ES12.4,A,ES12.4)') 'Case against its literal twin, ' // &
+         'relative difference of the objective value:', value_error, &
+         ', of the sensitivity:', sensitivity_error
+    call neko_log%message(trim(msg))
+
+    msg = 'The sensitivity is zero, so the comparison cannot fail'
+    @assertTrue(sensitivity_norm .gt. 0.0_rp, trim(msg))
+    write(msg, '(A,ES12.4)') 'The objective value differs from that of ' // &
+         'the literal twin, relative difference:', value_error
+    @assertTrue(value_error .le. tolerance, trim(msg))
+    write(msg, '(A,ES12.4)') 'The sensitivity differs from that of ' // &
+         'the literal twin, relative difference:', sensitivity_error
+    @assertTrue(sensitivity_error .le. tolerance, trim(msg))
+  end subroutine constants_match_literals
+
+  !> Initialise the case as the sensitivity tests do, compute its objective
+  !! and sensitivity, and return what it read and computed.
+  !! @param named Whether to run the case as it is. Otherwise each name is
+  !! replaced by its value and the constants are removed.
+  !! @param res What the run read and computed.
+  subroutine run_case(named, res)
+    logical, intent(in) :: named
+    type(run_result_t), intent(inout) :: res
+
+    type(json_file) :: parameters, design_parameters
+    type(simulation_t) :: sim
+    type(brinkman_design_t) :: des
+    type(problem_t) :: prob
+    type(vector_t) :: values
+    integer :: continuation_iteration, i
+    logical :: found
+
+    parameters = json_read_file(case_file)
+    if (.not. named) then
+       call parameters%remove('case.constants')
+       call parameters%update('case.fluid.Re', reynolds, found)
+       call parameters%update( &
+            'case.fluid.velocity_solver.absolute_tolerance', &
+            velocity_tolerance, found)
+       call parameters%update('optimization.design.mapping(1).f_max', &
+            brinkman_max, found)
+       call parameters%remove('optimization.objectives(1).weight')
+       call parameters%add('optimization.objectives(1).weight', &
+            objective_weights)
+       call parameters%update( &
+            'optimization.objectives(1).weight_iterations', weight_steps, &
+            found)
+       call parameters%update('optimization.solver.mma.c', mma_c, found)
+    end if
+    call json_get_or_default(parameters, &
+         'optimization.fd_test_continuation_iteration', &
+         continuation_iteration, 0)
+
+    ! Keep the output of the runs apart from that of the other tests, which
+    ! run in the same directory
+    call parameters%update('case.output_directory', 'constants_lookup/', &
+         found)
+
+    call json_get(parameters, 'optimization.design', design_parameters)
+    call sim%init(parameters)
+    call nekotop_continuation%init(parameters)
+    call des%init(design_parameters, sim)
+    call prob%init(parameters, des, sim)
+    if (continuation_iteration .gt. 0) then
+       call nekotop_continuation%update(continuation_iteration)
+    end if
+
+    ! The values read
+    if (NEKO_BCKND_DEVICE .eq. 1) then
+       call device_memcpy(sim%adjoint_fluid%mu%x, sim%adjoint_fluid%mu%x_d, &
+            sim%adjoint_fluid%mu%size(), DEVICE_TO_HOST, .true.)
+    end if
+    res%mu = sim%adjoint_fluid%mu%x(1, 1, 1, 1)
+    select type (adj => sim%adjoint_fluid)
+    class is (adjoint_fluid_scheme_incompressible_t)
+       res%velocity_tolerance = adj%ksp_vel%abs_tol
+    end select
+    res%n_params = nekotop_continuation%get_n_params()
+    do i = 1, res%n_params
+       if (nekotop_continuation%get_param_name(i) .eq. 'weight') then
+          res%weights = nekotop_continuation%params(i)%values
+          res%weight_iterations = &
+               nekotop_continuation%params(i)%iterations_per_value
+       end if
+    end do
+    if (.not. allocated(res%weights)) allocate(res%weights(0))
+    call mma_residual(parameters, des, res%mma_residual)
+
+    ! What the run computes
+    call prob%compute(des, sim)
+    call prob%compute_sensitivity(des, sim)
+    call prob%get_objective_value(res%value)
+
+    call values%init(des%size())
+    call des%get_sensitivity(values)
+    if (NEKO_BCKND_DEVICE .eq. 1) then
+       call device_memcpy(values%x, values%x_d, values%size(), &
+            DEVICE_TO_HOST, .true.)
+    end if
+    res%sensitivity = values%x
+    call values%free()
+
+    call prob%free()
+    call des%free()
+    call sim%free()
+    call nekotop_continuation%free()
+
+    ! Clear the registries, in which the next run registers its fields, and
+    ! the constants, which the literal run must not find
+    call neko_registry%free()
+    call neko_scratch_registry%free()
+    call neko_const_registry%free()
+    call neko_registry%init()
+    call neko_scratch_registry%init()
+    call neko_const_registry%init()
+  end subroutine run_case
+
+  !> Initialise MMA from the solver settings of the case, as the MMA
+  !! optimizer does for a problem with one constraint, and return its largest
+  !! KKT residual for zero sensitivities and constraint values. Before any
+  !! iteration the multipliers are zero, so the residual is `c` when `c`
+  !! exceeds `a0`.
+  !! @param parameters The case.
+  !! @param des The design, whose values MMA starts from.
+  !! @param residual The largest KKT residual.
+  subroutine mma_residual(parameters, des, residual)
+    type(json_file), intent(inout) :: parameters
+    type(brinkman_design_t), intent(inout) :: des
+    real(kind=rp), intent(out) :: residual
+    type(json_file) :: solver_parameters
+    type(mma_t) :: optimizer
+    type(vector_t) :: x, df0dx, fval
+    type(matrix_t) :: dfdx
+    real(kind=rp) :: scale
+    logical :: auto_scale, found
+
+    call json_get(parameters, 'optimization.solver', solver_parameters)
+    ! The residual of the primal-dual subsolver holds c on its own
+    call solver_parameters%update('mma.subsolver', 'pdip', found)
+    call solver_parameters%update('mma.backend', 'cpu', found)
+
+    call x%init(des%size())
+    call df0dx%init(des%size())
+    call fval%init(1)
+    call dfdx%init(1, des%size())
+    call des%get_values(x)
+
+    call optimizer%init(x, des%size(), 1, solver_parameters, scale, &
+         auto_scale)
+    call optimizer%kkt(x, df0dx, fval, dfdx)
+    residual = optimizer%get_residumax()
+
+    call optimizer%free()
+    call dfdx%free()
+    call fval%free()
+    call df0dx%free()
+    call x%free()
+  end subroutine mma_residual
+
+end module constants_lookup
