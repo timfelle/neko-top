@@ -33,7 +33,16 @@ domain:
   - where the fluid with negative sensitivity is, how fast the flow is
     there, and what the design is there at the last listed iteration;
 and finally the relative L2 difference of the forward velocity between
-the two iterations of --steady.
+the two iterations of --steady (skipped with a note if --steady is not
+given and the iteration after the first listed one is not stored, as in
+a run that stores a single iteration).
+
+w_B is the weight of the active brinkman_dissipation entry at each
+iteration, stepped through its continuation array if the weight is
+given as an array; entries at weight 0 are ignored, and two active
+entries stop the script. Where w_B is zero (or no entry is active), the
+comparison with the explicit estimate is marked not applicable and the
+rest is printed.
 """
 import argparse
 
@@ -72,13 +81,16 @@ def block_box(case, box):
 
 def scan_iteration(run, k, k_last, nel, n3, w3, dom, blo, bhi, fmax, q,
                    wB):
-    """Chunked pass over iteration k; returns the sums and samples."""
+    """Chunked pass over iteration k; returns the sums and samples.
+
+    @return None if the design domain holds no fluid at iteration k.
+    """
     des = st.Series(run, "design")
     sen = st.Series(run, "sensitivity")
     fwd = st.Series(run, "forward_fields")
     V = 0.0
     acc = dict(fluid=0.0, fluid_neg=0.0)
-    best = (-1.0, None)
+    best = (-np.inf, None)
     samp = {k_: [] for k_ in ("g", "E", "w", "d", "u", "x", "y", "z")}
     neg = {k_: [] for k_ in ("g", "w", "d", "x", "y", "z", "u", "xl")}
     fl_by = np.zeros(len(DIST_BINS) - 1)
@@ -132,6 +144,8 @@ def scan_iteration(run, k, k_last, nel, n3, w3, dom, blo, bhi, fmax, q,
                              ("z", p[:, 2]), ("u", np.sqrt(u2)),
                              ("xl", xl)):
                 neg[key].append(arr[seln])
+    if best[1] is None:
+        return None
     S = {k_: np.concatenate(v) for k_, v in samp.items()}
     N = {k_: np.concatenate(v) for k_, v in neg.items()}
     S["E"] /= V
@@ -142,29 +156,36 @@ def print_iteration(k, k_last, V, acc, best, S, N, fl_by, neg_by, blo, bhi,
                     fmax, q, wB):
     """Print the findings of one iteration."""
     wq = st.wquant
+    na = f"not applicable: Brinkman-dissipation weight 0 at iteration {k}"
     print(f"\n## iteration {k}: mesh volume {V:.4f}; fluid of the design "
           f"domain {acc['fluid']:.4f}; of it with negative sensitivity "
           f"{acc['fluid_neg'] / acc['fluid']:.5f}")
     (pb, ub, rb) = best[1]
-    est = 0.5 * wB / V * st.ramp_slope(0.0, fmax, q) * ub ** 2
+    est = (f"{0.5 * wB / V * st.ramp_slope(0.0, fmax, q) * ub ** 2:.2f}"
+           if wB else na)
     print(f"  largest sensitivity on the fluid: {best[0]:.2f} at "
           f"({pb[0]:.4f}, {pb[1]:.4f}, {pb[2]:.4f}), speed there "
           f"{ub:.3f}, filtered design {rb:.2e}; explicit estimate "
-          f"0.5 w_B/V slope(0) |u|^2 = {est:.2f}")
+          f"0.5 w_B/V slope(0) |u|^2 = {est}")
     ok = S["u"] > MIN_SPEED
-    r = S["g"][ok] / S["E"][ok]
-    qs = wq(r, S["w"][ok], np.array([0.05, 0.25, 0.5, 0.75, 0.95]))
-    cc = np.corrcoef(S["g"][ok], S["E"][ok])[0, 1]
-    print(f"  fluid nodes with speed above {MIN_SPEED:g} (1/{SAMPLE} "
-          f"sample, {ok.sum()} nodes): sensitivity / explicit "
-          "Brinkman-dissipation estimate, volume-weighted quantiles "
-          "5/25/50/75/95 % = " + " ".join(f"{v:.3f}" for v in qs)
-          + f"; correlation {cc:.4f}")
+    if not wB:
+        print(f"  fluid nodes with speed above {MIN_SPEED:g}: sensitivity "
+              "/ explicit Brinkman-dissipation estimate, overall and by "
+              f"distance to the block, {na}")
+    else:
+        r = S["g"][ok] / S["E"][ok]
+        qs = wq(r, S["w"][ok], np.array([0.05, 0.25, 0.5, 0.75, 0.95]))
+        cc = np.corrcoef(S["g"][ok], S["E"][ok])[0, 1]
+        print(f"  fluid nodes with speed above {MIN_SPEED:g} (1/{SAMPLE} "
+              f"sample, {ok.sum()} nodes): sensitivity / explicit "
+              "Brinkman-dissipation estimate, volume-weighted quantiles "
+              "5/25/50/75/95 % = " + " ".join(f"{v:.3f}" for v in qs)
+              + f"; correlation {cc:.4f}")
     for lab, m in (("within 2 elements of the block", S["d"] <= 2),
                    ("2 to 8 elements", (S["d"] > 2) & (S["d"] <= 8)),
                    ("farther", S["d"] > 8)):
         mm = ok & m
-        if mm.sum() > 10:
+        if wB and mm.sum() > 10:
             qq = wq(S["g"][mm] / S["E"][mm], S["w"][mm],
                     np.array([0.25, 0.5, 0.75]))
             print(f"    {lab:32s}: 25/50/75 % = "
@@ -253,10 +274,6 @@ def main():
     if rp is None:
         raise SystemExit("the design mapping has no RAMP step")
     fmax, q = rp.get("f_max", 1.0), rp.get("q", 1.0)
-    weights = st.objective_weights(case)
-    if "brinkman_dissipation" not in weights:
-        raise SystemExit("the case has no brinkman_dissipation objective")
-    wB = weights["brinkman_dissipation"]
     dom = st.design_domain(case)
     blo, bhi = block_box(case, a.box)
     w3 = st.tensor_weights(st.gll_weights(lx - 1))
@@ -267,6 +284,23 @@ def main():
     else:
         stored = [k for k in range(des.nsteps) if des.has(k)]
         its = sorted({stored[0], stored[-1]})
+    # Brinkman-dissipation weight of each iteration: that of the entry
+    # active there (continuation), or 0 if none is
+    kind = "brinkman_dissipation"
+    wB = {}
+    for k in its:
+        b = st.active_objectives(case, k, kind).get(kind)
+        wB[k] = st.weight_at(case, b, k) if b else 0.0
+    listed = [o for o in st.objective_entries(case) if o["type"] == kind]
+    if not listed:
+        wtext, notes = f"none (no {kind} entry)", []
+    elif len(listed) == 1:
+        wtext, notes = st.weight_text(case, listed[0])
+    else:
+        wtext, notes = f"from {len(listed)} {kind} entries", []
+    if len(listed) > 1 or (listed
+                           and isinstance(listed[0].get("weight"), list)):
+        notes.append(", ".join(f"{wB[k]} at iteration {k}" for k in its))
     if a.steady:
         pair = [int(t) for t in a.steady.split(",")]
         if len(pair) != 2:
@@ -277,7 +311,8 @@ def main():
     box = {"x_bounds": [blo[0], bhi[0]], "y_bounds": [blo[1], bhi[1]],
            "z_bounds": [blo[2], bhi[2]]}
     print(f"# {run}: {nel} elements, order {lx - 1}; RAMP f_max {fmax} "
-          f"q {q}; Brinkman-dissipation weight {wB}; block box "
+          f"q {q}; Brinkman-dissipation weight "
+          + "; ".join([wtext] + notes) + "; block box "
           + ", ".join(f"{k_} [{float(v[0])}, {float(v[1])}]"
                      for k_, v in box.items()))
     for k in its:
@@ -286,9 +321,18 @@ def main():
             if not ser.has(k):
                 raise SystemExit(f"missing {ser.step_file(k)}")
         res = scan_iteration(run, k, its[-1], nel, n3, w3, dom, blo, bhi,
-                             fmax, q, wB)
-        print_iteration(k, its[-1], *res, blo, bhi, fmax, q, wB)
-    steadiness(run, ka, kb, nel, n3)
+                             fmax, q, wB[k])
+        if res is None:
+            print(f"\n## iteration {k}: no fluid (design = 0) in the "
+                  "design domain, so there is nothing to report")
+            continue
+        print_iteration(k, its[-1], *res, blo, bhi, fmax, q, wB[k])
+    if a.steady or st.Series(run, "forward_fields").has(kb):
+        steadiness(run, ka, kb, nel, n3)
+    else:
+        print(f"\n## forward snapshots: iteration {kb} is not stored, so "
+              f"the velocity of iterations {ka} and {kb} is not compared "
+              "(--steady KA,KB compares another pair)")
 
 
 if __name__ == "__main__":

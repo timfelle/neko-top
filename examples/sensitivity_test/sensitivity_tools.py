@@ -35,6 +35,9 @@ CLASSES = ("interior", "face", "edge", "corner")
 # Number of elements read at a time by the chunked loops.
 CHUNK_ELEMENTS = 20000
 
+# Weight of an objective that does not set one (every Neko-TOP objective).
+DEFAULT_WEIGHT = 1.0
+
 
 # --------------------------------------------------------------------------
 # Case file
@@ -80,10 +83,115 @@ def mapping(case, kind):
     return None
 
 
-def objective_weights(case):
-    """Ordered dict of objective type -> weight (default 1)."""
-    return {o["type"]: float(o.get("weight", 1.0))
-            for o in case["optimization"].get("objectives", [])}
+def objective_entries(case):
+    """Entries of ``optimization.objectives``, in case-file order."""
+    return case["optimization"].get("objectives", [])
+
+
+def weight_schedule(case, obj):
+    """Weight values of an objective and the iterations per value.
+
+    Neko-TOP reads the weight as a real (default 1) or as an array of
+    reals whose first entry is the initial value; the continuation
+    scheduler steps through the array, ``weight_iterations`` iterations
+    per value (default ``optimization.solver.continuation_iterations``,
+    itself 1 by default). Neko-TOP rejects every other form, such as an
+    integer (0 rather than 0.0) or a string, whole or as an entry of the
+    array, and so does the script.
+
+    @param case Parsed case file.
+    @param obj Entry of ``optimization.objectives``.
+    @return list of weight values, iterations per value
+    """
+    w = obj.get("weight", DEFAULT_WEIGHT)
+    values = w if isinstance(w, list) else [w]
+    if not values or not all(isinstance(v, float) for v in values):
+        sys.exit(f"objective {obj['type']}: weight {json.dumps(w)} is "
+                 "neither a real (such as 0.0, not 0) nor an array of "
+                 "reals, the only forms Neko-TOP accepts")
+    default = case["optimization"].get("solver", {}).get(
+        "continuation_iterations", 1)
+    return values, obj.get("weight_iterations", default)
+
+
+def weight_at(case, obj, k=0):
+    """Weight of an objective in the sensitivity of iteration k.
+
+    Iteration 0, the initial evaluation, has the first value. Iteration
+    k >= 1 has value (k - 1) // n of the array, n iterations per value,
+    and the last value once the array is used up; n <= 0 keeps the first
+    value (Neko-TOP's continuation scheduler, updated at the start of
+    every iteration before the design is evaluated).
+    """
+    values, n = weight_schedule(case, obj)
+    if k < 1 or n <= 0:
+        return values[0]
+    return values[min((k - 1) // n, len(values) - 1)]
+
+
+def active_objectives(case, k=0, kind=None):
+    """Ordered dict of objective type -> entry active at iteration k.
+
+    An entry whose weight at iteration k is zero contributes nothing to
+    the sensitivity of that iteration, so it is ignored, whatever its
+    type. Neko-TOP accepts several entries of one type, but the scripts
+    split the sensitivity by type, and two active entries of one type
+    (other masks, windows or names) are different functions, so they
+    stop the script.
+
+    @param case Parsed case file.
+    @param k Iteration.
+    @param kind Only entries of this type, if given.
+    """
+    found = {}
+    for i, o in enumerate(objective_entries(case), 1):
+        if kind in (None, o["type"]) and weight_at(case, o, k) != 0.0:
+            found.setdefault(o["type"], []).append((i, o))
+    for t, entries in found.items():
+        if len(entries) > 1:
+            sys.exit(f"{len(entries)} {t} objectives are active at "
+                     f"iteration {k}: "
+                     + ", ".join(f"entry {i} ("
+                                 + (f"name \"{o['name']}\"" if "name" in o
+                                    else "no name") + ")"
+                                 for i, o in entries)
+                     + " of optimization.objectives; the scripts split "
+                     "the sensitivity by objective type and cannot tell "
+                     "them apart")
+    return {t: entries[0][1] for t, entries in found.items()}
+
+
+def active_weights(case):
+    """Ordered dict of objective type -> weight, active at iteration 0."""
+    return {t: weight_at(case, o)
+            for t, o in active_objectives(case).items()}
+
+
+def listed_types(case):
+    """Objective types the case lists, active or not."""
+    return {o["type"] for o in objective_entries(case)}
+
+
+def weight_text(case, obj):
+    """The weight of an objective as written, and notes on it.
+
+    @return text of the weight (the default if it is not set), list of
+            notes: default, the continuation schedule, and inactive (at
+            iteration 0, for a schedule) if the weight is zero there
+    """
+    values, n = weight_schedule(case, obj)
+    w = obj.get("weight", DEFAULT_WEIGHT)
+    notes = [] if "weight" in obj else ["default"]
+    if isinstance(w, list) and n <= 0:
+        notes.append("continuation off (weight_iterations <= 0): first "
+                     "value throughout")
+    elif isinstance(w, list):
+        notes.append(f"continuation, {n} iteration"
+                     f"{'' if n == 1 else 's'} per value")
+    if values[0] == 0.0:
+        notes.append("inactive at iteration 0" if isinstance(w, list)
+                     else "inactive")
+    return f"{w}", notes
 
 
 # --------------------------------------------------------------------------

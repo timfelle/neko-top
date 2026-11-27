@@ -66,9 +66,11 @@ def print_header(cf, case, par, dom):
           f"stop_design_change {sol.get('stop_design_change')}, "
           f"max_iterations {sol.get('max_iterations')}")
     print(f"# mapping {json.dumps(opt['design'].get('mapping'))}")
-    print("# objectives " + ", ".join(
-        f"{o['type']} (weight {o.get('weight', 1)})"
-        for o in opt.get("objectives", [])))
+    texts = []
+    for o in opt.get("objectives", []):
+        w, notes = st.weight_text(case, o)
+        texts.append(f"{o['type']} (weight {'; '.join([w] + notes)})")
+    print("# objectives " + ", ".join(texts))
     print(f"# design domain zone: {json.dumps(dom)}")
 
 

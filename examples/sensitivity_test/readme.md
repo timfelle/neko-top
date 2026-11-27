@@ -61,8 +61,9 @@ What each script reads:
 For `weight_scan.py`, evaluate the sensitivity of the seed design once
 with all objectives (the total run) and once for each objective on its
 own, by copying the case, keeping one entry of `optimization.objectives`
-and setting `"max_iterations": 0` in `optimization.solver`. Everything
-else (mesh, mapping, initial design, time span) must be the same.
+or setting the weight of the others to `0.0`, and setting
+`"max_iterations": 0` in `optimization.solver`. Everything else (mesh,
+mapping, initial design, time span) must be the same.
 
 ## Usage
 
@@ -121,14 +122,20 @@ python3 fluid_sensitivity.py RUN_DIR --box 1.7,2.0,0.2,0.5,0.2,0.5
 ```
 
 Over the fluid of the design domain it compares the sensitivity with the
-explicit Brinkman-dissipation derivative 0.5 w_B / V * RAMP'(r) * |u|^2.
-Quantiles of the ratio near 1 mean the sensitivity is that explicit term
-(and positive, so the fluid stays fluid); the rows by distance to the
-block show where the adjoint terms matter. It then locates the fluid
-with negative sensitivity, which is free to gain material, and prints
-the design there at the last listed iteration: if the design has not
-grown there, something other than the sign holds it. The last line
-compares the forward velocity of the two `--steady` iterations.
+explicit Brinkman-dissipation derivative 0.5 w_B / V * RAMP'(r) * |u|^2,
+with the weight w_B of each iteration (stepped through a continuation
+array as Neko-TOP does). Where w_B is zero, as in a run of another
+objective alone, that comparison is marked not applicable and the rest
+is printed. Quantiles of the ratio near 1 mean the sensitivity is that
+explicit term (and positive, so the fluid stays fluid); the rows by
+distance to the block show where the adjoint terms matter. It then
+locates the fluid with negative sensitivity, which is free to gain
+material, and prints the design there at the last listed iteration: if
+the design has not grown there, something other than the sign holds it.
+The last line compares the forward velocity of the two `--steady`
+iterations; without `--steady`, it gets a note instead if the iteration
+after the first listed one is not stored (as in a run that stores a
+single iteration).
 
 The block is the box of the point zone of the design's
 `initial_distribution`. If the design is not seeded from a box point
@@ -142,19 +149,32 @@ python3 weight_scan.py MIX_RUN TOTAL_RUN VISC_RUN --factors 1:1,1:0.1,0:0
 ```
 
 The runs can be given in any order; each case file says which objective
-the run holds. A single-objective run with a weight different from the
+the run holds. Only active objectives count, those whose weight at
+iteration 0 is not zero: a single-objective run may list the other
+objectives at weight `0.0`, and an objective at weight `0.0` in the
+total run is not part of the total. The viscous- and the
+Brinkman-dissipation weight of the total run are scanned, so neither may
+be zero there. An entry at weight `0.0` is ignored whatever its type,
+but two active entries of one type (say two masked mixing objectives)
+stop the script, which splits the sensitivity by type; this holds for
+the Brinkman-dissipation entry of `fluid_sensitivity.py` too. The header
+lines mark inactive objectives, default weights (1 where `weight` is not
+set) and continuation arrays, whose first entry is the weight at
+iteration 0. A single-objective run with a weight different from the
 total run's is rescaled to the total run's weight (stated in the
-header). With a run for every objective, the additivity line checks that
-the parts add up to the total: a relative difference far above round-off
-means the runs differ in more than the objectives. With one objective
-missing, its part is the total minus the others and the header says so.
+header). With a run for every objective, the additivity line checks
+that the parts add up to the total: a relative difference far above
+round-off means the runs differ in more than the objectives. With one
+objective missing, its part is the total minus the others and the
+header says so.
 
 The first table gives each part's size over the fluid and where it wants
 material (negative). The scan multiplies the viscous- and the
 Brinkman-dissipation weight by the factors in `--factors` and reports how
 much fluid is free to gain material and how much solid is free to lose
 it; a scan row where both are large is a weight choice that lets the
-design move.
+design move. A row where nothing is free (every weight at zero, say)
+shows n/a for the ratio and the median.
 
 ### `overintegration_check.py`
 
