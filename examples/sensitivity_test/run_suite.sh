@@ -9,7 +9,7 @@ echo "Running sensitivity test for scale $SCALE" > $RUN_DIR/$SCALE-report.txt
 for EXP in $EXPERIMENTS; do
     printf "_%.0s" {1..80} >> $RUN_DIR/$SCALE-report.txt
     printf "\nRunning sensitivity test for experiment $SCALE-$EXP\n" >> $RUN_DIR/$SCALE-report.txt
-    python3 $ROOT_DIR/sd_report.py $RUN_DIR/$SCALE-$EXP > $RUN_DIR/$SCALE-report.txt
+    python3 $ROOT_DIR/sd_report.py $RUN_DIR/$SCALE-$EXP >> $RUN_DIR/$SCALE-report.txt
     python3 $ROOT_DIR/dissipation_split.py $RUN_DIR/$SCALE-$EXP >> $RUN_DIR/$SCALE-report.txt
     python3 $ROOT_DIR/fluid_sensitivity.py $RUN_DIR/$SCALE-$EXP >> $RUN_DIR/$SCALE-report.txt
     python3 $ROOT_DIR/overintegration_check.py $RUN_DIR/$SCALE-$EXP >> $RUN_DIR/$SCALE-report.txt
