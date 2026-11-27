@@ -23,11 +23,13 @@ element widths (the x extent of the first element).
 
 For each iteration it prints, over the fluid (design = 0) of the design
 domain:
-  - the largest sensitivity and the explicit Brinkman-dissipation
-    derivative 0.5 w_B / V * RAMP'(0) * |u|^2 at that node;
-  - volume-weighted quantiles of the ratio of the sensitivity to that
-    explicit estimate, at nodes faster than 0.3 (a 1/8 sample), overall
-    and by distance to the block;
+  - the largest sensitivity and, at that node, the explicit
+    Brinkman-dissipation derivative 0.5 w_B / V * RAMP'(0) * |u|^2, with
+    the slope of the bare fluid;
+  - volume-weighted quantiles of the ratio of the sensitivity to the
+    explicit derivative 0.5 w_B / V * RAMP'(r) * |u|^2, with the slope at
+    each node's filtered design r, at nodes faster than 0.3 (a 1/8
+    sample), overall and by distance to the block;
   - the fluid volume, and the share of it with negative sensitivity, by
     distance to the block;
   - where the fluid with negative sensitivity is, how fast the flow is

@@ -25,6 +25,9 @@ For every iteration k it prints:
     grow by "increase" where they have the same sign);
   - whether the stored design k+1 is what the algorithm gives from design k
     and sensitivity k (offline replay of the update);
+  - the change of the objective that sensitivity k predicts to first order
+    for the step to k+1, the sum over the design domain of
+    B g_k (x_{k+1} - x_k), against the change in optimization_data.csv;
 and a one-line-per-iteration summary at the end.
 
 --save writes the listed top nodes and all nodes inside --box (default: a
@@ -155,12 +158,89 @@ def save_box(a, des, saved, vol, lo, hi, lx):
           f"to {a.save}")
 
 
+def predicted_change(des, k, x, G, Wt, nel, n3):
+    """First-order change of the objective from design k to design k + 1.
+
+    The stored sensitivity g is the function with <g, phi> = delta F, so
+    the change is the sum of B g_k (x_{k+1} - x_k), with B the
+    element-local mass: for continuous fields, the sum over the
+    element-local copies is the assembled inner product. The sum runs
+    over every local node: Neko-TOP sets the design and the sensitivity to
+    zero outside its design domain, so this is the sum over that domain,
+    whatever its point zone. Design k + 1 is read in chunks of elements
+    and never held whole.
+    """
+    out = 0.0
+    for e0, e1, s in st.element_chunks(nel, n3):
+        dx = des.read(k + 1, "design_indicator", s.start, s.stop) \
+            .astype(np.float64) - x[s]
+        out += float(((G[s] * dx).reshape(-1, n3) @ Wt.W) @ Wt.s[e0:e1])
+    return out
+
+
+def print_prediction(k, pred, log, first):
+    """Print the predicted and the logged change from iteration k - 1.
+
+    @param first Whether the one-time note on what one run can predict is
+           still to be printed.
+    @return whether that note was printed
+    """
+    if pred is None:
+        print(f"  first-order prediction of the change from iteration "
+              f"{k - 1}: not available (no sensitivity of iteration "
+              f"{k - 1})")
+        return False
+    got, why = st.logged_change(log, k - 1)
+    act = (f"not available ({why})" if got is None else
+           f"{got['total']:+.4e}; actual / predicted "
+           + (f"{got['total'] / pred:.3f}" if pred else "n/a"))
+    print(f"  first-order prediction of the change of the objective from "
+          f"iteration {k - 1}, sum of B g_{k - 1} (x_{k} - x_{k - 1}) over "
+          f"the design domain: {pred:+.4e}; actual (optimization_data.csv, "
+          f"{st.TOTAL}) {act}")
+    if got is None:
+        return False
+    if got["parts"]:
+        each = [f"{n} {w:g} x {d:+.4e} = {wd:+.4e}"
+                for n, w, d, wd in got["parts"]]
+        print(f"    actual weighted change by objective, at the weights of "
+              f"row {k - 1} (those of the sensitivity of iteration {k - 1}"
+              f"; row {k} may hold the next value of a continuation "
+              "weight): " + ", ".join(each) + "; sum "
+              f"{sum(p[3] for p in got['parts']):+.4e}")
+    if got["weights_change"]:
+        fixed = sum(p[3] for p in got["parts"])
+        print(f"    a weight changes between rows {k - 1} and {k} "
+              f"(continuation), so the {st.TOTAL} change includes that "
+              "change; the sum above, at fixed weights, is the one the "
+              "prediction approximates"
+              + (" (though the objectives' changes in it include the "
+                 "continued parameter's effect below)"
+                 if got["params_change"] else "")
+              + ": actual / predicted "
+              + (f"{fixed / pred:.3f}" if pred else "n/a"))
+    if got["params_change"]:
+        print(f"    a continued parameter changes between rows {k - 1} and "
+              f"{k}: " + ", ".join(f"{n} {a:g} -> {b:g}"
+                                   for n, a, b in got["params_change"])
+              + f"; the {st.TOTAL} change includes its effect at a fixed "
+              "design, so actual / predicted does not measure the step "
+              "alone")
+    if first:
+        print("    (a run stores only the weighted sum of the objectives' "
+              "sensitivities, so only the objective as a whole can be "
+              "predicted; weight_scan.py splits it by objective from "
+              "single-objective runs)")
+    return first
+
+
 def print_summary(summ):
     """Print the one-line-per-iteration summary table."""
     print("\n## summary (one line per iteration)")
     print("  iter  free vol.frac  normaliser    /median  isolation  "
           "move-limited  at min limit  median intended step | change INTO "
-          "this iteration: largest, vol.frac > 1e-3")
+          "this iteration: largest, vol.frac > 1e-3, actual / first-order "
+          "predicted")
     for k in sorted(summ):
         r = summ[k]
         if "smax" not in r:
@@ -173,7 +253,18 @@ def print_summary(summ):
               f"{r['ratio']:7.1f}  {f('iso', '%8.2f')}  "
               f"{f('limited', '%11.4f')}  {f('atmin', '%11.4f')}  "
               f"{f('step', '%14.3e')}      | {f('dmax', '%.4e')}, "
-              f"{f('moved', '%.5f')}")
+              f"{f('moved', '%.5f')}, {f('fo', '%.3f')}"
+              + ("*" if r.get("fo_w") else "")
+              + ("^" if r.get("fo_p") else ""))
+    if any(r.get("fo_w") for r in summ.values()):
+        print(f"  * a weight changes into this iteration (continuation), "
+              f"so the {st.TOTAL} change includes it; the iteration's "
+              "block gives the ratio at fixed weights")
+    if any(r.get("fo_p") for r in summ.values()):
+        print(f"  ^ a continued parameter (such as RAMP q) changes into "
+              f"this iteration, so the {st.TOTAL} change includes its "
+              "effect at a fixed design and the ratio does not measure "
+              "the step alone; the iteration's block names it")
 
 
 def main():
@@ -229,6 +320,9 @@ def main():
     print_csv(a.run)
 
     nit = max(des.nsteps, sen.nsteps)
+    log = st.optimization_log(a.run)
+    pred_from = {}      # iteration k -> predicted change k -> k+1
+    first = True        # the first prediction printed carries a note
     summ = {}
     want = (list(range(nit)) if a.iters == "all"
             else [int(t) for t in a.iters.split(",")])
@@ -297,6 +391,14 @@ def main():
                 else:
                     print(f"  change from iteration {k - 1}: none")
             del d, mv
+            pred = pred_from.get(k - 1)
+            got, _ = st.logged_change(log, k - 1)
+            if pred and got is not None:
+                summ[k]["fo"] = got["total"] / pred
+                summ[k]["fo_w"] = got["weights_change"]
+                summ[k]["fo_p"] = bool(got["params_change"])
+            if report and print_prediction(k, pred, log, first):
+                first = False
 
         if not sen.has(k):
             if report:
@@ -305,6 +407,8 @@ def main():
             replay_ok = False
             continue
         G = sen.read(k, "dFd_design_indicator").astype(np.float64)
+        if des.has(k + 1):
+            pred_from[k] = predicted_change(des, k, x, G, Wt, nel, n3)
         S = -G
         frozen = ((x >= xmax) & (S > 0)) | ((x <= xmin) & (S < 0))
         S[frozen] = 0.0

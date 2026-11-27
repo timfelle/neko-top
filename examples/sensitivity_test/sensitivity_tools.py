@@ -13,11 +13,12 @@ format. Each output series ``<base>`` (``design``, ``sensitivity``,
 The per-step files are read when present; otherwise the virtual datasets
 of the ``.vtkhdf`` are used.
 
-This module provides that reader, the case-file lookup, Gauss-Lobatto-
-Legendre (GLL) and Gauss-Legendre quadrature, Lagrange interpolation,
-per-element volumes and the design-domain mask computed in chunks,
-volume-weighted sums and quantiles, the element-local node classes, and
-the RAMP and Heaviside formulas. Only numpy and h5py are needed.
+This module provides that reader, the case-file lookup, the reader of
+``optimization_data.csv``, Gauss-Lobatto-Legendre (GLL) and
+Gauss-Legendre quadrature, Lagrange interpolation, per-element volumes
+and the design-domain mask computed in chunks, volume-weighted sums and
+quantiles, the element-local node classes, and the RAMP and Heaviside
+formulas. Only numpy and h5py are needed.
 """
 import glob
 import json
@@ -37,6 +38,11 @@ CHUNK_ELEMENTS = 20000
 
 # Weight of an objective that does not set one (every Neko-TOP objective).
 DEFAULT_WEIGHT = 1.0
+
+# Name of an objective that does not set one, by type (the log columns).
+DEFAULT_NAMES = {"scalar_mixing": "Scalar Mixing",
+                 "viscous_dissipation": "Viscous dissipation",
+                 "brinkman_dissipation": "Brinkman dissipation"}
 
 
 # --------------------------------------------------------------------------
@@ -192,6 +198,112 @@ def weight_text(case, obj):
         notes.append("inactive at iteration 0" if isinstance(w, list)
                      else "inactive")
     return f"{w}", notes
+
+
+# --------------------------------------------------------------------------
+# Optimization log
+
+# Column of the weighted sum of the objectives.
+TOTAL = "Total objective function"
+# Last fixed column; the continued parameters follow it.
+CONTINUATION_AFTER = "norm2_design_change"
+
+
+def optimization_log(run):
+    """Columns and rows of a run's ``optimization_data.csv``.
+
+    @param run Run directory.
+    @return list of column names and dict iteration -> list of values (an
+            iteration logged twice, as after a restart, keeps its last
+            row), or None if the run has no such file
+    """
+    path = os.path.join(run, "optimization_data.csv")
+    if not os.path.exists(path):
+        return None
+    with open(path) as f:
+        lines = [line for line in f if line.strip()]
+    if not lines:
+        return [], {}
+    names = [c.strip() for c in lines[0].split(",")]
+    rows = {}
+    for line in lines[1:]:
+        try:
+            v = [float(c) for c in line.split(",")]
+        except ValueError:
+            continue
+        rows[int(round(v[0]))] = v
+    return names, rows
+
+
+def logged_objectives(names):
+    """The objectives of an optimization log, in the order they are logged.
+
+    Every objective logs its value under its name and its weight under
+    ``<name>.weight``, in the order of ``optimization.objectives``; the
+    other columns (the total, constraints, further ``<name>.*`` columns,
+    optimiser entries, continuation parameters) are skipped.
+
+    @return list of (name, value column, weight column)
+    """
+    out = []
+    for j, c in enumerate(names):
+        if c.endswith(".weight"):
+            vals = [i for i in range(j) if names[i] == c[:-len(".weight")]]
+            if vals:
+                out.append((names[vals[-1]], vals[-1], j))
+    return out
+
+
+def logged_change(log, k):
+    """Logged change of the objective from iteration k to k + 1.
+
+    The weights are those of row k. The row of an iteration is written
+    after that iteration's evaluation, and Neko-TOP updates a continuation
+    weight at the start of the iteration, so the weights of row k are the
+    ones the sensitivity of iteration k carries; row k + 1 may already
+    hold the next value.
+
+    Neko-TOP also continues design-mapping parameters given as arrays
+    (RAMP q and f_max, the PDE filter's r, Heaviside beta, ...): each is
+    logged after norm2_design_change under its JSON key. If one changes
+    between the rows, the change of the total includes its effect at a
+    fixed design. A continued objective weight is logged there too, as
+    "weight", but its own <name>.weight column already shows it, so that
+    column is left out here.
+
+    @param log Result of optimization_log, or None.
+    @param k Iteration.
+    @return (dict: total = change of the total column, parts = list of
+            (name, weight, change, weighted change), weights_change =
+            whether a weight differs between the two rows, params_change
+            = list of (name, value of row k, value of row k + 1) of the
+            continued parameters that differ, None), or (None, reason)
+    """
+    if log is None:
+        return None, "no optimization_data.csv"
+    names, rows = log
+    for i in (k, k + 1):
+        if i not in rows:
+            return None, f"no row {i} in optimization_data.csv"
+    a, b = rows[k], rows[k + 1]
+    n = min(len(a), len(b))
+    if TOTAL not in names or names.index(TOTAL) >= n:
+        return None, f"no column '{TOTAL}' in optimization_data.csv"
+    t = names.index(TOTAL)
+    parts, changed = [], False
+    for name, jv, jw in logged_objectives(names):
+        if jw < n:
+            d = b[jv] - a[jv]
+            parts.append((name, a[jw], d, a[jw] * d))
+            changed = changed or a[jw] != b[jw]
+    params = []
+    if CONTINUATION_AFTER in names:
+        for j in range(names.index(CONTINUATION_AFTER) + 1, n):
+            name = names[j] if j < len(names) else f"column {j + 1}"
+            if name != "weight" and a[j] != b[j]:
+                params.append((name, a[j], b[j]))
+    return dict(total=b[t] - a[t], parts=parts, weights_change=changed,
+                params_change=params), None
 
 
 # --------------------------------------------------------------------------
